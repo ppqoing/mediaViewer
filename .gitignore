@@ -1,1 +1,7 @@
 .worktrees/
+.gradle/
+.idea/
+local.properties
+**/build/
+dist/*.apk
+dist/*.sha256
