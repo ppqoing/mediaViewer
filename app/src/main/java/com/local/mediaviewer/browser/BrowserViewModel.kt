@@ -48,6 +48,7 @@ class BrowserViewModel(
     }
 
     fun open(entry: DirectoryEntry) {
+        val current = pages.lastOrNull() ?: return
         if (entry.kind != MediaKind.DIRECTORY) {
             viewModelScope.launch {
                 mutableMediaLaunches.emit(
@@ -57,13 +58,15 @@ class BrowserViewModel(
                         requestUrl = entry.requestUrl,
                         mediaKey = entry.logicalUrl,
                         kind = entry.kind,
+                        rootId = root.id,
+                        directoryLogicalUrl =
+                            current.logicalDirectoryUrl,
                     ),
                 )
             }
             return
         }
 
-        val current = pages.lastOrNull() ?: return
         val breadcrumbs = current.breadcrumbs +
             Breadcrumb(entry.name, entry.logicalUrl)
         val loader = suspend {

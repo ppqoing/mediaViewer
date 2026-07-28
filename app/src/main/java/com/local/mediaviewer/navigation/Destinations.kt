@@ -27,3 +27,11 @@ data class ImageRoute(
     val logicalUrl: String,
     val requestUrl: String,
 )
+
+@Serializable
+data class ImageReaderRoute(
+    val rootId: String,
+    val directoryLogicalUrl: String,
+    val selectedLogicalUrl: String,
+    val selectedName: String,
+)

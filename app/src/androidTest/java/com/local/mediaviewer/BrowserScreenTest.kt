@@ -18,6 +18,7 @@ import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.model.RootShare
 import com.local.mediaviewer.navigation.HomeRoute
+import com.local.mediaviewer.navigation.ImageReaderRoute
 import com.local.mediaviewer.navigation.PlayerRoute
 import com.local.mediaviewer.ui.browser.BrowserScreen
 import java.time.Instant
@@ -128,6 +129,45 @@ class BrowserScreenTest {
         }
 
         rule.onNodeWithText("已到达播放器").assertIsDisplayed()
+        rule.runOnIdle {
+            assertEquals(original, decoded)
+        }
+    }
+
+    @Test
+    fun typedImageReaderRoutePreservesDirectoryContextExactly() {
+        val original = ImageReaderRoute(
+            rootId = "pik",
+            directoryLogicalUrl =
+                "http://media.example:8080/pik/%E6%9D%A1%E6%BC%AB%20(1)/?folder=a%26b#part",
+            selectedLogicalUrl =
+                "http://media.example:8080/pik/%E6%9D%A1%E6%BC%AB%20(1)/%E7%AC%AC%2001%20%E9%A1%B5%20%F0%9F%98%80.jpg",
+            selectedName = "第 01 页 😀.jpg",
+        )
+        var decoded: ImageReaderRoute? = null
+        rule.setContent {
+            val navController = rememberNavController()
+            NavHost(
+                navController,
+                startDestination = HomeRoute,
+            ) {
+                composable<HomeRoute> {
+                    LaunchedEffect(Unit) {
+                        navController.navigate(original)
+                    }
+                }
+                composable<ImageReaderRoute> { entry ->
+                    decoded = entry.toRoute()
+                    androidx.compose.material3.Text(
+                        "已到达图片阅读器",
+                    )
+                }
+            }
+        }
+
+        rule
+            .onNodeWithText("已到达图片阅读器")
+            .assertIsDisplayed()
         rule.runOnIdle {
             assertEquals(original, decoded)
         }

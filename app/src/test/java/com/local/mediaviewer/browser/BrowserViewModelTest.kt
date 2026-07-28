@@ -44,13 +44,20 @@ class BrowserViewModelTest {
             requestUrl = "http://192.0.2.1:8080/middle/sub/movie.mp4",
             kind = MediaKind.VIDEO,
         )
+        val image = entry(
+            name = "page.png",
+            logicalUrl = "${subUrl}page.png",
+            requestUrl =
+                "http://192.0.2.1:8080/middle/sub/page.png",
+            kind = MediaKind.IMAGE,
+        )
         val rootPage = page(
             rootUrl,
             listOf(entry("sub", subUrl, "", MediaKind.DIRECTORY)),
         )
         val subPage = page(
             subUrl,
-            listOf(video),
+            listOf(video, image),
             listOf(
                 Breadcrumb("MiddleDir", rootUrl),
                 Breadcrumb("sub", subUrl),
@@ -73,6 +80,19 @@ class BrowserViewModelTest {
         val launch = mediaDeferred.await()
         assertEquals(video.logicalUrl, launch.mediaKey)
         assertEquals(video.requestUrl, launch.requestUrl)
+        assertEquals(RootShare.MIDDLE.id, launch.rootId)
+        assertEquals(subUrl, launch.directoryLogicalUrl)
+
+        val imageDeferred =
+            async { viewModel.mediaLaunches.first() }
+        runCurrent()
+        viewModel.open(image)
+        val imageLaunch = imageDeferred.await()
+        assertEquals(image.logicalUrl, imageLaunch.mediaKey)
+        assertEquals(
+            subUrl,
+            imageLaunch.directoryLogicalUrl,
+        )
 
         viewModel.openBreadcrumb(0)
         assertEquals(rootUrl, currentPage(viewModel).logicalDirectoryUrl)

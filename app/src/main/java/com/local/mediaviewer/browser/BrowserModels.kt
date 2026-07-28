@@ -23,4 +23,6 @@ data class MediaLaunchRequest(
     val requestUrl: String,
     val mediaKey: String,
     val kind: MediaKind,
+    val rootId: String,
+    val directoryLogicalUrl: String,
 )
