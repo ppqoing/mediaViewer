@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import coil3.ImageLoader
 import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.image.ImageReaderUiState
+import com.local.mediaviewer.image.ImageLoadFailureKind
 import com.local.mediaviewer.image.ImageSortOrder
 import com.local.mediaviewer.ui.components.AppErrorPanel
 
@@ -35,6 +36,10 @@ fun ImageReaderScreen(
     onSortChanged: (ImageSortOrder) -> Unit,
     onAnchorChanged: (String) -> Unit,
     onRetryDirectory: () -> Unit,
+    onImageLoadError:
+        (String, ImageLoadFailureKind) -> Unit,
+    onImageLoadSuccess: (String) -> Unit,
+    onRetryImage: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -133,8 +138,19 @@ fun ImageReaderScreen(
                             imageLoader = imageLoader,
                             requestGeneration =
                                 state.requestGeneration,
+                            itemFailures =
+                                state.itemFailures,
+                            itemRequestGenerations =
+                                state
+                                    .itemRequestGenerations,
                             onAnchorChanged =
                                 onAnchorChanged,
+                            onImageLoadError =
+                                onImageLoadError,
+                            onImageLoadSuccess =
+                                onImageLoadSuccess,
+                            onRetryImage =
+                                onRetryImage,
                             modifier =
                                 Modifier.fillMaxSize(),
                         )
@@ -143,7 +159,27 @@ fun ImageReaderScreen(
                             item = current,
                             imageLoader = imageLoader,
                             requestGeneration =
-                                state.requestGeneration,
+                                effectiveRequestGeneration(
+                                    requestGeneration =
+                                        state
+                                            .requestGeneration,
+                                    itemRequestGeneration =
+                                        state
+                                            .itemRequestGenerations[
+                                                current
+                                                    .logicalUrl
+                                            ] ?: 0,
+                                ),
+                            failure =
+                                state.itemFailures[
+                                    current.logicalUrl
+                                ],
+                            onImageLoadError =
+                                onImageLoadError,
+                            onImageLoadSuccess =
+                                onImageLoadSuccess,
+                            onRetryImage =
+                                onRetryImage,
                             modifier =
                                 Modifier.fillMaxSize(),
                         )

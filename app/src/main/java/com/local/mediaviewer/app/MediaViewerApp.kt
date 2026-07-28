@@ -238,6 +238,8 @@ fun MediaViewerApp(container: AppContainer) {
                             preferences =
                                 container
                                     .readerPreferencesRepository,
+                            session =
+                                container.sessionManager,
                         )
                     }
                 },
@@ -255,6 +257,12 @@ fun MediaViewerApp(container: AppContainer) {
                     reader::updateAnchor,
                 onRetryDirectory =
                     reader::retryDirectory,
+                onImageLoadError =
+                    reader::onImageLoadError,
+                onImageLoadSuccess =
+                    reader::onImageLoadSuccess,
+                onRetryImage =
+                    reader::retryImage,
                 onBack = {
                     navController.popBackStack()
                 },

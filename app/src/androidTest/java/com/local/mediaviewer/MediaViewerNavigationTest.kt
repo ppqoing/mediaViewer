@@ -3,6 +3,7 @@ package com.local.mediaviewer
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -65,7 +66,9 @@ class MediaViewerNavigationTest {
     fun homeOpensNestedImage() {
         openNestedDirectory()
         rule.onNodeWithText("样例.png").performClick()
-        rule.onNodeWithText("样例.png").assertIsDisplayed()
+        rule.onAllNodesWithText("样例.png")
+            .onFirst()
+            .assertIsDisplayed()
         rule.onNodeWithTag("comic_reader").assertExists()
     }
 
@@ -77,7 +80,9 @@ class MediaViewerNavigationTest {
         }
         openNestedDirectory()
         rule.onNodeWithText("样例.png").performClick()
-        rule.onNodeWithText("样例.png").assertIsDisplayed()
+        rule.onAllNodesWithText("样例.png")
+            .onFirst()
+            .assertIsDisplayed()
         rule.onNodeWithTag("media_image").assertExists()
     }
 

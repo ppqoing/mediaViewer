@@ -6,6 +6,10 @@ import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
+import com.local.mediaviewer.model.SessionEndpoint
+import com.local.mediaviewer.network.ConnectionTestResult
+import com.local.mediaviewer.session.ServerSessionManager
+import com.local.mediaviewer.session.ServerSessionState
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -299,6 +303,253 @@ class ImageReaderViewModelTest {
         )
     }
 
+    @Test
+    fun `并发网络失败只刷新一次并重写全部请求 URL`() =
+        runTest(dispatcher) {
+            val logicalA = "${DIRECTORY_URL}a.jpg"
+            val logicalB = "${DIRECTORY_URL}b.jpg"
+            val refreshedEndpoint = SessionEndpoint(
+                logicalBaseUrl =
+                    "http://media.example:8080",
+                requestBaseUrl =
+                    "http://203.0.113.9:8080",
+                ipv4 = "203.0.113.9",
+            )
+            val session = ControlledImageSession(
+                AppResult.Success(refreshedEndpoint),
+            )
+            val viewModel = populatedViewModel(
+                session = session,
+            )
+            advanceUntilIdle()
+
+            viewModel.onImageLoadError(
+                logicalA,
+                ImageLoadFailureKind.NETWORK,
+            )
+            viewModel.onImageLoadError(
+                logicalB,
+                ImageLoadFailureKind.NETWORK,
+            )
+            advanceUntilIdle()
+
+            val content =
+                viewModel.uiState.value
+                    as ImageReaderUiState.Content
+            assertEquals(1, session.refreshCalls)
+            assertTrue(
+                content.images.all {
+                    it.requestUrl.startsWith(
+                        refreshedEndpoint
+                            .requestBaseUrl,
+                    )
+                },
+            )
+            assertEquals(1, content.requestGeneration)
+            assertTrue(content.itemFailures.isEmpty())
+            assertEquals(
+                false,
+                content.isRefreshingEndpoint,
+            )
+        }
+
+    @Test
+    fun `解码失败只记录单项且不刷新`() =
+        runTest(dispatcher) {
+            val logicalA = "${DIRECTORY_URL}a.jpg"
+            val session = ControlledImageSession(
+                AppResult.Failure(
+                    AppError.DnsFailure("unused"),
+                ),
+            )
+            val viewModel = populatedViewModel(
+                session = session,
+            )
+            advanceUntilIdle()
+
+            viewModel.onImageLoadError(
+                logicalA,
+                ImageLoadFailureKind.DECODE,
+            )
+            advanceUntilIdle()
+
+            val content =
+                viewModel.uiState.value
+                    as ImageReaderUiState.Content
+            assertEquals(0, session.refreshCalls)
+            assertEquals(
+                ImageItemFailure(
+                    message = "图片解码失败",
+                    kind = ImageLoadFailureKind.DECODE,
+                ),
+                content.itemFailures[logicalA],
+            )
+            assertEquals(0, content.requestGeneration)
+        }
+
+    @Test
+    fun `第二次网络失败不自动刷新`() =
+        runTest(dispatcher) {
+            val logicalA = "${DIRECTORY_URL}a.jpg"
+            val session = ControlledImageSession(
+                AppResult.Success(REFRESHED_ENDPOINT),
+            )
+            val viewModel = populatedViewModel(
+                session = session,
+            )
+            advanceUntilIdle()
+
+            viewModel.onImageLoadError(
+                logicalA,
+                ImageLoadFailureKind.NETWORK,
+            )
+            advanceUntilIdle()
+            viewModel.onImageLoadError(
+                logicalA,
+                ImageLoadFailureKind.NETWORK,
+            )
+            advanceUntilIdle()
+
+            val content =
+                viewModel.uiState.value
+                    as ImageReaderUiState.Content
+            assertEquals(1, session.refreshCalls)
+            assertEquals(
+                ImageLoadFailureKind.NETWORK,
+                content.itemFailures[logicalA]?.kind,
+            )
+            assertEquals(1, content.requestGeneration)
+        }
+
+    @Test
+    fun `人工重试只递增目标项代数`() =
+        runTest(dispatcher) {
+            val logicalA = "${DIRECTORY_URL}a.jpg"
+            val logicalB = "${DIRECTORY_URL}b.jpg"
+            val viewModel = populatedViewModel()
+            advanceUntilIdle()
+            viewModel.onImageLoadError(
+                logicalA,
+                ImageLoadFailureKind.DECODE,
+            )
+            viewModel.onImageLoadError(
+                logicalB,
+                ImageLoadFailureKind.DECODE,
+            )
+
+            viewModel.retryImage(logicalA)
+
+            val content =
+                viewModel.uiState.value
+                    as ImageReaderUiState.Content
+            assertEquals(
+                mapOf(logicalA to 1),
+                content.itemRequestGenerations,
+            )
+            assertTrue(
+                logicalA !in content.itemFailures,
+            )
+            assertTrue(
+                logicalB in content.itemFailures,
+            )
+            assertEquals(0, content.requestGeneration)
+        }
+
+    @Test
+    fun `加载成功清除目标项失败`() =
+        runTest(dispatcher) {
+            val logicalA = "${DIRECTORY_URL}a.jpg"
+            val logicalB = "${DIRECTORY_URL}b.jpg"
+            val viewModel = populatedViewModel()
+            advanceUntilIdle()
+            viewModel.onImageLoadError(
+                logicalA,
+                ImageLoadFailureKind.DECODE,
+            )
+            viewModel.onImageLoadError(
+                logicalB,
+                ImageLoadFailureKind.DECODE,
+            )
+
+            viewModel.onImageLoadSuccess(logicalA)
+
+            val content =
+                viewModel.uiState.value
+                    as ImageReaderUiState.Content
+            assertTrue(
+                logicalA !in content.itemFailures,
+            )
+            assertTrue(
+                logicalB in content.itemFailures,
+            )
+        }
+
+    @Test
+    fun `刷新失败保留单项错误并结束刷新`() =
+        runTest(dispatcher) {
+            val logicalA = "${DIRECTORY_URL}a.jpg"
+            val session = ControlledImageSession(
+                AppResult.Failure(
+                    AppError.DnsFailure("no host"),
+                ),
+            )
+            val viewModel = populatedViewModel(
+                session = session,
+            )
+            advanceUntilIdle()
+
+            viewModel.onImageLoadError(
+                logicalA,
+                ImageLoadFailureKind.NETWORK,
+            )
+            advanceUntilIdle()
+
+            val content =
+                viewModel.uiState.value
+                    as ImageReaderUiState.Content
+            assertEquals(1, session.refreshCalls)
+            assertEquals(
+                ImageItemFailure(
+                    message =
+                        "DNS 解析失败：no host",
+                    kind =
+                        ImageLoadFailureKind.NETWORK,
+                ),
+                content.itemFailures[logicalA],
+            )
+            assertEquals(
+                false,
+                content.isRefreshingEndpoint,
+            )
+            assertEquals(0, content.requestGeneration)
+        }
+
+    private fun populatedViewModel(
+        session: ServerSessionManager =
+            ControlledImageSession(
+                AppResult.Success(
+                    REFRESHED_ENDPOINT,
+                ),
+            ),
+    ): ImageReaderViewModel =
+        readerViewModel(
+            repository = ReaderDirectoryRepository(
+                successContent(
+                    listOf(
+                        readerEntry(
+                            "a.jpg",
+                            MediaKind.IMAGE,
+                        ),
+                        readerEntry(
+                            "b.jpg",
+                            MediaKind.IMAGE,
+                        ),
+                    ),
+                ),
+            ),
+            session = session,
+        )
+
     private fun readerViewModel(
         repository: DirectoryContentRepository,
         selectedLogicalUrl: String =
@@ -307,11 +558,18 @@ class ImageReaderViewModelTest {
             ReaderPreferencesFake(
                 ImageReaderMode.COMIC,
             ),
+        session: ServerSessionManager =
+            ControlledImageSession(
+                AppResult.Success(
+                    REFRESHED_ENDPOINT,
+                ),
+            ),
     ) = ImageReaderViewModel(
         directoryLogicalUrl = DIRECTORY_URL,
         selectedLogicalUrl = selectedLogicalUrl,
         contentRepository = repository,
         preferences = preferences,
+        session = session,
     )
 }
 
@@ -319,6 +577,11 @@ private const val DIRECTORY_URL =
     "http://media.example:8080/pik/chapter/"
 private const val REQUEST_DIRECTORY_URL =
     "http://192.0.2.1:8080/pik/chapter/"
+private val REFRESHED_ENDPOINT = SessionEndpoint(
+    logicalBaseUrl = "http://media.example:8080",
+    requestBaseUrl = "http://203.0.113.9:8080",
+    ipv4 = "203.0.113.9",
+)
 
 private fun successContent(
     entries: List<DirectoryEntry>,
@@ -373,5 +636,44 @@ private class ReaderPreferencesFake(
 
     override suspend fun setDefaultMode(mode: ImageReaderMode) {
         mutable.value = mode
+    }
+}
+
+private class ControlledImageSession(
+    private val refreshResult:
+        AppResult<SessionEndpoint>,
+) : ServerSessionManager {
+    private val mutableState =
+        MutableStateFlow<ServerSessionState>(
+            ServerSessionState.Connected(
+                endpoint = REFRESHED_ENDPOINT,
+                resolvedIpv4s =
+                    listOf(REFRESHED_ENDPOINT.ipv4),
+            ),
+        )
+    override val state = mutableState
+    var refreshCalls = 0
+        private set
+
+    override suspend fun connectSaved() = Unit
+
+    override suspend fun testCandidate(
+        input: String,
+    ): AppResult<ConnectionTestResult> =
+        error("测试不会探测服务器：$input")
+
+    override suspend fun saveCandidate(
+        result: ConnectionTestResult,
+    ) {
+        error(
+            "测试不会保存服务器：" +
+                result.server.logicalBaseUrl,
+        )
+    }
+
+    override suspend fun refreshAfterRequestFailure():
+        AppResult<SessionEndpoint> {
+        refreshCalls += 1
+        return refreshResult
     }
 }

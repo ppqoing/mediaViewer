@@ -8,6 +8,7 @@ import coil3.size.Scale
 import coil3.size.Size
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -78,6 +79,58 @@ class MediaImageLoaderFactoryTest {
             assertTrue(
                 requireNotNull(request.memoryCacheKey)
                     .contains("generation=3"),
+            )
+
+            val nextGeneration =
+                MediaImageLoaderFactory.createRequest(
+                    context = context,
+                    url =
+                        "http://192.0.2.1/pik/a.png",
+                    decodeSize =
+                        ImageDecodeSize(1080, 4096),
+                    requestGeneration = 4,
+                )
+            assertNotEquals(
+                request.memoryCacheKey,
+                nextGeneration.memoryCacheKey,
+            )
+            assertEquals(
+                "http://192.0.2.1/pik/a.png",
+                request.data,
+            )
+        }
+
+    @Test
+    fun `策略生成的请求不超过像素预算`() =
+        runTest {
+            val context =
+                ApplicationProvider
+                    .getApplicationContext<Context>()
+            val decodeSize = ImageDecodePolicy.target(
+                viewportWidthPx = 1_440,
+                viewportHeightPx = 3_200,
+                scale = 5f,
+            )
+            val request =
+                MediaImageLoaderFactory.createRequest(
+                    context = context,
+                    url =
+                        "http://192.0.2.1/pik/tall.png",
+                    decodeSize = decodeSize,
+                    requestGeneration = 0,
+                )
+
+            assertTrue(
+                decodeSize.widthPx.toLong() *
+                    decodeSize.heightPx.toLong() <=
+                    ImageDecodePolicy.MAX_PIXELS,
+            )
+            assertEquals(
+                Size(
+                    decodeSize.widthPx,
+                    decodeSize.heightPx,
+                ),
+                request.sizeResolver.size(),
             )
         }
 }

@@ -13,17 +13,32 @@ import okio.Buffer
 
 class MediaFixtureServer(
     private val fixtures: MediaFixtures,
+    imageCount: Int = 1,
 ) : Closeable {
     private val server = MockWebServer()
     private val rangeCounts =
         ConcurrentHashMap<String, AtomicInteger>()
     private val rangeHeaders =
         ConcurrentHashMap<String, ConcurrentLinkedQueue<String>>()
+    private val mediaRequests = AtomicInteger()
+    private val mediaPaths =
+        ConcurrentHashMap.newKeySet<String>()
+    private val imageFiles =
+        (1..imageCount).associate { index ->
+            val name =
+                "page-" +
+                    index.toString()
+                        .padStart(3, '0') +
+                    ".png"
+            name to fixtures.png
+        }
     private val files = linkedMapOf(
         "sample.mp4" to fixtures.mp4,
         "sample.wav" to fixtures.wav,
         "sample.png" to fixtures.png,
-    )
+    ).apply {
+        putAll(imageFiles)
+    }
 
     fun start() {
         server.dispatcher = object : Dispatcher() {
@@ -42,6 +57,12 @@ class MediaFixtureServer(
 
     fun rangeRequests(path: String): List<String> =
         rangeHeaders[path]?.toList().orEmpty()
+
+    fun mediaRequestCount(): Int =
+        mediaRequests.get()
+
+    fun requestedMediaPaths(): Set<String> =
+        mediaPaths.toSet()
 
     override fun close() {
         server.close()
@@ -69,6 +90,10 @@ class MediaFixtureServer(
         }
         val file = files[path.removePrefix(prefix)]
             ?: return MockResponse(code = 404)
+        if (request.method != "HEAD") {
+            mediaRequests.incrementAndGet()
+            mediaPaths.add(path)
+        }
         return mediaResponse(
             request = request,
             path = path,

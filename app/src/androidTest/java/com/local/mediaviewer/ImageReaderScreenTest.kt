@@ -9,6 +9,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import coil3.ImageLoader
+import com.local.mediaviewer.image.ImageItemFailure
+import com.local.mediaviewer.image.ImageLoadFailureKind
 import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.image.ImageReaderUiState
@@ -123,11 +125,51 @@ class ImageReaderScreenTest {
             .assertIsDisplayed()
     }
 
+    @Test
+    fun itemFailureIsInlineAndRetriesOnlyThatImage() {
+        val base = contentState()
+        val failedUrl = base.anchorLogicalUrl
+        var retriedUrl: String? = null
+        setScreen(
+            state = base.copy(
+                itemFailures = mapOf(
+                    failedUrl to
+                        ImageItemFailure(
+                            message = "图片解码失败",
+                            kind =
+                                ImageLoadFailureKind.DECODE,
+                        ),
+                ),
+            ),
+            onRetryImage = {
+                retriedUrl = it
+            },
+        )
+
+        rule.onNodeWithText("图片解码失败")
+            .assertIsDisplayed()
+        rule
+            .onNodeWithTag(
+                "retry_image:$failedUrl",
+            )
+            .performClick()
+        rule.runOnIdle {
+            assertEquals(failedUrl, retriedUrl)
+        }
+        rule.onNodeWithTag("comic_reader")
+            .assertIsDisplayed()
+    }
+
     private fun setScreen(
         state: ImageReaderUiState,
         onModeChanged: (ImageReaderMode) -> Unit = {},
         onSortChanged: (ImageSortOrder) -> Unit = {},
         onRetryDirectory: () -> Unit = {},
+        onImageLoadError:
+            (String, ImageLoadFailureKind) -> Unit =
+            { _, _ -> },
+        onImageLoadSuccess: (String) -> Unit = {},
+        onRetryImage: (String) -> Unit = {},
     ) {
         rule.setContent {
             MaterialTheme {
@@ -138,6 +180,11 @@ class ImageReaderScreenTest {
                     onSortChanged = onSortChanged,
                     onAnchorChanged = {},
                     onRetryDirectory = onRetryDirectory,
+                    onImageLoadError =
+                        onImageLoadError,
+                    onImageLoadSuccess =
+                        onImageLoadSuccess,
+                    onRetryImage = onRetryImage,
                     onBack = {},
                 )
             }

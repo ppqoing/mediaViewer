@@ -42,9 +42,12 @@ import coil3.compose.SubcomposeAsyncImageContent
 import com.local.mediaviewer.image.ComicTransform
 import com.local.mediaviewer.image.ComicTransformReducer
 import com.local.mediaviewer.image.ImageDecodePolicy
+import com.local.mediaviewer.image.ImageItemFailure
+import com.local.mediaviewer.image.ImageLoadFailureKind
 import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.ImageSortOrder
 import com.local.mediaviewer.image.MediaImageLoaderFactory
+import com.local.mediaviewer.image.classifyImageLoadFailure
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -56,7 +59,13 @@ fun ComicReader(
     sortOrder: ImageSortOrder,
     imageLoader: ImageLoader,
     requestGeneration: Int,
+    itemFailures: Map<String, ImageItemFailure>,
+    itemRequestGenerations: Map<String, Int>,
     onAnchorChanged: (String) -> Unit,
+    onImageLoadError:
+        (String, ImageLoadFailureKind) -> Unit,
+    onImageLoadSuccess: (String) -> Unit,
+    onRetryImage: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val initialAnchorIndex =
@@ -178,12 +187,26 @@ fun ComicReader(
                     item = item,
                     imageLoader = imageLoader,
                     requestGeneration =
-                        requestGeneration,
+                        effectiveRequestGeneration(
+                            requestGeneration =
+                                requestGeneration,
+                            itemRequestGeneration =
+                                itemRequestGenerations[
+                                    item.logicalUrl
+                                ] ?: 0,
+                        ),
+                    failure =
+                        itemFailures[item.logicalUrl],
                     viewportWidthPx =
                         viewportWidthPx,
                     viewportHeightPx =
                         viewportHeightPx,
                     visualScale = transform.scale,
+                    onImageLoadError =
+                        onImageLoadError,
+                    onImageLoadSuccess =
+                        onImageLoadSuccess,
+                    onRetryImage = onRetryImage,
                     modifier = Modifier
                         .requiredWidth(itemWidth)
                         .offset {
@@ -209,8 +232,30 @@ private fun ComicImage(
     viewportWidthPx: Int,
     viewportHeightPx: Int,
     visualScale: Float,
+    failure: ImageItemFailure?,
+    onImageLoadError:
+        (String, ImageLoadFailureKind) -> Unit,
+    onImageLoadSuccess: (String) -> Unit,
+    onRetryImage: (String) -> Unit,
     modifier: Modifier,
 ) {
+    if (failure != null) {
+        ImageItemErrorPanel(
+            item = item,
+            failure = failure,
+            onRetry = {
+                onRetryImage(item.logicalUrl)
+            },
+            modifier = modifier,
+        )
+        return
+    }
+    var hasIntrinsicSize by remember(
+        item.logicalUrl,
+        requestGeneration,
+    ) {
+        mutableStateOf(false)
+    }
     val context = LocalContext.current
     val decodeSize = remember(
         viewportWidthPx,
@@ -243,18 +288,45 @@ private fun ComicImage(
         contentDescription = item.name,
         contentScale = ContentScale.FillWidth,
         modifier = modifier
-            .fillMaxWidth()
-            .wrapContentHeight()
+            .then(
+                if (hasIntrinsicSize) {
+                    Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                },
+            )
             .testTag(
                 "comic_image:${item.logicalUrl}",
             ),
         loading = {
             ComicPlaceholder()
         },
-        error = {
+        error = { state ->
+            LaunchedEffect(state.result) {
+                onImageLoadError(
+                    item.logicalUrl,
+                    classifyImageLoadFailure(
+                        state.result.throwable,
+                    ),
+                )
+            }
             ComicPlaceholder("图片加载失败")
         },
-        success = {
+        success = { state ->
+            LaunchedEffect(
+                item.logicalUrl,
+                requestGeneration,
+                state.result,
+            ) {
+                hasIntrinsicSize = true
+                onImageLoadSuccess(
+                    item.logicalUrl,
+                )
+            }
             SubcomposeAsyncImageContent()
         },
     )
@@ -335,3 +407,12 @@ internal fun mostVisibleLogicalUrl(
         viewportEndPx =
             layoutInfo.viewportEndOffset,
     )
+
+internal fun effectiveRequestGeneration(
+    requestGeneration: Int,
+    itemRequestGeneration: Int,
+): Int =
+    requestGeneration * REQUEST_GENERATION_FACTOR +
+        itemRequestGeneration
+
+private const val REQUEST_GENERATION_FACTOR = 1_000_000

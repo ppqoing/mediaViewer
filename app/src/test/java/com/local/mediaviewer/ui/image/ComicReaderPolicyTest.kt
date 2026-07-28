@@ -55,4 +55,15 @@ class ComicReaderPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `全局和单项请求代数组合为稳定键`() {
+        assertEquals(
+            2_000_003,
+            effectiveRequestGeneration(
+                requestGeneration = 2,
+                itemRequestGeneration = 3,
+            ),
+        )
+    }
 }

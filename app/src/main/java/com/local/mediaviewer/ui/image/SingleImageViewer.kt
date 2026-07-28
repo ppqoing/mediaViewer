@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,16 +27,24 @@ import coil3.ImageLoader
 import coil3.compose.SubcomposeAsyncImage
 import coil3.compose.SubcomposeAsyncImageContent
 import com.local.mediaviewer.image.ImageDecodePolicy
+import com.local.mediaviewer.image.ImageItemFailure
+import com.local.mediaviewer.image.ImageLoadFailureKind
 import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.image.ZoomReducer
 import com.local.mediaviewer.image.ZoomTransform
+import com.local.mediaviewer.image.classifyImageLoadFailure
 
 @Composable
 fun SingleImageViewer(
     item: ImageReaderItem,
     imageLoader: ImageLoader,
     requestGeneration: Int,
+    failure: ImageItemFailure?,
+    onImageLoadError:
+        (String, ImageLoadFailureKind) -> Unit,
+    onImageLoadSuccess: (String) -> Unit,
+    onRetryImage: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var zoom by remember(item.logicalUrl) {
@@ -46,8 +55,20 @@ fun SingleImageViewer(
     BoxWithConstraints(
         modifier = modifier
             .clipToBounds()
-            .background(Color.Black),
+            .background(Color.Black)
+            .testTag("media_image"),
     ) {
+        if (failure != null) {
+            ImageItemErrorPanel(
+                item = item,
+                failure = failure,
+                onRetry = {
+                    onRetryImage(item.logicalUrl)
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+            return@BoxWithConstraints
+        }
         val viewportWidthPx =
             constraints.maxWidth.coerceAtLeast(1)
         val viewportHeightPx =
@@ -84,7 +105,6 @@ fun SingleImageViewer(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxSize()
-                .testTag("media_image")
                 .pointerInput(item.logicalUrl) {
                     detectTransformGestures {
                             _,
@@ -120,10 +140,19 @@ fun SingleImageViewer(
                     CircularProgressIndicator()
                 }
             },
-            error = {
+            error = { state ->
+                LaunchedEffect(state.result) {
+                    onImageLoadError(
+                        item.logicalUrl,
+                        classifyImageLoadFailure(
+                            state.result.throwable,
+                        ),
+                    )
+                }
                 Box(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
+                    contentAlignment =
+                        Alignment.Center,
                 ) {
                     Text(
                         text = "图片加载失败",
@@ -131,7 +160,16 @@ fun SingleImageViewer(
                     )
                 }
             },
-            success = {
+            success = { state ->
+                LaunchedEffect(
+                    item.logicalUrl,
+                    requestGeneration,
+                    state.result,
+                ) {
+                    onImageLoadSuccess(
+                        item.logicalUrl,
+                    )
+                }
                 SubcomposeAsyncImageContent()
             },
         )
