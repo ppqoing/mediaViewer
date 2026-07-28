@@ -209,15 +209,15 @@ class PlayerViewModelTest {
             val playsBefore = engine.playCalls
 
             viewModel.setVideoScaleMode(
-                VideoScaleMode.FILL_CROP,
+                VideoScaleMode.STRETCH,
             )
 
             assertEquals(
-                VideoScaleMode.FILL_CROP,
+                VideoScaleMode.STRETCH,
                 viewModel.uiState.value.videoScaleMode,
             )
             assertEquals(
-                listOf(VideoScaleMode.FILL_CROP),
+                listOf(VideoScaleMode.STRETCH),
                 engine.scaleModes,
             )
             assertEquals(

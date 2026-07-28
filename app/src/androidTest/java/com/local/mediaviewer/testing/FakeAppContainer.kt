@@ -35,25 +35,39 @@ import kotlinx.coroutines.flow.StateFlow
 
 class FakeAppContainer(
     context: Context,
+    initialReaderMode:
+        ImageReaderMode = ImageReaderMode.COMIC,
+    directoryContent:
+        DirectoryContent = defaultDirectoryContent(),
 ) : AppContainer, AutoCloseable {
     private val endpoint = SessionEndpoint(
-        logicalBaseUrl = "http://media.test:8080",
-        requestBaseUrl = "http://127.0.0.1:8080",
+        logicalBaseUrl = FAKE_LOGICAL_BASE_URL,
+        requestBaseUrl = FAKE_REQUEST_BASE_URL,
         ipv4 = "127.0.0.1",
     )
 
     override val settingsRepository: ServerSettingsRepository =
         FakeServerSettingsRepository()
+    private val readerPreferences =
+        FakeReaderPreferencesRepository(
+            initialReaderMode,
+        )
     override val readerPreferencesRepository:
         ReaderPreferencesRepository =
-        FakeReaderPreferencesRepository()
+        readerPreferences
     override val sessionManager: ServerSessionManager =
         FakeServerSessionManager(endpoint)
     override val directoryContentRepository:
         DirectoryContentRepository =
-        FakeDirectoryContentRepository(endpoint)
+        FakeDirectoryContentRepository(
+            endpoint = endpoint,
+            template = directoryContent,
+        )
     override val browserRepository: BrowserRepository =
-        FakeBrowserRepository(endpoint)
+        FakeBrowserRepository(
+            endpoint = endpoint,
+            template = directoryContent,
+        )
     override val playbackEngineFactory =
         PlaybackEngineFactory {
             FakePlaybackEngine()
@@ -63,78 +77,49 @@ class FakeAppContainer(
     override val imageLoader: ImageLoader =
         MediaImageLoaderFactory.create(context)
 
+    val savedReaderModes: List<ImageReaderMode>
+        get() = readerPreferences.savedModes.toList()
+
     override fun close() {
         imageLoader.shutdown()
     }
 }
 
-private class FakeReaderPreferencesRepository :
+private class FakeReaderPreferencesRepository(
+    initialMode: ImageReaderMode,
+) :
     ReaderPreferencesRepository {
     private val mutable =
-        MutableStateFlow(ImageReaderMode.COMIC)
+        MutableStateFlow(initialMode)
+    val savedModes =
+        mutableListOf<ImageReaderMode>()
     override val defaultMode: Flow<ImageReaderMode> = mutable
 
     override suspend fun currentDefaultMode(): ImageReaderMode =
         mutable.value
 
     override suspend fun setDefaultMode(mode: ImageReaderMode) {
+        savedModes += mode
         mutable.value = mode
     }
 }
 
 private class FakeDirectoryContentRepository(
     private val endpoint: SessionEndpoint,
+    private val template: DirectoryContent,
 ) : DirectoryContentRepository {
     override suspend fun load(
         logicalDirectoryUrl: String,
     ): AppResult<DirectoryContent> {
-        val requestDirectoryUrl =
-            endpoint.requestUrlFor(logicalDirectoryUrl)
-        val images = listOf(
-            Triple(
-                "前一页.jpg",
-                1_024L,
-                "previous.jpg",
-            ),
-            Triple(
-                "样例.png",
-                2_048L,
-                "sample.png",
-            ),
-            Triple(
-                "后一页.webp",
-                3_072L,
-                "next.webp",
-            ),
-        )
         return AppResult.Success(
-            DirectoryContent(
+            rebaseDirectoryContent(
+                template = template,
                 logicalDirectoryUrl =
                     logicalDirectoryUrl,
                 requestDirectoryUrl =
-                    requestDirectoryUrl,
-                entries = images.map {
-                        (name, size, fileName),
-                    ->
-                    DirectoryEntry(
-                        name = name,
-                        size = size,
-                        modifiedAt =
-                            Instant.parse(
-                                "2026-07-28T00:00:00Z",
-                            ),
-                        mode = 420L,
-                        isDirectory = false,
-                        isSymlink = false,
-                        logicalUrl =
-                            logicalDirectoryUrl +
-                                fileName,
-                        requestUrl =
-                            requestDirectoryUrl +
-                                fileName,
-                        kind = MediaKind.IMAGE,
-                    )
-                },
+                    endpoint.requestUrlFor(
+                        logicalDirectoryUrl,
+                    ),
             ),
         )
     }
@@ -194,6 +179,7 @@ private class FakeServerSessionManager(
 
 private class FakeBrowserRepository(
     private val endpoint: SessionEndpoint,
+    private val template: DirectoryContent,
 ) : BrowserRepository {
     override suspend fun openRoot(
         root: RootShare,
@@ -226,35 +212,19 @@ private class FakeBrowserRepository(
     ): AppResult<BrowserPage> {
         val requestDirectoryUrl =
             endpoint.requestUrlFor(logicalUrl)
+        val content = rebaseDirectoryContent(
+            template = template,
+            logicalDirectoryUrl = logicalUrl,
+            requestDirectoryUrl =
+                requestDirectoryUrl,
+        )
         return AppResult.Success(
             BrowserPage(
                 root = root,
                 logicalDirectoryUrl = logicalUrl,
                 requestDirectoryUrl = requestDirectoryUrl,
                 breadcrumbs = breadcrumbs,
-                entries = listOf(
-                    entry(
-                        name = "样例.mp4",
-                        logicalUrl = logicalUrl + "sample.mp4",
-                        requestUrl =
-                            requestDirectoryUrl + "sample.mp4",
-                        kind = MediaKind.VIDEO,
-                    ),
-                    entry(
-                        name = "样例.wav",
-                        logicalUrl = logicalUrl + "sample.wav",
-                        requestUrl =
-                            requestDirectoryUrl + "sample.wav",
-                        kind = MediaKind.AUDIO,
-                    ),
-                    entry(
-                        name = "样例.png",
-                        logicalUrl = logicalUrl + "sample.png",
-                        requestUrl =
-                            requestDirectoryUrl + "sample.png",
-                        kind = MediaKind.IMAGE,
-                    ),
-                ),
+                entries = content.entries,
             ),
         )
     }
@@ -277,6 +247,162 @@ private class FakeBrowserRepository(
         kind = kind,
     )
 }
+
+fun defaultDirectoryContent(): DirectoryContent {
+    val logicalDirectoryUrl =
+        "$FAKE_LOGICAL_BASE_URL/middle/nested/"
+    val requestDirectoryUrl =
+        "$FAKE_REQUEST_BASE_URL/middle/nested/"
+    return DirectoryContent(
+        logicalDirectoryUrl = logicalDirectoryUrl,
+        requestDirectoryUrl = requestDirectoryUrl,
+        entries = listOf(
+            fixtureEntry(
+                name = "样例.mp4",
+                relativeUrl = "sample.mp4",
+                size = 4_096L,
+                modifiedAt =
+                    "2026-07-28T04:00:00Z",
+                kind = MediaKind.VIDEO,
+                logicalDirectoryUrl =
+                    logicalDirectoryUrl,
+                requestDirectoryUrl =
+                    requestDirectoryUrl,
+            ),
+            fixtureEntry(
+                name = "样例.wav",
+                relativeUrl = "sample.wav",
+                size = 3_072L,
+                modifiedAt =
+                    "2026-07-28T03:00:00Z",
+                kind = MediaKind.AUDIO,
+                logicalDirectoryUrl =
+                    logicalDirectoryUrl,
+                requestDirectoryUrl =
+                    requestDirectoryUrl,
+            ),
+            fixtureEntry(
+                name = "样例.png",
+                relativeUrl = "sample.png",
+                size = 2_048L,
+                modifiedAt =
+                    "2026-07-28T02:00:00Z",
+                kind = MediaKind.IMAGE,
+                logicalDirectoryUrl =
+                    logicalDirectoryUrl,
+                requestDirectoryUrl =
+                    requestDirectoryUrl,
+            ),
+            fixtureEntry(
+                name = "001.jpg",
+                relativeUrl = "001.jpg",
+                size = 300L,
+                modifiedAt =
+                    "2026-07-28T03:00:00Z",
+                kind = MediaKind.IMAGE,
+                logicalDirectoryUrl =
+                    logicalDirectoryUrl,
+                requestDirectoryUrl =
+                    requestDirectoryUrl,
+            ),
+            fixtureEntry(
+                name = "002.jpg",
+                relativeUrl = "002.jpg",
+                size = 100L,
+                modifiedAt =
+                    "2026-07-28T01:00:00Z",
+                kind = MediaKind.IMAGE,
+                logicalDirectoryUrl =
+                    logicalDirectoryUrl,
+                requestDirectoryUrl =
+                    requestDirectoryUrl,
+            ),
+            fixtureEntry(
+                name = "003.jpg",
+                relativeUrl = "003.jpg",
+                size = 200L,
+                modifiedAt =
+                    "2026-07-28T02:00:00Z",
+                kind = MediaKind.IMAGE,
+                logicalDirectoryUrl =
+                    logicalDirectoryUrl,
+                requestDirectoryUrl =
+                    requestDirectoryUrl,
+            ),
+            fixtureEntry(
+                name = "clip.mp4",
+                relativeUrl = "clip.mp4",
+                size = 5_120L,
+                modifiedAt =
+                    "2026-07-28T05:00:00Z",
+                kind = MediaKind.VIDEO,
+                logicalDirectoryUrl =
+                    logicalDirectoryUrl,
+                requestDirectoryUrl =
+                    requestDirectoryUrl,
+            ),
+            fixtureEntry(
+                name = "subfolder",
+                relativeUrl = "subfolder/",
+                size = 0L,
+                modifiedAt =
+                    "2026-07-28T00:00:00Z",
+                kind = MediaKind.DIRECTORY,
+                logicalDirectoryUrl =
+                    logicalDirectoryUrl,
+                requestDirectoryUrl =
+                    requestDirectoryUrl,
+            ),
+        ),
+    )
+}
+
+private fun rebaseDirectoryContent(
+    template: DirectoryContent,
+    logicalDirectoryUrl: String,
+    requestDirectoryUrl: String,
+): DirectoryContent =
+    DirectoryContent(
+        logicalDirectoryUrl = logicalDirectoryUrl,
+        requestDirectoryUrl = requestDirectoryUrl,
+        entries = template.entries.map { entry ->
+            val relativeUrl =
+                entry.logicalUrl.removePrefix(
+                    template.logicalDirectoryUrl,
+                )
+            check(relativeUrl != entry.logicalUrl) {
+                "测试目录条目必须属于模板目录"
+            }
+            entry.copy(
+                logicalUrl =
+                    logicalDirectoryUrl + relativeUrl,
+                requestUrl =
+                    requestDirectoryUrl + relativeUrl,
+            )
+        },
+    )
+
+private fun fixtureEntry(
+    name: String,
+    relativeUrl: String,
+    size: Long,
+    modifiedAt: String,
+    kind: MediaKind,
+    logicalDirectoryUrl: String,
+    requestDirectoryUrl: String,
+) = DirectoryEntry(
+    name = name,
+    size = size,
+    modifiedAt = Instant.parse(modifiedAt),
+    mode = 420L,
+    isDirectory = kind == MediaKind.DIRECTORY,
+    isSymlink = false,
+    logicalUrl =
+        logicalDirectoryUrl + relativeUrl,
+    requestUrl =
+        requestDirectoryUrl + relativeUrl,
+    kind = kind,
+)
 
 private class FakePlaybackEngine : PlaybackEngine {
     private val mutable = MutableStateFlow(
@@ -320,6 +446,11 @@ private class FakePlaybackEngine : PlaybackEngine {
 
     override fun close() = Unit
 }
+
+private const val FAKE_LOGICAL_BASE_URL =
+    "http://media.test:8080"
+private const val FAKE_REQUEST_BASE_URL =
+    "http://127.0.0.1:8080"
 
 private class InMemoryPlaybackPositionStore :
     PlaybackPositionStore {

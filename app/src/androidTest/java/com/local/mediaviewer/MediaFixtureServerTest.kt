@@ -28,7 +28,10 @@ class MediaFixtureServerTest {
         }
         val fixtures = MediaFixtureFactory(directory).create()
 
-        MediaFixtureServer(fixtures).use { server ->
+        MediaFixtureServer(
+            fixtures = fixtures,
+            imageCount = 50,
+        ).use { server ->
             server.start()
             val client = OkHttpClient()
 
@@ -48,6 +51,22 @@ class MediaFixtureServerTest {
                 )
                 assertTrue(
                     json.contains("\"name\":\"sample.png\""),
+                )
+            }
+
+            client.newCall(
+                Request.Builder()
+                    .url(
+                        server.url(
+                            "/pik/page-050.png",
+                        ),
+                    )
+                    .build(),
+            ).execute().use { page ->
+                assertEquals(200, page.code)
+                assertEquals(
+                    "image/png",
+                    page.header("Content-Type"),
                 )
             }
 

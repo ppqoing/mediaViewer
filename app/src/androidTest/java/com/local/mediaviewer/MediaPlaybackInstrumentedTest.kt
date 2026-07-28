@@ -2,6 +2,8 @@ package com.local.mediaviewer
 
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
@@ -59,13 +61,22 @@ class MediaPlaybackInstrumentedTest {
     @Test
     fun videoUsesRangePlaysSeeksAndReattachesAfterActivityRecreation() {
         val engine = AndroidVlcPlaybackEngine(context)
+        val hostId = View.generateViewId()
         try {
             ActivityScenario.launch(
                 MainActivity::class.java,
             ).use { scenario ->
                 scenario.onActivity { activity ->
-                    val host = FrameLayout(activity)
-                    activity.setContentView(host)
+                    val host = FrameLayout(activity).apply {
+                        id = hostId
+                    }
+                    activity.setContentView(
+                        host,
+                        ViewGroup.LayoutParams(
+                            800,
+                            450,
+                        ),
+                    )
                     engine.attachVideoOutput(host)
                 }
                 engine.prepare(
@@ -100,6 +111,20 @@ class MediaPlaybackInstrumentedTest {
                         )
                 }
 
+                scenario.onActivity { activity ->
+                    val host = requireNotNull(
+                        activity.findViewById<
+                            FrameLayout
+                        >(hostId),
+                    )
+                    val output =
+                        requireNotNull(host.getChildAt(0))
+                    assertEquals(host.width, output.width)
+                    assertEquals(host.height, output.height)
+                    assertEquals(0f, output.translationX)
+                    assertEquals(0f, output.translationY)
+                }
+
                 val duration = engine.state.value.durationMs
                 val target = duration / 2
                 engine.seekTo(target)
@@ -114,6 +139,29 @@ class MediaPlaybackInstrumentedTest {
                         engine.state.value.positionMs - target,
                     ) < 2_000L
                 }
+                val positionBeforeModes =
+                    engine.state.value.positionMs
+                VideoScaleMode.entries.forEach { mode ->
+                    scenario.onActivity {
+                        engine.setVideoScaleMode(mode)
+                    }
+                    Thread.sleep(20)
+                    val state = engine.state.value
+                    assertTrue(
+                        "模式 $mode 后播放状态异常：$state",
+                        state.status !=
+                            PlaybackStatus.ERROR,
+                    )
+                    assertEquals(duration, state.durationMs)
+                    assertTrue(
+                        abs(
+                            state.positionMs -
+                                positionBeforeModes,
+                        ) < 2_000L ||
+                            state.status ==
+                            PlaybackStatus.ENDED,
+                    )
+                }
                 val positionBeforeRecreation =
                     engine.state.value.positionMs
                 scenario.onActivity {
@@ -122,15 +170,21 @@ class MediaPlaybackInstrumentedTest {
                 scenario.recreate()
                 scenario.onActivity { activity ->
                     val replacementHost =
-                        FrameLayout(activity)
+                        FrameLayout(activity).apply {
+                            id = hostId
+                        }
                     activity.setContentView(
                         replacementHost,
+                        ViewGroup.LayoutParams(
+                            800,
+                            450,
+                        ),
                     )
                     engine.attachVideoOutput(
                         replacementHost,
                     )
                     engine.setVideoScaleMode(
-                        VideoScaleMode.FILL_CROP,
+                        VideoScaleMode.STRETCH,
                     )
                 }
                 engine.play()

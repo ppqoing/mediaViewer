@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -34,6 +34,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
@@ -51,6 +53,15 @@ import com.local.mediaviewer.image.classifyImageLoadFailure
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+
+val ComicItemIndexSemanticsKey =
+    SemanticsPropertyKey<Int>("ComicItemIndex")
+val ComicScaleSemanticsKey =
+    SemanticsPropertyKey<Float>("ComicScale")
+val ComicHorizontalOffsetSemanticsKey =
+    SemanticsPropertyKey<Float>(
+        "ComicHorizontalOffset",
+    )
 
 @Composable
 fun ComicReader(
@@ -178,35 +189,14 @@ fun ComicReader(
             horizontalAlignment =
                 Alignment.CenterHorizontally,
         ) {
-            items(
+            itemsIndexed(
                 items = images,
-                key = ImageReaderItem::logicalUrl,
-                contentType = { "image" },
-            ) { item ->
-                ComicImage(
-                    item = item,
-                    imageLoader = imageLoader,
-                    requestGeneration =
-                        effectiveRequestGeneration(
-                            requestGeneration =
-                                requestGeneration,
-                            itemRequestGeneration =
-                                itemRequestGenerations[
-                                    item.logicalUrl
-                                ] ?: 0,
-                        ),
-                    failure =
-                        itemFailures[item.logicalUrl],
-                    viewportWidthPx =
-                        viewportWidthPx,
-                    viewportHeightPx =
-                        viewportHeightPx,
-                    visualScale = transform.scale,
-                    onImageLoadError =
-                        onImageLoadError,
-                    onImageLoadSuccess =
-                        onImageLoadSuccess,
-                    onRetryImage = onRetryImage,
+                key = { _, item ->
+                    item.logicalUrl
+                },
+                contentType = { _, _ -> "image" },
+            ) { index, item ->
+                Box(
                     modifier = Modifier
                         .requiredWidth(itemWidth)
                         .offset {
@@ -217,8 +207,52 @@ fun ComicReader(
                                         .roundToInt(),
                                 y = 0,
                             )
+                        }
+                        .testTag(
+                            "comic_item:${item.name}",
+                        )
+                        .semantics {
+                            this[
+                                ComicItemIndexSemanticsKey
+                            ] = index
+                            this[
+                                ComicScaleSemanticsKey
+                            ] = transform.scale
+                            this[
+                                ComicHorizontalOffsetSemanticsKey
+                            ] =
+                                transform
+                                    .horizontalOffsetPx
                         },
-                )
+                ) {
+                    ComicImage(
+                        item = item,
+                        imageLoader = imageLoader,
+                        requestGeneration =
+                            effectiveRequestGeneration(
+                                requestGeneration =
+                                    requestGeneration,
+                                itemRequestGeneration =
+                                    itemRequestGenerations[
+                                        item.logicalUrl
+                                    ] ?: 0,
+                            ),
+                        failure =
+                            itemFailures[item.logicalUrl],
+                        viewportWidthPx =
+                            viewportWidthPx,
+                        viewportHeightPx =
+                            viewportHeightPx,
+                        visualScale = transform.scale,
+                        onImageLoadError =
+                            onImageLoadError,
+                        onImageLoadSuccess =
+                            onImageLoadSuccess,
+                        onRetryImage = onRetryImage,
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }
