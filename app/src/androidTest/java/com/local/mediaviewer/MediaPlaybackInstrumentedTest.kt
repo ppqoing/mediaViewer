@@ -2,7 +2,7 @@ package com.local.mediaviewer
 
 import android.content.Context
 import android.content.pm.ActivityInfo
-import android.view.SurfaceView
+import android.widget.FrameLayout
 import androidx.room.Room
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -13,6 +13,7 @@ import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
 import com.local.mediaviewer.playback.MediaViewerDatabase
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.RoomPlaybackPositionStore
+import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.testing.MediaFixtureFactory
 import com.local.mediaviewer.testing.MediaFixtureServer
 import com.local.mediaviewer.ui.player.FullscreenController
@@ -63,9 +64,9 @@ class MediaPlaybackInstrumentedTest {
                 MainActivity::class.java,
             ).use { scenario ->
                 scenario.onActivity { activity ->
-                    val surface = SurfaceView(activity)
-                    activity.setContentView(surface)
-                    engine.attachVideoSurface(surface)
+                    val host = FrameLayout(activity)
+                    activity.setContentView(host)
+                    engine.attachVideoOutput(host)
                 }
                 engine.prepare(
                     server.url("/middle/sample.mp4"),
@@ -116,17 +117,20 @@ class MediaPlaybackInstrumentedTest {
                 val positionBeforeRecreation =
                     engine.state.value.positionMs
                 scenario.onActivity {
-                    engine.detachVideoSurface()
+                    engine.detachVideoOutput()
                 }
                 scenario.recreate()
                 scenario.onActivity { activity ->
-                    val replacementSurface =
-                        SurfaceView(activity)
+                    val replacementHost =
+                        FrameLayout(activity)
                     activity.setContentView(
-                        replacementSurface,
+                        replacementHost,
                     )
-                    engine.attachVideoSurface(
-                        replacementSurface,
+                    engine.attachVideoOutput(
+                        replacementHost,
+                    )
+                    engine.setVideoScaleMode(
+                        VideoScaleMode.FILL_CROP,
                     )
                 }
                 engine.play()

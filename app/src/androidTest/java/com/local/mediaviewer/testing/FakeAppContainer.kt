@@ -1,7 +1,7 @@
 package com.local.mediaviewer.testing
 
 import android.content.Context
-import android.view.SurfaceView
+import android.view.ViewGroup
 import coil3.ImageLoader
 import com.local.mediaviewer.app.AppContainer
 import com.local.mediaviewer.browser.Breadcrumb
@@ -24,6 +24,7 @@ import com.local.mediaviewer.playback.PlaybackEngineFactory
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.settings.ServerSettingsRepository
@@ -245,11 +246,11 @@ private class FakePlaybackEngine : PlaybackEngine {
         )
     }
 
-    override fun attachVideoSurface(
-        surfaceView: SurfaceView,
-    ) = Unit
+    override fun attachVideoOutput(host: ViewGroup) = Unit
 
-    override fun detachVideoSurface() = Unit
+    override fun detachVideoOutput() = Unit
+
+    override fun setVideoScaleMode(mode: VideoScaleMode) = Unit
 
     override fun play() {
         mutable.value = mutable.value.copy(

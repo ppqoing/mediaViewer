@@ -2,7 +2,11 @@ package com.local.mediaviewer.playback
 
 import android.content.Context
 import android.net.Uri
-import android.view.SurfaceView
+import android.os.Handler
+import android.os.Looper
+import android.view.ViewGroup
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,11 +14,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.util.VLCVideoLayout
 
 class AndroidVlcPlaybackEngine(
     context: Context,
 ) : PlaybackEngine {
     private val closed = AtomicBoolean(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val libVlc = LibVLC(
         context.applicationContext,
         arrayListOf("--network-caching=1500"),
@@ -23,6 +29,9 @@ class AndroidVlcPlaybackEngine(
     private val mutableState = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = mutableState.asStateFlow()
     private val interruptions = PlaybackInterruptions(context, ::pause)
+    private var videoHost: ViewGroup? = null
+    private var videoLayout: VLCVideoLayout? = null
+    private var videoScaleMode = VideoScaleMode.BEST_FIT
 
     init {
         mediaPlayer.setEventListener(::onVlcEvent)
@@ -42,23 +51,51 @@ class AndroidVlcPlaybackEngine(
         media.release()
     }
 
-    override fun attachVideoSurface(surfaceView: SurfaceView) {
+    override fun attachVideoOutput(host: ViewGroup) {
         check(!closed.get()) {
             "PlaybackEngine is closed"
         }
-        val videoOutput = mediaPlayer.vlcVout
-        if (videoOutput.areViewsAttached()) {
-            videoOutput.detachViews()
-        }
-        videoOutput.setVideoView(surfaceView)
-        videoOutput.attachViews()
+        requireMainThread("绑定")
+        detachVideoOutputInternal()
+
+        val layout = VLCVideoLayout(host.context)
+        host.removeAllViews()
+        host.addView(
+            layout,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        mediaPlayer.attachViews(
+            layout,
+            null,
+            false,
+            false,
+        )
+        videoHost = host
+        videoLayout = layout
+        mediaPlayer.setVideoScale(
+            videoScaleMode.toLibVlcScaleType(),
+        )
     }
 
-    override fun detachVideoSurface() {
+    override fun detachVideoOutput() {
         if (closed.get()) return
-        val videoOutput = mediaPlayer.vlcVout
-        if (videoOutput.areViewsAttached()) {
-            videoOutput.detachViews()
+        requireMainThread("解绑")
+        detachVideoOutputInternal()
+    }
+
+    override fun setVideoScaleMode(mode: VideoScaleMode) {
+        check(!closed.get()) {
+            "PlaybackEngine is closed"
+        }
+        requireMainThread("设置画面模式")
+        videoScaleMode = mode
+        if (videoLayout != null) {
+            mediaPlayer.setVideoScale(
+                mode.toLibVlcScaleType(),
+            )
         }
     }
 
@@ -120,11 +157,68 @@ class AndroidVlcPlaybackEngine(
         if (!closed.compareAndSet(false, true)) return
         interruptions.close()
         mediaPlayer.setEventListener(null)
-        if (mediaPlayer.vlcVout.areViewsAttached()) {
-            mediaPlayer.vlcVout.detachViews()
+        runOnMainThread {
+            detachVideoOutputInternal()
         }
         mediaPlayer.stop()
         mediaPlayer.release()
         libVlc.release()
+    }
+
+    private fun detachVideoOutputInternal() {
+        if (videoLayout == null) return
+        mediaPlayer.detachViews()
+        videoHost?.removeAllViews()
+        videoLayout = null
+        videoHost = null
+    }
+
+    private fun requireMainThread(operation: String) {
+        check(Looper.myLooper() == Looper.getMainLooper()) {
+            "视频输出必须在主线程$operation"
+        }
+    }
+
+    private fun runOnMainThread(action: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            action()
+            return
+        }
+
+        val completed = CountDownLatch(1)
+        var failure: Throwable? = null
+        check(
+            mainHandler.post {
+                try {
+                    action()
+                } catch (error: Throwable) {
+                    failure = error
+                } finally {
+                    completed.countDown()
+                }
+            },
+        ) {
+            "无法向主线程提交视频输出操作"
+        }
+        val finished = try {
+            completed.await(
+                MAIN_THREAD_TIMEOUT_SECONDS,
+                TimeUnit.SECONDS,
+            )
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw IllegalStateException(
+                "等待视频输出主线程操作时被中断",
+                error,
+            )
+        }
+        check(finished) {
+            "视频输出主线程操作超时"
+        }
+        failure?.let { throw it }
+    }
+
+    private companion object {
+        const val MAIN_THREAD_TIMEOUT_SECONDS = 10L
     }
 }

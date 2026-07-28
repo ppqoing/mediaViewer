@@ -1,6 +1,6 @@
 package com.local.mediaviewer.playback
 
-import android.view.SurfaceView
+import android.view.ViewGroup
 import kotlinx.coroutines.flow.StateFlow
 
 interface PlaybackEngine : AutoCloseable {
@@ -8,9 +8,11 @@ interface PlaybackEngine : AutoCloseable {
 
     fun prepare(url: String)
 
-    fun attachVideoSurface(surfaceView: SurfaceView)
+    fun attachVideoOutput(host: ViewGroup)
 
-    fun detachVideoSurface()
+    fun detachVideoOutput()
+
+    fun setVideoScaleMode(mode: VideoScaleMode)
 
     fun play()
 

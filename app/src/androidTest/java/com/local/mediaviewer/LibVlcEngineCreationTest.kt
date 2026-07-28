@@ -24,7 +24,7 @@ class LibVlcEngineCreationTest {
 
         engine.close()
         engine.close()
-        engine.detachVideoSurface()
+        engine.detachVideoOutput()
         engine.play()
         engine.pause()
         engine.seekTo(10_000)

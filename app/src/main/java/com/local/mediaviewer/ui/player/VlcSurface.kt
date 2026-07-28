@@ -1,6 +1,6 @@
 package com.local.mediaviewer.ui.player
 
-import android.view.SurfaceView
+import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -16,17 +16,17 @@ fun VlcSurface(
     AndroidView(
         modifier = modifier.testTag("vlc_surface"),
         factory = { context ->
-            SurfaceView(context).also { surface ->
-                surface.keepScreenOn = keepScreenOn
-                engine.attachVideoSurface(surface)
+            FrameLayout(context).also { host ->
+                host.keepScreenOn = keepScreenOn
+                engine.attachVideoOutput(host)
             }
         },
-        update = { surface ->
-            surface.keepScreenOn = keepScreenOn
+        update = { host ->
+            host.keepScreenOn = keepScreenOn
         },
-        onRelease = { surface ->
-            surface.keepScreenOn = false
-            engine.detachVideoSurface()
+        onRelease = { host ->
+            host.keepScreenOn = false
+            engine.detachVideoOutput()
         },
     )
 }

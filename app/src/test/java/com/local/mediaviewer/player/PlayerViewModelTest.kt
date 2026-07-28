@@ -1,6 +1,6 @@
 package com.local.mediaviewer.player
 
-import android.view.SurfaceView
+import android.view.ViewGroup
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.model.SessionEndpoint
@@ -9,6 +9,7 @@ import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import kotlinx.coroutines.Dispatchers
@@ -215,9 +216,11 @@ private class FakeEngine : PlaybackEngine {
         preparedUrls += url
     }
 
-    override fun attachVideoSurface(surfaceView: SurfaceView) = Unit
+    override fun attachVideoOutput(host: ViewGroup) = Unit
 
-    override fun detachVideoSurface() = Unit
+    override fun detachVideoOutput() = Unit
+
+    override fun setVideoScaleMode(mode: VideoScaleMode) = Unit
 
     override fun play() {
         playCalls += 1
