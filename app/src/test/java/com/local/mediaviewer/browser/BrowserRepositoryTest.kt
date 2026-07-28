@@ -3,136 +3,114 @@ package com.local.mediaviewer.browser
 import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.model.DirectoryEntry
+import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.model.RootShare
 import com.local.mediaviewer.model.SessionEndpoint
-import com.local.mediaviewer.network.CaddyDirectoryClient
 import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
+import java.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BrowserRepositoryTest {
     @Test
-    fun `打开根目录同时构造逻辑和请求 URL`() = runTest {
-        val session = FakeSession(endpoint("192.168.1.17"))
-        val calls = mutableListOf<Pair<String, String>>()
-        val client = FakeDirectoryClient { logical, request ->
-            calls += logical to request
-            AppResult.Success(emptyList())
-        }
-        val repository = DefaultBrowserRepository(client, session)
+    fun `打开根目录构造逻辑 URL 并委托共享内容仓库`() = runTest {
+        val logicalUrl = "http://media.example:8080/middle/"
+        val requestUrl = "http://192.0.2.1:8080/middle/"
+        val contentRepository = RecordingContentRepository(
+            DirectoryContent(
+                logicalDirectoryUrl = logicalUrl,
+                requestDirectoryUrl = requestUrl,
+                entries = emptyList(),
+            ),
+        )
+        val repository = DefaultBrowserRepository(
+            contentRepository = contentRepository,
+            session = BrowserSession(browserEndpoint("192.0.2.1")),
+        )
 
         val result = repository.openRoot(RootShare.MIDDLE)
-        val page = (result as AppResult.Success<BrowserPage>).value
 
-        assertEquals(
-            listOf(
-                "http://media.example:8080/middle/" to
-                    "http://192.168.1.17:8080/middle/",
-            ),
-            calls,
-        )
+        val page = (result as AppResult.Success<BrowserPage>).value
+        assertEquals(listOf(logicalUrl), contentRepository.logicalUrls)
         assertEquals("MiddleDir", page.breadcrumbs.single().label)
-        assertEquals(
-            "http://media.example:8080/middle/",
-            page.logicalDirectoryUrl,
-        )
+        assertEquals(logicalUrl, page.logicalDirectoryUrl)
+        assertEquals(requestUrl, page.requestDirectoryUrl)
     }
 
     @Test
-    fun `网络失败只刷新一次并按新 IPv4 重试逻辑 URL`() = runTest {
-        val session = FakeSession(
-            endpoint("192.0.2.1"),
-            refreshed = endpoint("192.0.2.2"),
+    fun `浏览仓库用共享内容构造原有页面`() = runTest {
+        val logicalUrl =
+            "http://media.example:8080/middle/sub/"
+        val requestUrl =
+            "http://192.0.2.1:8080/middle/sub/"
+        val entries = listOf(browserEntry("a.jpg"))
+        val content = DirectoryContent(
+            logicalDirectoryUrl = logicalUrl,
+            requestDirectoryUrl = requestUrl,
+            entries = entries,
         )
-        val requests = mutableListOf<String>()
-        val client = FakeDirectoryClient { _, request ->
-            requests += request
-            if (requests.size == 1) {
-                AppResult.Failure(AppError.NetworkFailure("timeout"))
-            } else {
-                AppResult.Success(emptyList())
-            }
-        }
-        val repository = DefaultBrowserRepository(client, session)
+        val contentRepository =
+            RecordingContentRepository(content)
+        val repository = DefaultBrowserRepository(
+            contentRepository = contentRepository,
+            session = BrowserSession(browserEndpoint("192.0.2.1")),
+        )
         val breadcrumbs = listOf(
-            Breadcrumb("MiddleDir", "http://media.example:8080/middle/"),
-            Breadcrumb("sub", "http://media.example:8080/middle/sub/"),
+            Breadcrumb("MiddleDir", logicalUrl),
         )
 
         val result = repository.openDirectory(
             root = RootShare.MIDDLE,
-            logicalUrl = "http://media.example:8080/middle/sub/",
+            logicalUrl = logicalUrl,
             breadcrumbs = breadcrumbs,
         )
 
         val page = (result as AppResult.Success<BrowserPage>).value
+        assertEquals(listOf(logicalUrl), contentRepository.logicalUrls)
+        assertEquals(RootShare.MIDDLE, page.root)
+        assertEquals(logicalUrl, page.logicalDirectoryUrl)
+        assertEquals(requestUrl, page.requestDirectoryUrl)
         assertEquals(breadcrumbs, page.breadcrumbs)
-        assertEquals(
-            listOf(
-                "http://192.0.2.1:8080/middle/sub/",
-                "http://192.0.2.2:8080/middle/sub/",
+        assertEquals(entries, page.entries)
+    }
+
+    @Test
+    fun `共享内容错误原样返回`() = runTest {
+        val failure = AppResult.Failure(
+            AppError.InvalidDirectoryResponse,
+        )
+        val repository = DefaultBrowserRepository(
+            contentRepository = RecordingContentRepository(failure),
+            session = BrowserSession(browserEndpoint("192.0.2.1")),
+        )
+
+        val result = repository.openDirectory(
+            root = RootShare.PIK,
+            logicalUrl = "http://media.example:8080/pik/",
+            breadcrumbs = emptyList(),
+        )
+
+        assertEquals(failure, result)
+    }
+
+    @Test
+    fun `服务器未连接时打开根目录不调用内容仓库`() = runTest {
+        val contentRepository = RecordingContentRepository(
+            result = AppResult.Failure(
+                AppError.NetworkFailure("不应调用"),
             ),
-            requests,
         )
-        assertEquals(1, session.refreshCalls)
-    }
-
-    @Test
-    fun `重试仍为网络失败时不再刷新`() = runTest {
-        val session = FakeSession(
-            endpoint("192.0.2.1"),
-            refreshed = endpoint("192.0.2.2"),
-        )
-        var calls = 0
         val repository = DefaultBrowserRepository(
-            FakeDirectoryClient { _, _ ->
-                calls += 1
-                AppResult.Failure(AppError.NetworkFailure("timeout-$calls"))
-            },
-            session,
-        )
-
-        val result = repository.openRoot(RootShare.MIDDLE)
-
-        assertEquals(
-            AppError.NetworkFailure("timeout-2"),
-            (result as AppResult.Failure).error,
-        )
-        assertEquals(2, calls)
-        assertEquals(1, session.refreshCalls)
-    }
-
-    @Test
-    fun `HTTP 404 不刷新 DNS`() = runTest {
-        val session = FakeSession(endpoint("192.0.2.1"))
-        val repository = DefaultBrowserRepository(
-            FakeDirectoryClient { _, _ ->
-                AppResult.Failure(AppError.HttpFailure(404))
-            },
-            session,
-        )
-
-        val result = repository.openRoot(RootShare.PIK)
-
-        assertTrue(result is AppResult.Failure)
-        assertEquals(0, session.refreshCalls)
-    }
-
-    @Test
-    fun `服务器未连接时不发出目录请求`() = runTest {
-        var calls = 0
-        val repository = DefaultBrowserRepository(
-            FakeDirectoryClient { _, _ ->
-                calls += 1
-                AppResult.Success(emptyList())
-            },
-            FakeSession(endpoint("192.0.2.1"), connected = false),
+            contentRepository = contentRepository,
+            session = BrowserSession(
+                initial = browserEndpoint("192.0.2.1"),
+                connected = false,
+            ),
         )
 
         val result = repository.openRoot(RootShare.MIDDLE)
@@ -141,24 +119,56 @@ class BrowserRepositoryTest {
             AppError.NetworkFailure("服务器尚未连接"),
             (result as AppResult.Failure).error,
         )
-        assertEquals(0, calls)
+        assertEquals(emptyList<String>(), contentRepository.logicalUrls)
     }
 }
 
-private fun endpoint(ip: String) = SessionEndpoint(
+private fun browserEndpoint(ipv4: String) = SessionEndpoint(
     logicalBaseUrl = "http://media.example:8080",
-    requestBaseUrl = "http://$ip:8080",
-    ipv4 = ip,
+    requestBaseUrl = "http://$ipv4:8080",
+    ipv4 = ipv4,
 )
 
-private class FakeSession(
+private fun browserEntry(name: String) = DirectoryEntry(
+    name = name,
+    size = 2_048L,
+    modifiedAt = Instant.parse("2026-07-28T00:00:00Z"),
+    mode = 420L,
+    isDirectory = false,
+    isSymlink = false,
+    logicalUrl =
+        "http://media.example:8080/middle/sub/$name",
+    requestUrl =
+        "http://192.0.2.1:8080/middle/sub/$name",
+    kind = MediaKind.IMAGE,
+)
+
+private class RecordingContentRepository(
+    private val result: AppResult<DirectoryContent>,
+) : DirectoryContentRepository {
+    val logicalUrls = mutableListOf<String>()
+
+    constructor(content: DirectoryContent) :
+        this(AppResult.Success(content))
+
+    override suspend fun load(
+        logicalDirectoryUrl: String,
+    ): AppResult<DirectoryContent> {
+        logicalUrls += logicalDirectoryUrl
+        return result
+    }
+}
+
+private class BrowserSession(
     initial: SessionEndpoint,
-    private val refreshed: SessionEndpoint = initial,
     connected: Boolean = true,
 ) : ServerSessionManager {
     private val mutableState = MutableStateFlow<ServerSessionState>(
         if (connected) {
-            ServerSessionState.Connected(initial, listOf(initial.ipv4))
+            ServerSessionState.Connected(
+                initial,
+                listOf(initial.ipv4),
+            )
         } else {
             ServerSessionState.Failed(
                 AppError.NetworkFailure("offline"),
@@ -167,40 +177,17 @@ private class FakeSession(
         },
     )
     override val state: StateFlow<ServerSessionState> = mutableState
-    var refreshCalls = 0
-        private set
 
     override suspend fun connectSaved() = Unit
 
     override suspend fun testCandidate(
         input: String,
-    ): AppResult<ConnectionTestResult> = error("not used")
+    ): AppResult<ConnectionTestResult> = error("not used: $input")
 
-    override suspend fun saveCandidate(result: ConnectionTestResult) = Unit
+    override suspend fun saveCandidate(
+        result: ConnectionTestResult,
+    ) = error("not used: ${result.endpoint.logicalBaseUrl}")
 
-    override suspend fun refreshAfterRequestFailure(): AppResult<SessionEndpoint> {
-        refreshCalls += 1
-        mutableState.value = ServerSessionState.Connected(
-            refreshed,
-            listOf(refreshed.ipv4),
-        )
-        return AppResult.Success(refreshed)
-    }
-}
-
-private fun interface DirectoryCall {
-    suspend fun invoke(
-        logical: String,
-        request: String,
-    ): AppResult<List<DirectoryEntry>>
-}
-
-private class FakeDirectoryClient(
-    private val call: DirectoryCall,
-) : CaddyDirectoryClient {
-    override suspend fun listDirectory(
-        logicalDirectoryUrl: String,
-        requestDirectoryUrl: String,
-    ): AppResult<List<DirectoryEntry>> =
-        call.invoke(logicalDirectoryUrl, requestDirectoryUrl)
+    override suspend fun refreshAfterRequestFailure():
+        AppResult<SessionEndpoint> = error("not used")
 }

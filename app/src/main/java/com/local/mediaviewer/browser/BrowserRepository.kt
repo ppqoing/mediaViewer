@@ -4,7 +4,6 @@ import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.model.RootShare
 import com.local.mediaviewer.model.SessionEndpoint
-import com.local.mediaviewer.network.CaddyDirectoryClient
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -20,7 +19,7 @@ interface BrowserRepository {
 }
 
 class DefaultBrowserRepository(
-    private val directoryClient: CaddyDirectoryClient,
+    private val contentRepository: DirectoryContentRepository,
     private val session: ServerSessionManager,
 ) : BrowserRepository {
     override suspend fun openRoot(root: RootShare): AppResult<BrowserPage> {
@@ -32,8 +31,6 @@ class DefaultBrowserRepository(
             root = root,
             logicalUrl = logicalUrl,
             breadcrumbs = listOf(Breadcrumb(root.displayName, logicalUrl)),
-            endpoint = endpoint,
-            allowRefresh = true,
         )
     }
 
@@ -42,13 +39,10 @@ class DefaultBrowserRepository(
         logicalUrl: String,
         breadcrumbs: List<Breadcrumb>,
     ): AppResult<BrowserPage> {
-        val endpoint = currentEndpoint() ?: return unavailable()
         return load(
             root = root,
             logicalUrl = logicalUrl,
             breadcrumbs = breadcrumbs,
-            endpoint = endpoint,
-            allowRefresh = true,
         )
     }
 
@@ -56,43 +50,21 @@ class DefaultBrowserRepository(
         root: RootShare,
         logicalUrl: String,
         breadcrumbs: List<Breadcrumb>,
-        endpoint: SessionEndpoint,
-        allowRefresh: Boolean,
     ): AppResult<BrowserPage> {
-        val requestUrl = endpoint.requestUrlFor(logicalUrl)
-        return when (
-            val result = directoryClient.listDirectory(
-                logicalDirectoryUrl = logicalUrl,
-                requestDirectoryUrl = requestUrl,
-            )
-        ) {
+        return when (val result = contentRepository.load(logicalUrl)) {
             is AppResult.Success -> AppResult.Success(
                 BrowserPage(
                     root = root,
-                    logicalDirectoryUrl = logicalUrl,
-                    requestDirectoryUrl = requestUrl,
+                    logicalDirectoryUrl =
+                        result.value.logicalDirectoryUrl,
+                    requestDirectoryUrl =
+                        result.value.requestDirectoryUrl,
                     breadcrumbs = breadcrumbs,
-                    entries = result.value,
+                    entries = result.value.entries,
                 ),
             )
 
-            is AppResult.Failure -> {
-                if (allowRefresh && result.error is AppError.NetworkFailure) {
-                    when (val refreshed = session.refreshAfterRequestFailure()) {
-                        is AppResult.Success -> load(
-                            root = root,
-                            logicalUrl = logicalUrl,
-                            breadcrumbs = breadcrumbs,
-                            endpoint = refreshed.value,
-                            allowRefresh = false,
-                        )
-
-                        is AppResult.Failure -> refreshed
-                    }
-                } else {
-                    result
-                }
-            }
+            is AppResult.Failure -> result
         }
     }
 

@@ -5,6 +5,8 @@ import androidx.room.Room
 import coil3.ImageLoader
 import com.local.mediaviewer.browser.BrowserRepository
 import com.local.mediaviewer.browser.DefaultBrowserRepository
+import com.local.mediaviewer.browser.DefaultDirectoryContentRepository
+import com.local.mediaviewer.browser.DirectoryContentRepository
 import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.network.DefaultCaddyDirectoryClient
 import com.local.mediaviewer.network.DefaultConnectionProbe
@@ -26,6 +28,7 @@ import com.local.mediaviewer.settings.serverSettingsDataStore
 interface AppContainer {
     val settingsRepository: ServerSettingsRepository
     val sessionManager: ServerSessionManager
+    val directoryContentRepository: DirectoryContentRepository
     val browserRepository: BrowserRepository
     val playbackEngineFactory: PlaybackEngineFactory
     val playbackPositionStore: PlaybackPositionStore
@@ -54,9 +57,16 @@ class DefaultAppContainer(context: Context) : AppContainer {
             probe = probe,
         )
 
+    override val directoryContentRepository:
+        DirectoryContentRepository =
+        DefaultDirectoryContentRepository(
+            directoryClient = directoryClient,
+            session = sessionManager,
+        )
+
     override val browserRepository: BrowserRepository =
         DefaultBrowserRepository(
-            directoryClient = directoryClient,
+            contentRepository = directoryContentRepository,
             session = sessionManager,
         )
 

@@ -7,6 +7,8 @@ import com.local.mediaviewer.app.AppContainer
 import com.local.mediaviewer.browser.Breadcrumb
 import com.local.mediaviewer.browser.BrowserPage
 import com.local.mediaviewer.browser.BrowserRepository
+import com.local.mediaviewer.browser.DirectoryContent
+import com.local.mediaviewer.browser.DirectoryContentRepository
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.model.DirectoryEntry
@@ -41,6 +43,9 @@ class FakeAppContainer(
         FakeServerSettingsRepository()
     override val sessionManager: ServerSessionManager =
         FakeServerSessionManager(endpoint)
+    override val directoryContentRepository:
+        DirectoryContentRepository =
+        StrictDirectoryContentRepository()
     override val browserRepository: BrowserRepository =
         FakeBrowserRepository(endpoint)
     override val playbackEngineFactory =
@@ -55,6 +60,16 @@ class FakeAppContainer(
     override fun close() {
         imageLoader.shutdown()
     }
+}
+
+private class StrictDirectoryContentRepository :
+    DirectoryContentRepository {
+    override suspend fun load(
+        logicalDirectoryUrl: String,
+    ): AppResult<DirectoryContent> =
+        error(
+            "导航测试未配置共享目录内容：$logicalDirectoryUrl",
+        )
 }
 
 private class FakeServerSettingsRepository :
