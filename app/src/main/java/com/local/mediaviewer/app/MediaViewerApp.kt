@@ -19,6 +19,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.local.mediaviewer.browser.BrowserViewModel
 import com.local.mediaviewer.home.HomeViewModel
+import com.local.mediaviewer.image.ImageViewerViewModel
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.model.RootShare
 import com.local.mediaviewer.navigation.BrowserRoute
@@ -30,8 +31,8 @@ import com.local.mediaviewer.player.PlayerRequest
 import com.local.mediaviewer.player.PlayerViewModel
 import com.local.mediaviewer.settings.SettingsViewModel
 import com.local.mediaviewer.ui.browser.BrowserScreen
-import com.local.mediaviewer.ui.components.MediaRouteShell
 import com.local.mediaviewer.ui.home.HomeScreen
+import com.local.mediaviewer.ui.image.ImageViewerScreen
 import com.local.mediaviewer.ui.player.AudioPlayerScreen
 import com.local.mediaviewer.ui.player.FullscreenController
 import com.local.mediaviewer.ui.player.VideoPlayerScreen
@@ -210,10 +211,28 @@ fun MediaViewerApp(container: AppContainer) {
         }
         composable<ImageRoute> { entry ->
             val route = entry.toRoute<ImageRoute>()
-            MediaRouteShell(
-                title = route.name,
-                typeLabel = "图片查看器",
-                onBack = { navController.popBackStack() },
+            val viewer: ImageViewerViewModel = viewModel(
+                key = "image:${route.logicalUrl}",
+                factory = viewModelFactory {
+                    initializer {
+                        ImageViewerViewModel(
+                            logicalUrl = route.logicalUrl,
+                            initialRequestUrl = route.requestUrl,
+                            session = container.sessionManager,
+                        )
+                    }
+                },
+            )
+            val state by viewer.uiState.collectAsStateWithLifecycle()
+            ImageViewerScreen(
+                name = route.name,
+                state = state,
+                imageLoader = container.imageLoader,
+                onLoadError = viewer::onLoadError,
+                onRetry = viewer::retry,
+                onBack = {
+                    navController.popBackStack()
+                },
             )
         }
     }

@@ -2,8 +2,10 @@ package com.local.mediaviewer.app
 
 import android.content.Context
 import androidx.room.Room
+import coil3.ImageLoader
 import com.local.mediaviewer.browser.BrowserRepository
 import com.local.mediaviewer.browser.DefaultBrowserRepository
+import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.network.DefaultCaddyDirectoryClient
 import com.local.mediaviewer.network.DefaultConnectionProbe
 import com.local.mediaviewer.network.DefaultDirectoryJsonParser
@@ -27,6 +29,7 @@ interface AppContainer {
     val browserRepository: BrowserRepository
     val playbackEngineFactory: PlaybackEngineFactory
     val playbackPositionStore: PlaybackPositionStore
+    val imageLoader: ImageLoader
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
@@ -67,6 +70,10 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     override val playbackPositionStore: PlaybackPositionStore by lazy {
         RoomPlaybackPositionStore(database.playbackPositionDao())
+    }
+
+    override val imageLoader: ImageLoader by lazy {
+        MediaImageLoaderFactory.create(appContext)
     }
 
     private val playbackEngineLock = Any()
