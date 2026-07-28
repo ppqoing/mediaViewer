@@ -23,6 +23,13 @@ sealed interface AppError {
         override val userMessage = "服务器返回 HTTP $statusCode"
     }
 
+    data class ProbeFailure(
+        val resolvedIpv4s: List<String>,
+        val lastError: String,
+    ) : AppError {
+        override val userMessage = "所有 IPv4 均连接失败：$lastError"
+    }
+
     data object InvalidDirectoryResponse : AppError {
         override val userMessage = "目录响应格式无效"
     }
