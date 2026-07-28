@@ -1,6 +1,7 @@
 package com.local.mediaviewer.app
 
 import android.content.Context
+import androidx.room.Room
 import com.local.mediaviewer.browser.BrowserRepository
 import com.local.mediaviewer.browser.DefaultBrowserRepository
 import com.local.mediaviewer.network.DefaultCaddyDirectoryClient
@@ -9,8 +10,11 @@ import com.local.mediaviewer.network.DefaultDirectoryJsonParser
 import com.local.mediaviewer.network.OkHttpDirectoryProbeTransport
 import com.local.mediaviewer.network.SystemIpv4Resolver
 import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
+import com.local.mediaviewer.playback.MediaViewerDatabase
 import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackEngineFactory
+import com.local.mediaviewer.playback.PlaybackPositionStore
+import com.local.mediaviewer.playback.RoomPlaybackPositionStore
 import com.local.mediaviewer.session.DefaultServerSessionManager
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.settings.DataStoreServerSettingsRepository
@@ -22,6 +26,7 @@ interface AppContainer {
     val sessionManager: ServerSessionManager
     val browserRepository: BrowserRepository
     val playbackEngineFactory: PlaybackEngineFactory
+    val playbackPositionStore: PlaybackPositionStore
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
@@ -51,6 +56,18 @@ class DefaultAppContainer(context: Context) : AppContainer {
             directoryClient = directoryClient,
             session = sessionManager,
         )
+
+    private val database: MediaViewerDatabase by lazy {
+        Room.databaseBuilder(
+            appContext,
+            MediaViewerDatabase::class.java,
+            "mediaviewer.db",
+        ).build()
+    }
+
+    override val playbackPositionStore: PlaybackPositionStore by lazy {
+        RoomPlaybackPositionStore(database.playbackPositionDao())
+    }
 
     private val playbackEngineLock = Any()
     private var activePlaybackEngine: PlaybackEngine? = null

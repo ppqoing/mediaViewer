@@ -1,9 +1,14 @@
 package com.local.mediaviewer.app
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -21,10 +26,15 @@ import com.local.mediaviewer.navigation.HomeRoute
 import com.local.mediaviewer.navigation.ImageRoute
 import com.local.mediaviewer.navigation.PlayerRoute
 import com.local.mediaviewer.navigation.SettingsRoute
+import com.local.mediaviewer.player.PlayerRequest
+import com.local.mediaviewer.player.PlayerViewModel
 import com.local.mediaviewer.settings.SettingsViewModel
 import com.local.mediaviewer.ui.browser.BrowserScreen
 import com.local.mediaviewer.ui.components.MediaRouteShell
 import com.local.mediaviewer.ui.home.HomeScreen
+import com.local.mediaviewer.ui.player.AudioPlayerScreen
+import com.local.mediaviewer.ui.player.FullscreenController
+import com.local.mediaviewer.ui.player.VideoPlayerScreen
 import com.local.mediaviewer.ui.settings.SettingsScreen
 
 @Composable
@@ -136,11 +146,67 @@ fun MediaViewerApp(container: AppContainer) {
         }
         composable<PlayerRoute> { entry ->
             val route = entry.toRoute<PlayerRoute>()
-            MediaRouteShell(
-                title = route.name,
-                typeLabel = "媒体播放器",
-                onBack = { navController.popBackStack() },
+            val player: PlayerViewModel = viewModel(
+                key = "player:${route.mediaKey}",
+                factory = viewModelFactory {
+                    initializer {
+                        PlayerViewModel(
+                            initialRequest = PlayerRequest(
+                                name = route.name,
+                                logicalUrl = route.logicalUrl,
+                                requestUrl = route.requestUrl,
+                                mediaKey = route.mediaKey,
+                                kind = route.kind,
+                            ),
+                            engine =
+                                container.playbackEngineFactory.create(),
+                            positionStore =
+                                container.playbackPositionStore,
+                            session = container.sessionManager,
+                        )
+                    }
+                },
             )
+            val state by player.uiState.collectAsStateWithLifecycle()
+            val activity = requireNotNull(LocalActivity.current) {
+                "播放器必须托管在 Activity 中"
+            }
+            val fullscreenController = remember(activity) {
+                FullscreenController(activity)
+            }
+            DisposableEffect(fullscreenController) {
+                onDispose {
+                    fullscreenController.close()
+                }
+            }
+            LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+                player.onBackgrounded()
+            }
+            val leave = {
+                player.leave {
+                    navController.popBackStack()
+                }
+            }
+
+            if (route.kind == MediaKind.AUDIO) {
+                AudioPlayerScreen(
+                    state = state,
+                    onPlay = player::play,
+                    onPause = player::pause,
+                    onSeek = player::seekTo,
+                    onBack = leave,
+                )
+            } else {
+                VideoPlayerScreen(
+                    state = state,
+                    engine = player.engine,
+                    fullscreenController = fullscreenController,
+                    onPlay = player::play,
+                    onPause = player::pause,
+                    onSeek = player::seekTo,
+                    onBack = leave,
+                )
+            }
         }
         composable<ImageRoute> { entry ->
             val route = entry.toRoute<ImageRoute>()
