@@ -1,114 +1,104 @@
-# Windows HTTP Range Server Design
+# Windows HTTP Range 服务器设计
 
-## Goal
+## 目标
 
-Provide read-only HTTP access to two existing media directories on a Windows
-machine. Clients on the trusted local network must be able to browse directory
-listings and read arbitrary byte ranges from media files.
+在 Windows 电脑上，将两个现有媒体目录以只读 HTTP 服务的形式提供给可信
+局域网内的客户端。客户端必须能够浏览目录列表，并能够读取媒体文件的任意
+字节范围。
 
-## Confirmed constraints
+## 已确认的约束
 
-- The server runs on Windows.
-- Access is limited to the local network.
-- Transport is plain HTTP; HTTPS is intentionally out of scope.
-- Authentication is intentionally omitted because HTTP Basic Authentication
-  would not protect credentials on an unencrypted connection.
-- The service listens on TCP port `8080`.
-- Directory listings are enabled.
-- Media files must never be modified by the server.
-- `I:\MiddleDir` and `G:\pik` both exist and are local fixed-disk directories.
-- TCP port `8080` was unoccupied during design validation.
+- 服务器运行在 Windows 上。
+- 仅限局域网访问。
+- 使用明文 HTTP；明确不使用 HTTPS。
+- 不配置身份认证，因为 HTTP Basic Auth 无法在未加密连接上保护凭据。
+- 服务监听 TCP `8080` 端口。
+- 开启目录列表。
+- 服务不得修改媒体文件。
+- `I:\MiddleDir` 和 `G:\pik` 均已存在，并且都是本地固定磁盘目录。
+- 设计核验时，TCP `8080` 端口未被占用。
 
-## Architecture
+## 架构
 
-Caddy runs as an automatically started Windows service and listens on all local
-interfaces at TCP port `8080`. Windows Defender Firewall permits inbound traffic
-to that port only from `LocalSubnet`.
+Caddy 作为自动启动的 Windows 服务运行，在所有本地网络接口的 TCP `8080`
+端口上监听。Windows Defender 防火墙只允许来源为 `LocalSubnet` 的设备
+访问该端口。
 
-The URL namespace is:
+URL 与 Windows 目录的映射关系如下：
 
-| URL prefix | Windows directory |
+| URL 前缀 | Windows 目录 |
 | --- | --- |
 | `/middle/` | `I:\MiddleDir` |
 | `/pik/` | `G:\pik` |
 
-For example:
+示例：
 
 ```text
-http://<server-lan-address>:8080/middle/movie.mp4
-http://<server-lan-address>:8080/pik/example/image.jpg
+http://<服务器局域网地址>:8080/middle/movie.mp4
+http://<服务器局域网地址>:8080/pik/example/image.jpg
 ```
 
-Each prefix provides Caddy's directory browser. Requests for files are handled
-by Caddy's static file server, including `HEAD`, byte-range requests, partial
-responses, entity metadata, `404 Not Found`, and `416 Range Not Satisfiable`.
-Requests outside the two prefixes return `404`.
+两个 URL 前缀均启用 Caddy 的目录浏览器。文件请求由 Caddy 静态文件服务器
+处理，包括 `HEAD`、字节范围请求、部分内容响应、实体元数据、
+`404 Not Found` 和 `416 Range Not Satisfiable`。访问这两个前缀以外的
+路径时返回 `404`。
 
-## Components
+## 组件
 
 ### Caddy
 
-- Use the official Windows AMD64 Caddy binary.
-- Store the executable under `C:\Program Files\Caddy`.
-- Store the Caddyfile and operational data under `C:\ProgramData\Caddy`.
-- Run Caddy through the Windows Service Control Manager with automatic startup.
-- Disable automatic HTTPS by using an explicit HTTP site address.
-- Do not enable response compression for media files.
-- Enable structured access logs with rotation under
-  `C:\ProgramData\Caddy\logs`.
+- 使用 Caddy 官方 Windows AMD64 可执行文件。
+- 将程序存放在 `C:\Program Files\Caddy`。
+- 将 Caddyfile 和运行数据存放在 `C:\ProgramData\Caddy`。
+- 通过 Windows 服务控制管理器运行，并设置为自动启动。
+- 使用明确的 HTTP 站点地址，从而不启用自动 HTTPS。
+- 不对媒体文件启用响应压缩。
+- 在 `C:\ProgramData\Caddy\logs` 下启用带轮转的结构化访问日志。
 
-### Filesystem access
+### 文件系统访问
 
-- Caddy receives only the permissions needed to traverse and read the two media
-  directories.
-- Caddy configuration exposes the directories through distinct URL prefixes;
-  it never exposes a drive root.
-- No upload, delete, rename, WebDAV, or write endpoint is present.
+- 只为 Caddy 提供遍历和读取两个媒体目录所需的权限。
+- 通过两个不同 URL 前缀暴露目录，不暴露任何磁盘根目录。
+- 不提供上传、删除、重命名、WebDAV 或其他写入端点。
 
-### Network access
+### 网络访问
 
-- Listen on TCP port `8080`.
-- Create a narrowly scoped Windows Defender Firewall rule whose remote address
-  is `LocalSubnet`.
-- Do not create or retain a router port-forward for TCP `8080`.
-- Clients use the server's stable LAN address or LAN hostname.
+- 监听 TCP `8080` 端口。
+- 创建范围严格限定为 `LocalSubnet` 的 Windows Defender 防火墙入站规则。
+- 不为 TCP `8080` 创建或保留路由器公网端口转发。
+- 客户端通过服务器稳定的局域网地址或局域网主机名访问。
 
-## Data flow
+## 数据流
 
-1. A local-network client requests a directory or media URL.
-2. Windows Defender Firewall rejects requests not originating from the local
-   subnet.
-3. Caddy maps `/middle/` or `/pik/` to the corresponding directory.
-4. Directory requests receive a generated listing.
-5. File requests with a valid `Range` header receive `206 Partial Content` and
-   the requested bytes.
-6. Invalid paths receive `404`; unsatisfiable ranges receive `416`.
+1. 局域网客户端请求目录或媒体 URL。
+2. Windows Defender 防火墙拒绝来源不属于本地子网的请求。
+3. Caddy 将 `/middle/` 或 `/pik/` 映射到相应目录。
+4. 目录请求返回自动生成的目录列表。
+5. 带有效 `Range` 请求头的文件请求返回 `206 Partial Content` 和指定字节。
+6. 无效路径返回 `404`；无法满足的范围请求返回 `416`。
 
-## Security boundary
+## 安全边界
 
-The trusted LAN is the only security boundary. Directory names, filenames, and
-media contents are visible to any device allowed onto that LAN. Plain HTTP
-provides neither confidentiality nor peer authentication. If the service later
-needs guest-Wi-Fi, VPN, or public access, this design must be revised before the
-firewall scope is widened.
+可信局域网是本方案唯一的安全边界。获准进入该局域网的任何设备都可以看到
+目录名、文件名和媒体内容。明文 HTTP 不提供机密性，也不验证通信对端。
+如果以后需要允许访客 Wi-Fi、VPN 或公网访问，必须先修改本设计，不能直接
+扩大防火墙允许范围。
 
-## Validation
+## 验收标准
 
-Deployment is accepted only when all of the following pass:
+只有以下检查全部通过，部署才算完成：
 
-1. Caddy validates the Caddyfile successfully.
-2. The Windows service is running and configured for automatic startup.
-3. The firewall rule is limited to `LocalSubnet`.
-4. Both `/middle/` and `/pik/` return directory listings from another LAN
-   device.
-5. A request for bytes `0-1023` returns status `206`, a valid `Content-Range`,
-   and exactly 1024 bytes.
-6. An unsatisfiable range returns `416`.
-7. A path outside both configured prefixes returns `404`.
-8. No write, upload, delete, or rename operation is exposed.
+1. Caddy 成功验证 Caddyfile。
+2. Windows 服务处于运行状态，并设置为自动启动。
+3. 防火墙规则的远程地址范围仅为 `LocalSubnet`。
+4. 从另一台局域网设备访问 `/middle/` 和 `/pik/` 时，均能看到目录列表。
+5. 请求字节 `0-1023` 时，返回状态码 `206`、有效的 `Content-Range`，
+   且响应体恰好为 1024 字节。
+6. 无法满足的范围请求返回 `416`。
+7. 访问两个已配置前缀之外的路径时返回 `404`。
+8. 服务未提供任何写入、上传、删除或重命名操作。
 
-## Rollback
+## 回滚
 
-Stop and remove the Caddy Windows service, remove the dedicated firewall rule,
-and delete the Caddy installation/configuration directories. Media files are
-not changed by deployment or rollback.
+停止并删除 Caddy Windows 服务，删除专用防火墙规则，然后删除 Caddy
+程序和配置目录。部署及回滚过程均不修改媒体文件。
