@@ -1,0 +1,73 @@
+package com.local.mediaviewer.ui.player
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import com.local.mediaviewer.playback.VideoScaleMode
+
+fun videoScaleLabel(mode: VideoScaleMode): String =
+    when (mode) {
+        VideoScaleMode.BEST_FIT -> "等比适应"
+        VideoScaleMode.FILL_CROP -> "裁剪铺满"
+        VideoScaleMode.STRETCH -> "强制拉伸"
+        VideoScaleMode.ORIGINAL -> "原始尺寸"
+    }
+
+@Composable
+fun VideoScaleMenu(
+    current: VideoScaleMode,
+    onSelected: (VideoScaleMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier) {
+        IconButton(
+            onClick = { expanded = true },
+            modifier = Modifier.testTag("video_scale_menu"),
+        ) {
+            Icon(
+                imageVector = Icons.Default.AspectRatio,
+                contentDescription =
+                    "画面模式：${videoScaleLabel(current)}",
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            VideoScaleMode.entries.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(videoScaleLabel(mode)) },
+                    onClick = {
+                        expanded = false
+                        onSelected(mode)
+                    },
+                    leadingIcon = if (mode == current) {
+                        {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                )
+            }
+        }
+    }
+}

@@ -6,6 +6,7 @@ import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.session.ServerSessionManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -82,6 +83,18 @@ class PlayerViewModel(
     }
 
     fun seekTo(positionMs: Long) = engine.seekTo(positionMs)
+
+    fun setVideoScaleMode(mode: VideoScaleMode) {
+        if (
+            mutableUiState.value.videoScaleMode == mode
+        ) {
+            return
+        }
+        engine.setVideoScaleMode(mode)
+        mutableUiState.value = mutableUiState.value.copy(
+            videoScaleMode = mode,
+        )
+    }
 
     fun onBackgrounded() {
         engine.pause()

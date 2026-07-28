@@ -193,6 +193,54 @@ class PlayerViewModelTest {
             assertEquals(1, leaveCallbacks)
             assertTrue(store.records.size >= 2)
         }
+
+    @Test
+    fun `画面模式只更新当前播放器且不重启媒体`() =
+        runTest(dispatcher) {
+            val engine = FakeEngine()
+            val viewModel = PlayerViewModel(
+                request(),
+                engine,
+                FakeStore(),
+                FakePlayerSession(),
+            )
+            runCurrent()
+            val preparesBefore = engine.preparedUrls.size
+            val playsBefore = engine.playCalls
+
+            viewModel.setVideoScaleMode(
+                VideoScaleMode.FILL_CROP,
+            )
+
+            assertEquals(
+                VideoScaleMode.FILL_CROP,
+                viewModel.uiState.value.videoScaleMode,
+            )
+            assertEquals(
+                listOf(VideoScaleMode.FILL_CROP),
+                engine.scaleModes,
+            )
+            assertEquals(
+                preparesBefore,
+                engine.preparedUrls.size,
+            )
+            assertEquals(playsBefore, engine.playCalls)
+
+            val second = PlayerViewModel(
+                request().copy(mediaKey = "second"),
+                FakeEngine(),
+                FakeStore(),
+                FakePlayerSession(),
+            )
+            assertEquals(
+                VideoScaleMode.BEST_FIT,
+                second.uiState.value.videoScaleMode,
+            )
+
+            viewModel.leave {}
+            second.leave {}
+            runCurrent()
+        }
 }
 
 private fun request() = PlayerRequest(
@@ -208,6 +256,7 @@ private class FakeEngine : PlaybackEngine {
     override val state: StateFlow<PlaybackState> = mutable
     val preparedUrls = mutableListOf<String>()
     val seeks = mutableListOf<Long>()
+    val scaleModes = mutableListOf<VideoScaleMode>()
     var playCalls = 0
     var pauseCalls = 0
     var closeCalls = 0
@@ -220,7 +269,9 @@ private class FakeEngine : PlaybackEngine {
 
     override fun detachVideoOutput() = Unit
 
-    override fun setVideoScaleMode(mode: VideoScaleMode) = Unit
+    override fun setVideoScaleMode(mode: VideoScaleMode) {
+        scaleModes += mode
+    }
 
     override fun play() {
         playCalls += 1

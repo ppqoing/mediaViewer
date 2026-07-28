@@ -209,6 +209,8 @@ fun MediaViewerApp(container: AppContainer) {
                     onPlay = player::play,
                     onPause = player::pause,
                     onSeek = player::seekTo,
+                    onVideoScaleModeChanged =
+                        player::setVideoScaleMode,
                     onBack = leave,
                 )
             }

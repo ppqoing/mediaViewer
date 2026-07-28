@@ -9,14 +9,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+interface FullscreenStateController : AutoCloseable {
+    val isFullscreen: StateFlow<Boolean>
+
+    fun enter()
+
+    fun exit()
+
+    override fun close()
+}
+
 class FullscreenController(
     private val activity: Activity,
-) : AutoCloseable {
+) : FullscreenStateController {
     private val mutableFullscreen = MutableStateFlow(false)
-    val isFullscreen: StateFlow<Boolean> =
+    override val isFullscreen: StateFlow<Boolean> =
         mutableFullscreen.asStateFlow()
 
-    fun enter() {
+    override fun enter() {
         activity.requestedOrientation =
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         WindowCompat.setDecorFitsSystemWindows(activity.window, false)
@@ -27,7 +37,7 @@ class FullscreenController(
         mutableFullscreen.value = true
     }
 
-    fun exit() {
+    override fun exit() {
         WindowInsetsControllerCompat(
             activity.window,
             activity.window.decorView,
