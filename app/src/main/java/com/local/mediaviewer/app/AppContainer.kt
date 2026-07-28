@@ -8,6 +8,9 @@ import com.local.mediaviewer.network.DefaultConnectionProbe
 import com.local.mediaviewer.network.DefaultDirectoryJsonParser
 import com.local.mediaviewer.network.OkHttpDirectoryProbeTransport
 import com.local.mediaviewer.network.SystemIpv4Resolver
+import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
+import com.local.mediaviewer.playback.PlaybackEngine
+import com.local.mediaviewer.playback.PlaybackEngineFactory
 import com.local.mediaviewer.session.DefaultServerSessionManager
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.settings.DataStoreServerSettingsRepository
@@ -18,9 +21,11 @@ interface AppContainer {
     val settingsRepository: ServerSettingsRepository
     val sessionManager: ServerSessionManager
     val browserRepository: BrowserRepository
+    val playbackEngineFactory: PlaybackEngineFactory
 }
 
 class DefaultAppContainer(context: Context) : AppContainer {
+    private val appContext = context.applicationContext
     override val settingsRepository: ServerSettingsRepository =
         DataStoreServerSettingsRepository(context.serverSettingsDataStore)
 
@@ -46,4 +51,15 @@ class DefaultAppContainer(context: Context) : AppContainer {
             directoryClient = directoryClient,
             session = sessionManager,
         )
+
+    private val playbackEngineLock = Any()
+    private var activePlaybackEngine: PlaybackEngine? = null
+    override val playbackEngineFactory = PlaybackEngineFactory {
+        synchronized(playbackEngineLock) {
+            activePlaybackEngine?.close()
+            AndroidVlcPlaybackEngine(appContext).also { engine ->
+                activePlaybackEngine = engine
+            }
+        }
+    }
 }
