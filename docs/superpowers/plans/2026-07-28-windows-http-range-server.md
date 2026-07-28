@@ -36,8 +36,8 @@ Manager、Windows Defender Firewall、curl.exe。
 - `deploy/windows/uninstall.ps1`：删除服务、防火墙和专用 ACL，保留媒体文件。
 - `deploy/windows/verify.ps1`：验证配置、服务、目录列表和 Range 行为。
 - `deploy/windows/README.md`：中文运维说明。
-- `tests/windows/Test-Caddyfile.ps1`：静态验证 Caddyfile 安全边界。
-- `tests/windows/Test-Scripts.ps1`：验证 PowerShell 语法和安装契约。
+- `tests/windows/Test-Caddyfile.ps1`：启动临时 Caddy 进程并验证真实 HTTP 行为。
+- `tests/windows/Test-Scripts.ps1`：执行安装预检并验证脚本的可运行契约。
 
 ### 任务 1：Caddy 路由配置
 
@@ -51,9 +51,15 @@ Manager、Windows Defender Firewall、curl.exe。
 - 输入：`I:\MiddleDir`、`G:\pik`、TCP 8080。
 - 输出：`/middle/`、`/pik/` 两个可浏览的只读 HTTP 路径。
 
-- [ ] **步骤 1：编写失败的 Caddyfile 契约测试**
+- [ ] **步骤 1：编写失败的 Caddy HTTP 行为测试**
 
 ```powershell
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)]
+    [string]$CaddyExe
+)
+
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $configPath = Join-Path $repoRoot 'deploy\windows\Caddyfile'
@@ -62,33 +68,94 @@ if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
     throw "缺少 Caddyfile：$configPath"
 }
 
-$text = Get-Content -Raw -LiteralPath $configPath
-$required = @(
-    'http://:8080',
-    'root * I:/MiddleDir',
-    'root * G:/pik',
-    'redir /middle /middle/ 308',
-    'redir /pik /pik/ 308',
-    'respond 404'
+if (-not (Test-Path -LiteralPath $CaddyExe -PathType Leaf)) {
+    throw "缺少 Caddy 测试二进制：$CaddyExe"
+}
+
+$temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) (
+    'media-range-test-' + [guid]::NewGuid().ToString('N')
 )
+New-Item -ItemType Directory -Path $temporaryDirectory | Out-Null
+$oldLogPath = $env:MEDIA_RANGE_LOG
+$env:MEDIA_RANGE_LOG = Join-Path $temporaryDirectory 'access.log'
 
-foreach ($item in $required) {
-    if (-not $text.Contains($item)) {
-        throw "Caddyfile 缺少：$item"
+$process = Start-Process -FilePath $CaddyExe -PassThru -WindowStyle Hidden `
+    -ArgumentList @('run', '--config', $configPath, '--adapter', 'caddyfile')
+
+try {
+    $ready = $false
+    foreach ($attempt in 1..50) {
+        $status = & curl.exe --silent --output NUL --write-out '%{http_code}' `
+            'http://127.0.0.1:8080/middle/'
+        if ($status -eq '200') {
+            $ready = $true
+            break
+        }
+        Start-Sleep -Milliseconds 100
     }
-}
-
-if ([regex]::Matches($text, 'file_server\s+browse').Count -ne 2) {
-    throw 'Caddyfile 必须且只能配置两个 file_server browse。'
-}
-
-foreach ($forbidden in @('https://', 'basic_auth', 'basicauth', 'encode ')) {
-    if ($text.Contains($forbidden)) {
-        throw "Caddyfile 包含禁止配置：$forbidden"
+    if (-not $ready) {
+        throw '临时 Caddy 未在 5 秒内就绪。'
     }
+
+    foreach ($path in @('/middle/', '/pik/')) {
+        $status = & curl.exe --silent --output NUL --write-out '%{http_code}' `
+            ("http://127.0.0.1:8080" + $path)
+        if ($status -ne '200') {
+            throw "$path 未返回目录列表，状态码：$status"
+        }
+    }
+
+    $sample = Get-ChildItem -LiteralPath 'I:\MiddleDir' -File -Recurse |
+        Where-Object Length -GE 1024 |
+        Select-Object -First 1
+    if (-not $sample) {
+        throw 'I:\MiddleDir 中没有可用于 Range 测试的文件。'
+    }
+
+    $relative = $sample.FullName.Substring('I:\MiddleDir'.Length).TrimStart('\')
+    $encoded = (($relative -split '\\') |
+        ForEach-Object { [uri]::EscapeDataString($_) }) -join '/'
+    $url = 'http://127.0.0.1:8080/middle/' + $encoded
+    $headers = Join-Path $temporaryDirectory 'headers.txt'
+    $body = Join-Path $temporaryDirectory 'body.bin'
+
+    & curl.exe --silent --show-error --dump-header $headers --output $body `
+        --header 'Range: bytes=0-1023' $url
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Range 请求失败。'
+    }
+    if (-not (Select-String -LiteralPath $headers -Pattern '^HTTP/\S+ 206 ')) {
+        throw 'Range 请求未返回 206。'
+    }
+    if (-not (Select-String -LiteralPath $headers -Pattern '^Content-Range:' )) {
+        throw 'Range 响应缺少 Content-Range。'
+    }
+    if ((Get-Item -LiteralPath $body).Length -ne 1024) {
+        throw 'Range 响应体不是 1024 字节。'
+    }
+
+    $invalidStart = $sample.Length + 1
+    $status416 = & curl.exe --silent --output NUL --write-out '%{http_code}' `
+        --header "Range: bytes=$invalidStart-" $url
+    if ($status416 -ne '416') {
+        throw "越界 Range 未返回 416，而是 $status416。"
+    }
+
+    $status404 = & curl.exe --silent --output NUL --write-out '%{http_code}' `
+        'http://127.0.0.1:8080/not-configured'
+    if ($status404 -ne '404') {
+        throw "未配置路径未返回 404，而是 $status404。"
+    }
+} finally {
+    if ($process -and -not $process.HasExited) {
+        Stop-Process -Id $process.Id -Force
+        $process.WaitForExit()
+    }
+    $env:MEDIA_RANGE_LOG = $oldLogPath
+    Remove-Item -LiteralPath $temporaryDirectory -Recurse -Force
 }
 
-Write-Host 'Caddyfile 静态契约验证通过。'
+Write-Host 'Caddy HTTP 行为验证通过。'
 ```
 
 - [ ] **步骤 2：运行测试并确认失败**
@@ -96,7 +163,8 @@ Write-Host 'Caddyfile 静态契约验证通过。'
 运行：
 
 ```powershell
-pwsh -NoProfile -File tests/windows/Test-Caddyfile.ps1
+pwsh -NoProfile -File tests/windows/Test-Caddyfile.ps1 `
+    -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe
 ```
 
 预期：失败并报告缺少 `deploy\windows\Caddyfile`。
@@ -111,7 +179,7 @@ pwsh -NoProfile -File tests/windows/Test-Caddyfile.ps1
 
 http://:8080 {
 	log {
-		output file C:/ProgramData/Caddy/logs/access.log {
+		output file {$MEDIA_RANGE_LOG:C:/ProgramData/Caddy/logs/access.log} {
 			roll_size 10MiB
 			roll_keep 10
 			roll_keep_for 720h
@@ -141,10 +209,11 @@ http://:8080 {
 运行：
 
 ```powershell
-pwsh -NoProfile -File tests/windows/Test-Caddyfile.ps1
+pwsh -NoProfile -File tests/windows/Test-Caddyfile.ps1 `
+    -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe
 ```
 
-预期：输出 `Caddyfile 静态契约验证通过。`
+预期：临时启动 Caddy，并输出 `Caddy HTTP 行为验证通过。`
 
 - [ ] **步骤 5：提交**
 
@@ -167,42 +236,65 @@ git commit -m "feat: add Caddy media routes"
 - 输出：`MediaRangeCaddy` 服务、`MediaRange HTTP 8080` 防火墙规则和已校验的
   Caddy 2.11.4 安装。
 
-- [ ] **步骤 1：编写失败的脚本契约测试**
+- [ ] **步骤 1：编写失败的安装预检行为测试**
 
-测试必须先确认两个脚本存在，再通过
-`System.Management.Automation.Language.Parser.ParseFile()` 验证无语法错误，
-并验证以下不可变条件：
+`tests/windows/Test-Scripts.ps1` 接受已校验的 Caddy 测试二进制路径，首先使用
+PowerShell 解析器拒绝语法错误，然后实际执行安装脚本的 `-ValidateOnly`
+模式。测试断言预检结果明确报告版本、服务名、端口、两个媒体目录以及配置
+验证成功：
 
 ```powershell
-$requiredInstallText = @(
-    "`$CaddyVersion = '2.11.4'",
-    "`$ServiceName = 'MediaRangeCaddy'",
-    "`$FirewallRuleName = 'MediaRange HTTP 8080'",
-    'caddy_2.11.4_windows_amd64.zip',
-    'caddy_2.11.4_checksums.txt',
-    'Get-FileHash',
-    'LocalSubnet',
-    'NT AUTHORITY\LocalService',
-    'NT SERVICE\MediaRangeCaddy',
-    'I:\MiddleDir',
-    'G:\pik',
-    'validate --config',
-    'Start-Service'
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)]
+    [string]$CaddyExe
 )
 
-$requiredUninstallText = @(
-    'Stop-Service',
-    'Remove-NetFirewallRule',
-    'NT SERVICE\MediaRangeCaddy',
-    'sc.exe',
-    'delete'
-)
+$ErrorActionPreference = 'Stop'
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$installPath = Join-Path $repoRoot 'deploy\windows\install.ps1'
+$uninstallPath = Join-Path $repoRoot 'deploy\windows\uninstall.ps1'
+
+foreach ($path in @($installPath, $uninstallPath)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "缺少部署脚本：$path"
+    }
+
+    $tokens = $null
+    $errors = $null
+    [System.Management.Automation.Language.Parser]::ParseFile(
+        $path,
+        [ref]$tokens,
+        [ref]$errors
+    ) | Out-Null
+    if ($errors.Count -ne 0) {
+        throw "PowerShell 语法错误：$($errors[0])"
+    }
+}
+
+$result = & $installPath -ValidateOnly -CaddyExe $CaddyExe
+if ($result.CaddyVersion -ne '2.11.4') {
+    throw '安装预检返回了错误的 Caddy 版本。'
+}
+if ($result.ServiceName -ne 'MediaRangeCaddy' -or $result.Port -ne 8080) {
+    throw '安装预检返回了错误的服务名或端口。'
+}
+if ($result.MediaDirectories.Count -ne 2) {
+    throw '安装预检没有返回两个媒体目录。'
+}
+if (-not $result.ConfigValid) {
+    throw '安装预检没有验证 Caddyfile。'
+}
+
+Write-Host 'PowerShell 部署脚本预检验证通过。'
 ```
 
 安装脚本必须：
 
 1. 使用 `#Requires -RunAsAdministrator`。
-2. 检查媒体目录和 8080 端口。
+2. 提供不修改系统的
+   `-ValidateOnly -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe` 模式，用于检查
+   媒体目录、8080 端口和 Caddyfile。
 3. 从 Caddy GitHub 官方 `v2.11.4` 发布页下载 Windows AMD64 ZIP 和校验和文件。
 4. 从校验和文件提取 ZIP 的预期 SHA-256，并与 `Get-FileHash` 结果比较。
 5. 将二进制安装到 `C:\Program Files\Caddy`，配置安装到
@@ -225,7 +317,8 @@ C:\ProgramData\Caddy
 - [ ] **步骤 2：运行测试并确认失败**
 
 ```powershell
-pwsh -NoProfile -File tests/windows/Test-Scripts.ps1
+pwsh -NoProfile -File tests/windows/Test-Scripts.ps1 `
+    -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe
 ```
 
 预期：失败并报告缺少安装或卸载脚本。
@@ -243,6 +336,28 @@ $FirewallRuleName = 'MediaRange HTTP 8080'
 $InstallDirectory = 'C:\Program Files\Caddy'
 $DataDirectory = 'C:\ProgramData\Caddy'
 $MediaDirectories = @('I:\MiddleDir', 'G:\pik')
+```
+
+安装脚本参数固定为：
+
+```powershell
+[CmdletBinding()]
+param(
+    [switch]$ValidateOnly,
+    [string]$CaddyExe
+)
+```
+
+`-ValidateOnly` 不创建目录、服务、ACL 或防火墙规则；成功时返回：
+
+```powershell
+[pscustomobject]@{
+    CaddyVersion = '2.11.4'
+    ServiceName = 'MediaRangeCaddy'
+    Port = 8080
+    MediaDirectories = @('I:\MiddleDir', 'G:\pik')
+    ConfigValid = $true
+}
 ```
 
 下载地址固定为：
@@ -276,10 +391,11 @@ https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_chec
 - [ ] **步骤 5：验证语法和契约**
 
 ```powershell
-pwsh -NoProfile -File tests/windows/Test-Scripts.ps1
+pwsh -NoProfile -File tests/windows/Test-Scripts.ps1 `
+    -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe
 ```
 
-预期：输出 `PowerShell 部署脚本契约验证通过。`
+预期：输出 `PowerShell 部署脚本预检验证通过。`
 
 - [ ] **步骤 6：提交**
 
@@ -301,40 +417,51 @@ git commit -m "feat: add Windows Caddy installer"
 - 输入：已运行的 `MediaRangeCaddy` 服务。
 - 输出：服务、ACL、防火墙、目录浏览、206、416、404 的验证报告。
 
-- [ ] **步骤 1：扩充失败的脚本契约测试**
+- [ ] **步骤 1：扩充失败的验证脚本行为测试**
 
-增加对 `verify.ps1` 和 `README.md` 的存在性、PowerShell 语法及以下验证关键词
-的断言：
+修改 `tests/windows/Test-Scripts.ps1`：要求 `verify.ps1` 存在且无 PowerShell
+语法错误，然后执行其不依赖已安装服务的配置验证模式：
 
 ```powershell
-$requiredVerifyText = @(
-    'MediaRangeCaddy',
-    'MediaRange HTTP 8080',
-    'LocalSubnet',
-    'http://127.0.0.1:8080',
-    '/middle/',
-    '/pik/',
-    'bytes=0-1023',
-    '206',
-    'Content-Range',
-    '416',
-    '404'
-)
+$verifyPath = Join-Path $repoRoot 'deploy\windows\verify.ps1'
+if (-not (Test-Path -LiteralPath $verifyPath -PathType Leaf)) {
+    throw "缺少运行时验证脚本：$verifyPath"
+}
+
+$tokens = $null
+$errors = $null
+[System.Management.Automation.Language.Parser]::ParseFile(
+    $verifyPath,
+    [ref]$tokens,
+    [ref]$errors
+) | Out-Null
+if ($errors.Count -ne 0) {
+    throw "verify.ps1 存在语法错误：$($errors[0])"
+}
+
+$configResult = & $verifyPath -ConfigOnly -CaddyExe $CaddyExe
+if (-not $configResult.ConfigValid) {
+    throw 'verify.ps1 未能验证 Caddyfile。'
+}
 ```
+
+README 是面向人的运维文档，不做文字匹配测试；任务完成时直接审阅内容。
 
 - [ ] **步骤 2：运行测试并确认失败**
 
 ```powershell
-pwsh -NoProfile -File tests/windows/Test-Scripts.ps1
+pwsh -NoProfile -File tests/windows/Test-Scripts.ps1 `
+    -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe
 ```
 
-预期：失败并报告缺少 `verify.ps1` 或 `README.md`。
+预期：失败并报告缺少 `verify.ps1`。
 
 - [ ] **步骤 3：实现运行时验证脚本**
 
 验证脚本必须：
 
-1. 运行 Caddyfile 语法验证。
+1. 支持 `-ConfigOnly -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe`，只运行
+   Caddyfile 语法验证并返回 `ConfigValid = $true`。
 2. 检查服务状态为 `Running`、启动类型为 `Auto`、账户为
    `NT AUTHORITY\LocalService`。
 3. 检查防火墙规则启用且远程地址包含 `LocalSubnet`。
@@ -361,8 +488,10 @@ README 必须记录：
 - [ ] **步骤 5：运行静态测试**
 
 ```powershell
-pwsh -NoProfile -File tests/windows/Test-Caddyfile.ps1
-pwsh -NoProfile -File tests/windows/Test-Scripts.ps1
+pwsh -NoProfile -File tests/windows/Test-Caddyfile.ps1 `
+    -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe
+pwsh -NoProfile -File tests/windows/Test-Scripts.ps1 `
+    -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe
 ```
 
 预期：两个测试均通过。
@@ -386,11 +515,13 @@ git commit -m "test: add range server verification"
 - 输入：任务 1 至任务 3 的已提交部署文件。
 - 输出：运行中的局域网 HTTP Range 服务。
 
-- [ ] **步骤 1：再次运行仓库静态测试**
+- [ ] **步骤 1：再次运行仓库行为测试**
 
 ```powershell
-pwsh -NoProfile -File tests/windows/Test-Caddyfile.ps1
-pwsh -NoProfile -File tests/windows/Test-Scripts.ps1
+pwsh -NoProfile -File tests/windows/Test-Caddyfile.ps1 `
+    -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe
+pwsh -NoProfile -File tests/windows/Test-Scripts.ps1 `
+    -CaddyExe C:\Temp\caddy-2.11.4\caddy.exe
 ```
 
 预期：两个测试均通过。
