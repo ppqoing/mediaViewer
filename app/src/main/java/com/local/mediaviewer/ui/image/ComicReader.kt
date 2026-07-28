@@ -300,7 +300,7 @@ private fun ComicImage(
                 },
             )
             .testTag(
-                "comic_image:${item.logicalUrl}",
+                "comic_image:${item.name}",
             ),
         loading = {
             ComicPlaceholder()

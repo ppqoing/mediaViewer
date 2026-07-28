@@ -46,7 +46,8 @@ internal fun ImageItemErrorPanel(
         Button(
             onClick = onRetry,
             modifier = Modifier.testTag(
-                "retry_image:${item.logicalUrl}",
+                "retry_image:" +
+                    item.logicalUrl.hashCode(),
             ),
         ) {
             Text("重试此图")

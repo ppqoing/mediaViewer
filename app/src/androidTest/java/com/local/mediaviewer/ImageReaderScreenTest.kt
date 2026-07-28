@@ -150,7 +150,7 @@ class ImageReaderScreenTest {
             .assertIsDisplayed()
         rule
             .onNodeWithTag(
-                "retry_image:$failedUrl",
+                "retry_image:${failedUrl.hashCode()}",
             )
             .performClick()
         rule.runOnIdle {
