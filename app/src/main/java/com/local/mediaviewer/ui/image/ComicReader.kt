@@ -1,0 +1,337 @@
+package com.local.mediaviewer.ui.image
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
+import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.SubcomposeAsyncImageContent
+import com.local.mediaviewer.image.ComicTransform
+import com.local.mediaviewer.image.ComicTransformReducer
+import com.local.mediaviewer.image.ImageDecodePolicy
+import com.local.mediaviewer.image.ImageReaderItem
+import com.local.mediaviewer.image.ImageSortOrder
+import com.local.mediaviewer.image.MediaImageLoaderFactory
+import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+
+@Composable
+fun ComicReader(
+    images: List<ImageReaderItem>,
+    anchorLogicalUrl: String,
+    sortOrder: ImageSortOrder,
+    imageLoader: ImageLoader,
+    requestGeneration: Int,
+    onAnchorChanged: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val initialAnchorIndex =
+        images.indexOfFirst {
+            it.logicalUrl == anchorLogicalUrl
+        }.coerceAtLeast(0)
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex =
+            initialAnchorIndex,
+    )
+    var transform by rememberSaveable(
+        stateSaver = listSaver(
+            save = {
+                listOf(
+                    it.scale,
+                    it.horizontalOffsetPx,
+                )
+            },
+            restore = {
+                ComicTransform(
+                    scale = it[0],
+                    horizontalOffsetPx = it[1],
+                )
+            },
+        ),
+    ) {
+        mutableStateOf(ComicTransform())
+    }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black),
+    ) {
+        val viewportWidthPx =
+            constraints.maxWidth.coerceAtLeast(1)
+        val viewportHeightPx =
+            constraints.maxHeight.coerceAtLeast(1)
+        val density = LocalDensity.current
+        val itemWidth = with(density) {
+            (
+                viewportWidthPx *
+                    transform.scale
+            ).toDp()
+        }
+        val dragState = rememberDraggableState { delta ->
+            transform = ComicTransformReducer.gesture(
+                current = transform,
+                zoomChange = 1f,
+                panXPx = delta,
+                viewportWidthPx =
+                    viewportWidthPx.toFloat(),
+            )
+        }
+
+        LaunchedEffect(viewportWidthPx) {
+            transform = ComicTransformReducer.clamp(
+                current = transform,
+                viewportWidthPx =
+                    viewportWidthPx.toFloat(),
+            )
+        }
+        LaunchedEffect(images, sortOrder) {
+            val anchorIndex =
+                images.indexOfFirst {
+                    it.logicalUrl == anchorLogicalUrl
+                }.coerceAtLeast(0)
+            listState.scrollToItem(anchorIndex)
+        }
+        LaunchedEffect(listState, images) {
+            snapshotFlow {
+                if (listState.isScrollInProgress) {
+                    mostVisibleLogicalUrl(
+                        listState.layoutInfo,
+                    )
+                } else {
+                    null
+                }
+            }
+                .filterNotNull()
+                .distinctUntilChanged()
+                .collect(onAnchorChanged)
+        }
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("comic_reader")
+                .comicTransformGestures {
+                        zoomChange,
+                        panXPx,
+                    ->
+                    transform =
+                        ComicTransformReducer.gesture(
+                            current = transform,
+                            zoomChange = zoomChange,
+                            panXPx = panXPx,
+                            viewportWidthPx =
+                                viewportWidthPx
+                                    .toFloat(),
+                        )
+                }
+                .draggable(
+                    state = dragState,
+                    orientation =
+                        Orientation.Horizontal,
+                    enabled = transform.scale > 1f,
+                ),
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+        ) {
+            items(
+                items = images,
+                key = ImageReaderItem::logicalUrl,
+                contentType = { "image" },
+            ) { item ->
+                ComicImage(
+                    item = item,
+                    imageLoader = imageLoader,
+                    requestGeneration =
+                        requestGeneration,
+                    viewportWidthPx =
+                        viewportWidthPx,
+                    viewportHeightPx =
+                        viewportHeightPx,
+                    visualScale = transform.scale,
+                    modifier = Modifier
+                        .requiredWidth(itemWidth)
+                        .offset {
+                            IntOffset(
+                                x =
+                                    transform
+                                        .horizontalOffsetPx
+                                        .roundToInt(),
+                                y = 0,
+                            )
+                        },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComicImage(
+    item: ImageReaderItem,
+    imageLoader: ImageLoader,
+    requestGeneration: Int,
+    viewportWidthPx: Int,
+    viewportHeightPx: Int,
+    visualScale: Float,
+    modifier: Modifier,
+) {
+    val context = LocalContext.current
+    val decodeSize = remember(
+        viewportWidthPx,
+        viewportHeightPx,
+        visualScale,
+    ) {
+        ImageDecodePolicy.target(
+            viewportWidthPx = viewportWidthPx,
+            viewportHeightPx = viewportHeightPx,
+            scale = visualScale,
+        )
+    }
+    val request = remember(
+        context,
+        item.requestUrl,
+        decodeSize,
+        requestGeneration,
+    ) {
+        MediaImageLoaderFactory.createRequest(
+            context = context,
+            url = item.requestUrl,
+            decodeSize = decodeSize,
+            requestGeneration = requestGeneration,
+        )
+    }
+
+    SubcomposeAsyncImage(
+        model = request,
+        imageLoader = imageLoader,
+        contentDescription = item.name,
+        contentScale = ContentScale.FillWidth,
+        modifier = modifier
+            .fillMaxWidth()
+            .wrapContentHeight()
+            .testTag(
+                "comic_image:${item.logicalUrl}",
+            ),
+        loading = {
+            ComicPlaceholder()
+        },
+        error = {
+            ComicPlaceholder("图片加载失败")
+        },
+        success = {
+            SubcomposeAsyncImageContent()
+        },
+    )
+}
+
+@Composable
+private fun ComicPlaceholder(
+    message: String? = null,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(160.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (message == null) {
+            CircularProgressIndicator()
+        } else {
+            Text(
+                text = message,
+                color = Color.White,
+            )
+        }
+    }
+}
+
+internal data class VisibleImageBounds(
+    val logicalUrl: String,
+    val offsetPx: Int,
+    val sizePx: Int,
+)
+
+internal fun mostVisibleLogicalUrl(
+    items: List<VisibleImageBounds>,
+    viewportStartPx: Int,
+    viewportEndPx: Int,
+): String? =
+    items
+        .map { item ->
+            val visibleStart =
+                maxOf(item.offsetPx, viewportStartPx)
+            val visibleEnd =
+                minOf(
+                    item.offsetPx + item.sizePx,
+                    viewportEndPx,
+                )
+            item to
+                (visibleEnd - visibleStart)
+                    .coerceAtLeast(0)
+        }
+        .filter { (_, visiblePx) ->
+            visiblePx > 0
+        }
+        .maxByOrNull { (_, visiblePx) ->
+            visiblePx
+        }
+        ?.first
+        ?.logicalUrl
+
+internal fun mostVisibleLogicalUrl(
+    layoutInfo: LazyListLayoutInfo,
+): String? =
+    mostVisibleLogicalUrl(
+        items =
+            layoutInfo.visibleItemsInfo.mapNotNull {
+                item ->
+                val logicalUrl =
+                    item.key as? String
+                        ?: return@mapNotNull null
+                VisibleImageBounds(
+                    logicalUrl = logicalUrl,
+                    offsetPx = item.offset,
+                    sizePx = item.size,
+                )
+            },
+        viewportStartPx =
+            layoutInfo.viewportStartOffset,
+        viewportEndPx =
+            layoutInfo.viewportEndOffset,
+    )

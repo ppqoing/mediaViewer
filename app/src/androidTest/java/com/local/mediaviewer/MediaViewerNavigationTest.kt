@@ -9,7 +9,9 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.app.MediaViewerApp
+import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.testing.FakeAppContainer
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -61,6 +63,18 @@ class MediaViewerNavigationTest {
 
     @Test
     fun homeOpensNestedImage() {
+        openNestedDirectory()
+        rule.onNodeWithText("样例.png").performClick()
+        rule.onNodeWithText("样例.png").assertIsDisplayed()
+        rule.onNodeWithTag("comic_reader").assertExists()
+    }
+
+    @Test
+    fun homeUsesConfiguredSingleImageMode() {
+        runBlocking {
+            container.readerPreferencesRepository
+                .setDefaultMode(ImageReaderMode.SINGLE)
+        }
         openNestedDirectory()
         rule.onNodeWithText("样例.png").performClick()
         rule.onNodeWithText("样例.png").assertIsDisplayed()

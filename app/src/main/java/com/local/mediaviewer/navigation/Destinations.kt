@@ -22,13 +22,6 @@ data class PlayerRoute(
 )
 
 @Serializable
-data class ImageRoute(
-    val name: String,
-    val logicalUrl: String,
-    val requestUrl: String,
-)
-
-@Serializable
 data class ImageReaderRoute(
     val rootId: String,
     val directoryLogicalUrl: String,

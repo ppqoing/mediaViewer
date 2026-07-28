@@ -51,7 +51,7 @@ class FakeAppContainer(
         FakeServerSessionManager(endpoint)
     override val directoryContentRepository:
         DirectoryContentRepository =
-        StrictDirectoryContentRepository()
+        FakeDirectoryContentRepository(endpoint)
     override val browserRepository: BrowserRepository =
         FakeBrowserRepository(endpoint)
     override val playbackEngineFactory =
@@ -82,14 +82,62 @@ private class FakeReaderPreferencesRepository :
     }
 }
 
-private class StrictDirectoryContentRepository :
-    DirectoryContentRepository {
+private class FakeDirectoryContentRepository(
+    private val endpoint: SessionEndpoint,
+) : DirectoryContentRepository {
     override suspend fun load(
         logicalDirectoryUrl: String,
-    ): AppResult<DirectoryContent> =
-        error(
-            "导航测试未配置共享目录内容：$logicalDirectoryUrl",
+    ): AppResult<DirectoryContent> {
+        val requestDirectoryUrl =
+            endpoint.requestUrlFor(logicalDirectoryUrl)
+        val images = listOf(
+            Triple(
+                "前一页.jpg",
+                1_024L,
+                "previous.jpg",
+            ),
+            Triple(
+                "样例.png",
+                2_048L,
+                "sample.png",
+            ),
+            Triple(
+                "后一页.webp",
+                3_072L,
+                "next.webp",
+            ),
         )
+        return AppResult.Success(
+            DirectoryContent(
+                logicalDirectoryUrl =
+                    logicalDirectoryUrl,
+                requestDirectoryUrl =
+                    requestDirectoryUrl,
+                entries = images.map {
+                        (name, size, fileName),
+                    ->
+                    DirectoryEntry(
+                        name = name,
+                        size = size,
+                        modifiedAt =
+                            Instant.parse(
+                                "2026-07-28T00:00:00Z",
+                            ),
+                        mode = 420L,
+                        isDirectory = false,
+                        isSymlink = false,
+                        logicalUrl =
+                            logicalDirectoryUrl +
+                                fileName,
+                        requestUrl =
+                            requestDirectoryUrl +
+                                fileName,
+                        kind = MediaKind.IMAGE,
+                    )
+                },
+            ),
+        )
+    }
 }
 
 private class FakeServerSettingsRepository :

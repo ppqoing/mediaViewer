@@ -3,8 +3,13 @@ package com.local.mediaviewer.image
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import coil3.request.CachePolicy
+import coil3.size.Precision
+import coil3.size.Scale
+import coil3.size.Size
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -44,4 +49,35 @@ class MediaImageLoaderFactoryTest {
 
         loader.shutdown()
     }
+
+    @Test
+    fun `图片请求限制解码尺寸并隔离重试代次`() =
+        runTest {
+            val context =
+                ApplicationProvider
+                    .getApplicationContext<Context>()
+            val request =
+                MediaImageLoaderFactory.createRequest(
+                    context = context,
+                    url =
+                        "http://192.0.2.1/pik/a.png",
+                    decodeSize =
+                        ImageDecodeSize(1080, 4096),
+                    requestGeneration = 3,
+                )
+
+            assertEquals(
+                Size(1080, 4096),
+                request.sizeResolver.size(),
+            )
+            assertEquals(Scale.FIT, request.scale)
+            assertEquals(
+                Precision.INEXACT,
+                request.precision,
+            )
+            assertTrue(
+                requireNotNull(request.memoryCacheKey)
+                    .contains("generation=3"),
+            )
+        }
 }
