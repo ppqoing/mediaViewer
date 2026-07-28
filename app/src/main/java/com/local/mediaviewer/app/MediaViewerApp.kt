@@ -71,6 +71,8 @@ fun MediaViewerApp(container: AppContainer) {
                     initializer {
                         SettingsViewModel(
                             settings = container.settingsRepository,
+                            readerPreferences =
+                                container.readerPreferencesRepository,
                             session = container.sessionManager,
                         )
                     }
@@ -87,6 +89,8 @@ fun MediaViewerApp(container: AppContainer) {
                 onInputChanged = settings::onInputChanged,
                 onTest = settings::testConnection,
                 onSave = settings::save,
+                onDefaultImageModeChanged =
+                    settings::onDefaultImageModeChanged,
                 onBack = { navController.popBackStack() },
             )
         }

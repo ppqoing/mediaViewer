@@ -3,12 +3,14 @@ package com.local.mediaviewer
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.local.mediaviewer.home.HomeUiState
+import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.model.RootShare
 import com.local.mediaviewer.settings.SettingsUiState
 import com.local.mediaviewer.ui.home.HomeScreen
@@ -62,6 +64,7 @@ class HomeSettingsScreenTest {
 
     @Test
     fun settingsSaveFollowsProbeState() {
+        var selectedReaderMode: ImageReaderMode? = null
         rule.setContent {
             SettingsScreen(
                 state = SettingsUiState(
@@ -73,6 +76,9 @@ class HomeSettingsScreenTest {
                 onInputChanged = {},
                 onTest = {},
                 onSave = {},
+                onDefaultImageModeChanged = {
+                    selectedReaderMode = it
+                },
                 onBack = {},
             )
         }
@@ -82,5 +88,15 @@ class HomeSettingsScreenTest {
         rule.onNodeWithTag("save_server").assertIsNotEnabled()
         rule.onNodeWithText("10.0.0.8").assertIsDisplayed()
         rule.onNodeWithText("已选择：203.0.113.7").assertIsDisplayed()
+        rule.onNodeWithText("图片阅读").assertIsDisplayed()
+        rule.onNodeWithTag("default_reader_comic")
+            .assertIsSelected()
+        rule.onNodeWithTag("default_reader_single")
+            .performClick()
+        assertEquals(
+            ImageReaderMode.SINGLE,
+            selectedReaderMode,
+        )
+        rule.onNodeWithTag("save_server").assertIsNotEnabled()
     }
 }

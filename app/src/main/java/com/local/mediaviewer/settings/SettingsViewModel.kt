@@ -3,6 +3,8 @@ package com.local.mediaviewer.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.local.mediaviewer.core.AppResult
+import com.local.mediaviewer.image.ImageReaderMode
+import com.local.mediaviewer.image.ReaderPreferencesRepository
 import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.session.ServerSessionManager
 import kotlinx.coroutines.Job
@@ -21,10 +23,15 @@ data class SettingsUiState(
     val selectedIpv4: String? = null,
     val errorMessage: String? = null,
     val canSave: Boolean = false,
+    val defaultImageMode:
+        ImageReaderMode = ImageReaderMode.COMIC,
+    val isSavingImageMode: Boolean = false,
+    val imageModeError: String? = null,
 )
 
 class SettingsViewModel(
     private val settings: ServerSettingsRepository,
+    private val readerPreferences: ReaderPreferencesRepository,
     private val session: ServerSessionManager,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(SettingsUiState())
@@ -46,6 +53,12 @@ class SettingsViewModel(
                     input = logicalBaseUrl,
                 )
             }
+        }
+        viewModelScope.launch {
+            val mode = readerPreferences.currentDefaultMode()
+            mutableUiState.value = mutableUiState.value.copy(
+                defaultImageMode = mode,
+            )
         }
     }
 
@@ -112,6 +125,36 @@ class SettingsViewModel(
         viewModelScope.launch {
             session.saveCandidate(result)
             mutableSaved.emit(Unit)
+        }
+    }
+
+    fun onDefaultImageModeChanged(mode: ImageReaderMode) {
+        if (
+            mode == mutableUiState.value.defaultImageMode ||
+            mutableUiState.value.isSavingImageMode
+        ) {
+            return
+        }
+        val previous = mutableUiState.value.defaultImageMode
+        mutableUiState.value = mutableUiState.value.copy(
+            defaultImageMode = mode,
+            isSavingImageMode = true,
+            imageModeError = null,
+        )
+        viewModelScope.launch {
+            runCatching {
+                readerPreferences.setDefaultMode(mode)
+            }.onSuccess {
+                mutableUiState.value = mutableUiState.value.copy(
+                    isSavingImageMode = false,
+                )
+            }.onFailure {
+                mutableUiState.value = mutableUiState.value.copy(
+                    defaultImageMode = previous,
+                    isSavingImageMode = false,
+                    imageModeError = "默认看图方式保存失败",
+                )
+            }
         }
     }
 }

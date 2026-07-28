@@ -10,7 +10,9 @@ import com.local.mediaviewer.browser.BrowserRepository
 import com.local.mediaviewer.browser.DirectoryContent
 import com.local.mediaviewer.browser.DirectoryContentRepository
 import com.local.mediaviewer.core.AppResult
+import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.image.MediaImageLoaderFactory
+import com.local.mediaviewer.image.ReaderPreferencesRepository
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.model.RootShare
@@ -41,6 +43,9 @@ class FakeAppContainer(
 
     override val settingsRepository: ServerSettingsRepository =
         FakeServerSettingsRepository()
+    override val readerPreferencesRepository:
+        ReaderPreferencesRepository =
+        FakeReaderPreferencesRepository()
     override val sessionManager: ServerSessionManager =
         FakeServerSessionManager(endpoint)
     override val directoryContentRepository:
@@ -59,6 +64,20 @@ class FakeAppContainer(
 
     override fun close() {
         imageLoader.shutdown()
+    }
+}
+
+private class FakeReaderPreferencesRepository :
+    ReaderPreferencesRepository {
+    private val mutable =
+        MutableStateFlow(ImageReaderMode.COMIC)
+    override val defaultMode: Flow<ImageReaderMode> = mutable
+
+    override suspend fun currentDefaultMode(): ImageReaderMode =
+        mutable.value
+
+    override suspend fun setDefaultMode(mode: ImageReaderMode) {
+        mutable.value = mode
     }
 }
 

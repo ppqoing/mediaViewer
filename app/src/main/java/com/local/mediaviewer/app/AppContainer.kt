@@ -7,7 +7,10 @@ import com.local.mediaviewer.browser.BrowserRepository
 import com.local.mediaviewer.browser.DefaultBrowserRepository
 import com.local.mediaviewer.browser.DefaultDirectoryContentRepository
 import com.local.mediaviewer.browser.DirectoryContentRepository
+import com.local.mediaviewer.image.DataStoreReaderPreferencesRepository
 import com.local.mediaviewer.image.MediaImageLoaderFactory
+import com.local.mediaviewer.image.ReaderPreferencesRepository
+import com.local.mediaviewer.image.readerPreferencesDataStore
 import com.local.mediaviewer.network.DefaultCaddyDirectoryClient
 import com.local.mediaviewer.network.DefaultConnectionProbe
 import com.local.mediaviewer.network.DefaultDirectoryJsonParser
@@ -27,6 +30,7 @@ import com.local.mediaviewer.settings.serverSettingsDataStore
 
 interface AppContainer {
     val settingsRepository: ServerSettingsRepository
+    val readerPreferencesRepository: ReaderPreferencesRepository
     val sessionManager: ServerSessionManager
     val directoryContentRepository: DirectoryContentRepository
     val browserRepository: BrowserRepository
@@ -39,6 +43,11 @@ class DefaultAppContainer(context: Context) : AppContainer {
     private val appContext = context.applicationContext
     override val settingsRepository: ServerSettingsRepository =
         DataStoreServerSettingsRepository(context.serverSettingsDataStore)
+    override val readerPreferencesRepository:
+        ReaderPreferencesRepository =
+        DataStoreReaderPreferencesRepository(
+            appContext.readerPreferencesDataStore,
+        )
 
     private val directoryParser = DefaultDirectoryJsonParser()
     private val directoryClient = DefaultCaddyDirectoryClient(

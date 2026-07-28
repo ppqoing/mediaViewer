@@ -2,12 +2,14 @@ package com.local.mediaviewer.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.settings.SettingsUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,6 +31,7 @@ fun SettingsScreen(
     onInputChanged: (String) -> Unit,
     onTest: () -> Unit,
     onSave: () -> Unit,
+    onDefaultImageModeChanged: (ImageReaderMode) -> Unit,
     onBack: () -> Unit,
 ) {
     Scaffold(
@@ -91,6 +95,53 @@ fun SettingsScreen(
                 modifier = Modifier.testTag("save_server"),
             ) {
                 Text("保存")
+            }
+            Text(
+                text = "图片阅读",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Row(
+                horizontalArrangement =
+                    Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected =
+                        state.defaultImageMode ==
+                            ImageReaderMode.COMIC,
+                    onClick = {
+                        onDefaultImageModeChanged(
+                            ImageReaderMode.COMIC,
+                        )
+                    },
+                    label = { Text("条漫") },
+                    enabled = !state.isSavingImageMode,
+                    modifier =
+                        Modifier.testTag(
+                            "default_reader_comic",
+                        ),
+                )
+                FilterChip(
+                    selected =
+                        state.defaultImageMode ==
+                            ImageReaderMode.SINGLE,
+                    onClick = {
+                        onDefaultImageModeChanged(
+                            ImageReaderMode.SINGLE,
+                        )
+                    },
+                    label = { Text("单图") },
+                    enabled = !state.isSavingImageMode,
+                    modifier =
+                        Modifier.testTag(
+                            "default_reader_single",
+                        ),
+                )
+            }
+            state.imageModeError?.let { message ->
+                Text(
+                    text = message,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }
