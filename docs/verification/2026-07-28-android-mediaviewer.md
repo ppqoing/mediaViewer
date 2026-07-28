@@ -1,14 +1,14 @@
 # mediaviewer Android 验收记录
 
-- 完成时间：2026-07-28 20:43:32 +08:00
-- Git 修订：368ffbe08a63edab8f1f73c8e51a20267ab54f59
+- 完成时间：2026-07-29 00:57:03 +08:00
+- Git 修订：c00de60249aa94f9ab736a175670b873c4bcdab3
 - AVD：Pixel_3a_API_36_extension_level_17_x86_64
 - Android API：36
 - ABI：x86_64
 - 真实服务器：http://192.168.1.17:8080
-- 应用进程 PID：28608
+- 应用进程 PID：11244
 - APK：dist/mediaviewer-debug.apk
-- SHA-256：457a2690c47cf5eda27ac2c274e069d17d49274e2bf00b52598dddf3397ab46f
+- SHA-256：abd47bd7434a8f9499338244ad9f68a5335a7494986f8f54e7b27f0c197438f2
 
 ## 自动门禁
 
@@ -20,6 +20,12 @@
 - PNG/WAV/MP4 自生成夹具：通过
 - HTTP Range 206：通过
 - LibVLC 视频、音频与 seek：通过
+- LibVLC VLCVideoLayout 输出几何：通过
+- 四种视频画面模式：通过
+- 条漫/单图默认设置：通过
+- 六种图片排序与锚点：通过
+- 50 图片动态加载：通过
+- 统一缩放与解码上限：通过
 - 横屏旋转：通过
 - API 36 x86_64 安装与启动：通过
 
