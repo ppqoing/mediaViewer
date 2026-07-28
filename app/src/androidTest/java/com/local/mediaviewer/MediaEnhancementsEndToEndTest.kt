@@ -193,29 +193,55 @@ class MediaEnhancementsEndToEndTest {
                 down(
                     pointerId = 0,
                     position =
-                        middle + Offset(-60f, 0f),
+                        middle + Offset(-40f, 0f),
                 )
                 down(
                     pointerId = 1,
                     position =
-                        middle + Offset(60f, 0f),
+                        middle + Offset(40f, 0f),
+                )
+                moveTo(
+                    pointerId = 0,
+                    position =
+                        middle + Offset(-80f, 0f),
+                    delayMillis = 100L,
+                )
+                moveTo(
+                    pointerId = 1,
+                    position =
+                        middle + Offset(80f, 0f),
+                    delayMillis = 100L,
                 )
                 moveTo(
                     pointerId = 0,
                     position =
                         middle + Offset(-120f, 0f),
+                    delayMillis = 100L,
                 )
                 moveTo(
                     pointerId = 1,
                     position =
                         middle + Offset(120f, 0f),
+                    delayMillis = 100L,
+                )
+                moveTo(
+                    pointerId = 0,
+                    position =
+                        middle + Offset(-160f, 0f),
+                    delayMillis = 100L,
+                )
+                moveTo(
+                    pointerId = 1,
+                    position =
+                        middle + Offset(160f, 0f),
+                    delayMillis = 100L,
                 )
                 up(pointerId = 0)
                 up(pointerId = 1)
             }
         val firstScale = comicScale("001.jpg")
         val secondScale = comicScale("002.jpg")
-        assertTrue(firstScale > 1f)
+        assertTrue(firstScale > 3.5f)
         assertEquals(
             firstScale,
             secondScale,

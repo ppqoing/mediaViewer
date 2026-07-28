@@ -222,3 +222,16 @@ class AndroidVlcPlaybackEngine(
         const val MAIN_THREAD_TIMEOUT_SECONDS = 10L
     }
 }
+
+private fun VideoScaleMode.toLibVlcScaleType():
+    MediaPlayer.ScaleType =
+    when (this) {
+        VideoScaleMode.BEST_FIT ->
+            MediaPlayer.ScaleType.SURFACE_BEST_FIT
+        VideoScaleMode.FILL_CROP ->
+            MediaPlayer.ScaleType.SURFACE_FIT_SCREEN
+        VideoScaleMode.STRETCH ->
+            MediaPlayer.ScaleType.SURFACE_FILL
+        VideoScaleMode.ORIGINAL ->
+            MediaPlayer.ScaleType.SURFACE_ORIGINAL
+    }

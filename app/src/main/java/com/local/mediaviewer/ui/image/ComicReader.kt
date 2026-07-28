@@ -79,6 +79,9 @@ fun ComicReader(
     onRetryImage: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val deviceBitmapLimits = remember {
+        queryDeviceBitmapLimits()
+    }
     val initialAnchorIndex =
         images.indexOfFirst {
             it.logicalUrl == anchorLogicalUrl
@@ -243,6 +246,8 @@ fun ComicReader(
                             viewportWidthPx,
                         viewportHeightPx =
                             viewportHeightPx,
+                        deviceBitmapLimits =
+                            deviceBitmapLimits,
                         visualScale = transform.scale,
                         onImageLoadError =
                             onImageLoadError,
@@ -265,6 +270,7 @@ private fun ComicImage(
     requestGeneration: Int,
     viewportWidthPx: Int,
     viewportHeightPx: Int,
+    deviceBitmapLimits: DeviceBitmapLimits,
     visualScale: Float,
     failure: ImageItemFailure?,
     onImageLoadError:
@@ -294,12 +300,17 @@ private fun ComicImage(
     val decodeSize = remember(
         viewportWidthPx,
         viewportHeightPx,
+        deviceBitmapLimits,
         visualScale,
     ) {
         ImageDecodePolicy.target(
             viewportWidthPx = viewportWidthPx,
             viewportHeightPx = viewportHeightPx,
             scale = visualScale,
+            maxBitmapWidthPx =
+                deviceBitmapLimits.maxWidthPx,
+            maxBitmapHeightPx =
+                deviceBitmapLimits.maxHeightPx,
         )
     }
     val request = remember(

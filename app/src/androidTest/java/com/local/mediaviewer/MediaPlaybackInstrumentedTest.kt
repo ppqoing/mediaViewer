@@ -29,6 +29,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.videolan.libvlc.MediaPlayer
 
 @RunWith(AndroidJUnit4::class)
 class MediaPlaybackInstrumentedTest {
@@ -142,9 +143,18 @@ class MediaPlaybackInstrumentedTest {
                 val positionBeforeModes =
                     engine.state.value.positionMs
                 VideoScaleMode.entries.forEach { mode ->
+                    var appliedScale:
+                        MediaPlayer.ScaleType? = null
                     scenario.onActivity {
                         engine.setVideoScaleMode(mode)
+                        appliedScale =
+                            nativeMediaPlayer(engine)
+                                .videoScale
                     }
+                    assertEquals(
+                        expectedNativeScale(mode),
+                        appliedScale,
+                    )
                     Thread.sleep(20)
                     val state = engine.state.value
                     assertTrue(
@@ -160,14 +170,31 @@ class MediaPlaybackInstrumentedTest {
                         ) < 2_000L ||
                             state.status ==
                             PlaybackStatus.ENDED,
+                        )
+                }
+                scenario.onActivity {
+                    engine.setVideoScaleMode(
+                        VideoScaleMode.STRETCH,
+                    )
+                    assertEquals(
+                        MediaPlayer.ScaleType.SURFACE_FILL,
+                        nativeMediaPlayer(engine)
+                            .videoScale,
                     )
                 }
                 val positionBeforeRecreation =
                     engine.state.value.positionMs
                 scenario.onActivity {
                     engine.detachVideoOutput()
+                    nativeMediaPlayer(engine)
+                        .setVideoScale(
+                            MediaPlayer.ScaleType
+                                .SURFACE_BEST_FIT,
+                        )
                 }
                 scenario.recreate()
+                var reappliedScale:
+                    MediaPlayer.ScaleType? = null
                 scenario.onActivity { activity ->
                     val replacementHost =
                         FrameLayout(activity).apply {
@@ -183,10 +210,14 @@ class MediaPlaybackInstrumentedTest {
                     engine.attachVideoOutput(
                         replacementHost,
                     )
-                    engine.setVideoScaleMode(
-                        VideoScaleMode.STRETCH,
-                    )
+                    reappliedScale =
+                        nativeMediaPlayer(engine)
+                            .videoScale
                 }
+                assertEquals(
+                    MediaPlayer.ScaleType.SURFACE_FILL,
+                    reappliedScale,
+                )
                 engine.play()
                 waitUntil(
                     timeoutMs = 10_000,
@@ -212,6 +243,32 @@ class MediaPlaybackInstrumentedTest {
             engine.close()
         }
     }
+
+    private fun nativeMediaPlayer(
+        engine: AndroidVlcPlaybackEngine,
+    ): MediaPlayer {
+        val field =
+            AndroidVlcPlaybackEngine::class.java
+                .getDeclaredField("mediaPlayer")
+        field.isAccessible = true
+        return requireNotNull(
+            field.get(engine) as? MediaPlayer,
+        )
+    }
+
+    private fun expectedNativeScale(
+        mode: VideoScaleMode,
+    ): MediaPlayer.ScaleType =
+        when (mode) {
+            VideoScaleMode.BEST_FIT ->
+                MediaPlayer.ScaleType.SURFACE_BEST_FIT
+            VideoScaleMode.FILL_CROP ->
+                MediaPlayer.ScaleType.SURFACE_FIT_SCREEN
+            VideoScaleMode.STRETCH ->
+                MediaPlayer.ScaleType.SURFACE_FILL
+            VideoScaleMode.ORIGINAL ->
+                MediaPlayer.ScaleType.SURFACE_ORIGINAL
+        }
 
     @Test
     fun audioUsesRangeAndBecomesSeekable() {

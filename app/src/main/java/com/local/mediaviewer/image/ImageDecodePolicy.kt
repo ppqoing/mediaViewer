@@ -15,9 +15,15 @@ object ImageDecodePolicy {
         viewportWidthPx: Int,
         viewportHeightPx: Int,
         scale: Float,
+        maxBitmapWidthPx: Int = Int.MAX_VALUE,
+        maxBitmapHeightPx: Int = Int.MAX_VALUE,
     ): ImageDecodeSize {
         val safeWidth = viewportWidthPx.coerceAtLeast(1)
         val safeHeight = viewportHeightPx.coerceAtLeast(1)
+        val safeMaxWidth =
+            maxBitmapWidthPx.coerceAtLeast(1)
+        val safeMaxHeight =
+            maxBitmapHeightPx.coerceAtLeast(1)
         val boundedScale = scale.coerceIn(1f, 2f)
         val rawWidth =
             (safeWidth * boundedScale)
@@ -30,21 +36,30 @@ object ImageDecodePolicy {
                 .toInt()
         val rawPixels =
             rawWidth.toLong() * rawHeight.toLong()
-        val shrink = if (rawPixels > MAX_PIXELS) {
-            sqrt(
-                MAX_PIXELS.toDouble() /
-                    rawPixels.toDouble(),
-            )
-        } else {
-            1.0
-        }
+        val pixelShrink =
+            if (rawPixels > MAX_PIXELS) {
+                sqrt(
+                    MAX_PIXELS.toDouble() /
+                        rawPixels.toDouble(),
+                )
+            } else {
+                1.0
+            }
+        val shrink = minOf(
+            1.0,
+            pixelShrink,
+            safeMaxWidth.toDouble() /
+                rawWidth.toDouble(),
+            safeMaxHeight.toDouble() /
+                rawHeight.toDouble(),
+        )
         return ImageDecodeSize(
             widthPx = (rawWidth * shrink)
                 .toInt()
-                .coerceAtLeast(1),
+                .coerceIn(1, safeMaxWidth),
             heightPx = (rawHeight * shrink)
                 .toInt()
-                .coerceAtLeast(1),
+                .coerceIn(1, safeMaxHeight),
         )
     }
 }

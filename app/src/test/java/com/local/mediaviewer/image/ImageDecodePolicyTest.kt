@@ -53,6 +53,26 @@ class ImageDecodePolicyTest {
         assertWithinPixelBudget(target)
     }
 
+    @Test
+    fun `设备最大宽高按相同比例约束解码目标`() {
+        val target = ImageDecodePolicy.target(
+            viewportWidthPx = 8_000,
+            viewportHeightPx = 1_000,
+            scale = 2f,
+            maxBitmapWidthPx = 2_048,
+            maxBitmapHeightPx = 300,
+        )
+
+        assertEquals(
+            ImageDecodeSize(
+                widthPx = 1_200,
+                heightPx = 300,
+            ),
+            target,
+        )
+        assertWithinPixelBudget(target)
+    }
+
     private fun assertWithinPixelBudget(
         target: ImageDecodeSize,
     ) {

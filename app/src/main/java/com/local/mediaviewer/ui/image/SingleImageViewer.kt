@@ -51,6 +51,9 @@ fun SingleImageViewer(
         mutableStateOf(ZoomTransform())
     }
     val context = LocalContext.current
+    val deviceBitmapLimits = remember {
+        queryDeviceBitmapLimits()
+    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -76,12 +79,17 @@ fun SingleImageViewer(
         val decodeSize = remember(
             viewportWidthPx,
             viewportHeightPx,
+            deviceBitmapLimits,
             zoom.scale,
         ) {
             ImageDecodePolicy.target(
                 viewportWidthPx = viewportWidthPx,
                 viewportHeightPx = viewportHeightPx,
                 scale = zoom.scale,
+                maxBitmapWidthPx =
+                    deviceBitmapLimits.maxWidthPx,
+                maxBitmapHeightPx =
+                    deviceBitmapLimits.maxHeightPx,
             )
         }
         val request = remember(

@@ -42,12 +42,18 @@ object ImageSequence {
         right: ImageReaderItem,
         descending: Boolean,
     ): Int {
-        val first = if (descending) right else left
-        val second = if (descending) left else right
-        return String.CASE_INSENSITIVE_ORDER
-            .compare(first.name, second.name)
+        val primary =
+            String.CASE_INSENSITIVE_ORDER
+                .compare(left.name, right.name)
+        return (
+            if (descending) {
+                -primary
+            } else {
+                primary
+            }
+        )
             .takeIf { it != 0 }
-            ?: first.name.compareTo(second.name)
+            ?: left.name.compareTo(right.name)
                 .takeIf { it != 0 }
             ?: left.logicalUrl.compareTo(right.logicalUrl)
     }

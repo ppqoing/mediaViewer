@@ -181,8 +181,8 @@ class ImageSequenceTest {
             listOf(
                 "logical-1",
                 "logical-2",
-                "logical-z",
                 "logical-a",
+                "logical-z",
             ),
             ImageSequence.sort(
                 items,
