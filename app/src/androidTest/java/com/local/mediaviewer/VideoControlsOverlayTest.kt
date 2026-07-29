@@ -15,7 +15,10 @@ import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import com.local.mediaviewer.ui.player.FullscreenStateController
+import com.local.mediaviewer.ui.player.PlayerBrightnessController
+import com.local.mediaviewer.ui.player.PlayerVolumeController
 import com.local.mediaviewer.ui.player.VideoPlayerScreen
+import com.local.mediaviewer.ui.player.VolumeState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Rule
@@ -65,6 +68,8 @@ class VideoControlsOverlayTest {
                     controller = OverlayPlaybackController(),
                     fullscreenController = OverlayFullscreenController(),
                     preferences = OverlayPreferencesRepository(),
+                    volumeController = OverlayVolumeController(),
+                    brightnessController = OverlayBrightnessController(),
                     onPlay = {},
                     onPause = {},
                     onReplay = {},
@@ -130,6 +135,28 @@ private class OverlayPlaybackController : PlaybackController {
     override fun stop() = Unit
 
     override fun seekTo(positionMs: Long) = Unit
+
+    override fun close() = Unit
+}
+
+private class OverlayVolumeController : PlayerVolumeController {
+    override val state: StateFlow<VolumeState> = MutableStateFlow(VolumeState(5, 10, false))
+
+    override fun refresh() = Unit
+
+    override fun setFraction(value: Float) = Unit
+
+    override fun adjustByFraction(delta: Float) = Unit
+
+    override fun toggleMute() = Unit
+}
+
+private class OverlayBrightnessController : PlayerBrightnessController {
+    override val fraction: StateFlow<Float> = MutableStateFlow(0.5f)
+
+    override fun setFraction(value: Float) = Unit
+
+    override fun adjustByFraction(delta: Float) = Unit
 
     override fun close() = Unit
 }

@@ -31,6 +31,7 @@ class PlayerScreenTest {
 
     @Test
     fun audioScreenShowsControlsWithoutVideoSurface() {
+        val volumeController = ScreenFakeVolumeController()
         rule.setContent {
             MaterialTheme {
                 AudioPlayerScreen(
@@ -55,6 +56,7 @@ class PlayerScreenTest {
                     onNext = {},
                     onSpeedChanged = {},
                     onRetry = {},
+                    volumeController = volumeController,
                     onBack = {},
                 )
             }
@@ -80,6 +82,45 @@ class PlayerScreenTest {
     }
 
     @Test
+    fun audioScreenExposesVolumeControlsWithoutVideoCapabilities() {
+        val volumeController = ScreenFakeVolumeController()
+        rule.setContent {
+            MaterialTheme {
+                AudioPlayerScreen(
+                    state = PlayerUiState(
+                        name = "音乐.flac",
+                        kind = MediaKind.AUDIO,
+                        status = PlaybackStatus.PAUSED,
+                    ),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    onRetry = {},
+                    volumeController = volumeController,
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("音量，当前 50%").assertIsDisplayed()
+        rule.onNodeWithContentDescription("音量，当前 50%").performClick()
+        rule.onNodeWithContentDescription("取消静音").assertIsDisplayed()
+        rule.onNodeWithTag("volume_slider").assertIsDisplayed()
+        rule.onNodeWithContentDescription("亮度").assertDoesNotExist()
+        rule.onNodeWithContentDescription("锁定控制").assertDoesNotExist()
+        rule.onNodeWithContentDescription("画面比例").assertDoesNotExist()
+        rule.onNodeWithContentDescription("全屏").assertDoesNotExist()
+    }
+
+    @Test
     fun videoScaleMenuWorksInNormalAndFullscreen() {
         var selectedMode: VideoScaleMode? = null
         val fullscreenController =
@@ -98,6 +139,8 @@ class PlayerScreenTest {
                     fullscreenController =
                         fullscreenController,
                     preferences = ScreenPlayerPreferencesRepository(),
+                    volumeController = ScreenFakeVolumeController(),
+                    brightnessController = ScreenFakeBrightnessController(),
                     onPlay = {},
                     onPause = {},
                     onReplay = {},
@@ -165,6 +208,7 @@ class PlayerScreenTest {
                     onNext = {},
                     onSpeedChanged = {},
                     onRetry = {},
+                    volumeController = ScreenFakeVolumeController(),
                     onBack = {},
                 )
             }
@@ -224,6 +268,47 @@ private class ScreenFakePlaybackController : PlaybackController {
     override fun stop() = Unit
 
     override fun seekTo(positionMs: Long) = Unit
+
+    override fun close() = Unit
+}
+
+private class ScreenFakeVolumeController :
+    com.local.mediaviewer.ui.player.PlayerVolumeController {
+    private val mutable = MutableStateFlow(
+        com.local.mediaviewer.ui.player.VolumeState(
+            current = 5,
+            maximum = 10,
+            muted = false,
+        ),
+    )
+    override val state: StateFlow<com.local.mediaviewer.ui.player.VolumeState> = mutable
+
+    override fun refresh() = Unit
+
+    override fun setFraction(value: Float) {
+        val maximum = mutable.value.maximum
+        val current = (value.coerceIn(0f, 1f) * maximum).toInt()
+        mutable.value = mutable.value.copy(current = current, muted = current == 0)
+    }
+
+    override fun adjustByFraction(delta: Float) = Unit
+
+    override fun toggleMute() {
+        mutable.value = if (mutable.value.muted) {
+            mutable.value.copy(current = 5, muted = false)
+        } else {
+            mutable.value.copy(current = 0, muted = true)
+        }
+    }
+}
+
+private class ScreenFakeBrightnessController :
+    com.local.mediaviewer.ui.player.PlayerBrightnessController {
+    override val fraction = MutableStateFlow(0.5f)
+
+    override fun setFraction(value: Float) = Unit
+
+    override fun adjustByFraction(delta: Float) = Unit
 
     override fun close() = Unit
 }

@@ -1,5 +1,6 @@
 package com.local.mediaviewer.app
 
+import android.media.AudioManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
@@ -35,7 +36,9 @@ import com.local.mediaviewer.ui.home.HomeScreen
 import com.local.mediaviewer.ui.image.ImageReaderScreen
 import com.local.mediaviewer.ui.player.AudioPlayerScreen
 import com.local.mediaviewer.ui.player.FullscreenController
+import com.local.mediaviewer.ui.player.SystemVolumeController
 import com.local.mediaviewer.ui.player.VideoPlayerScreen
+import com.local.mediaviewer.ui.player.WindowBrightnessController
 import com.local.mediaviewer.ui.settings.SettingsScreen
 
 @Composable
@@ -182,6 +185,11 @@ fun MediaViewerApp(container: AppContainer) {
             val fullscreenController = remember(activity) {
                 FullscreenController(activity)
             }
+            val volumeController = remember(activity) {
+                SystemVolumeController(
+                    requireNotNull(activity.getSystemService(AudioManager::class.java)),
+                )
+            }
             DisposableEffect(fullscreenController) {
                 onDispose {
                     fullscreenController.close()
@@ -211,15 +219,24 @@ fun MediaViewerApp(container: AppContainer) {
                     onNext = player::next,
                     onSpeedChanged = player::setPlaybackSpeed,
                     onRetry = player::retry,
+                    volumeController = volumeController,
                     onResumeHintShown = player::onResumeHintShown,
                     onBack = leave,
                 )
             } else {
+                val brightnessController = remember(activity) {
+                    WindowBrightnessController(activity)
+                }
+                DisposableEffect(brightnessController) {
+                    onDispose(brightnessController::close)
+                }
                 VideoPlayerScreen(
                     state = state,
                     controller = player.controller,
                     fullscreenController = fullscreenController,
                     preferences = container.playerPreferencesRepository,
+                    volumeController = volumeController,
+                    brightnessController = brightnessController,
                     onPlay = player::play,
                     onPause = player::pause,
                     onReplay = player::replay,

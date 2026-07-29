@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Lock
@@ -52,6 +51,11 @@ fun VideoControlsOverlay(
     onNext: () -> Unit,
     onSpeedChanged: (Float) -> Unit,
     onVideoScaleModeChanged: (com.local.mediaviewer.playback.VideoScaleMode) -> Unit,
+    volumeState: VolumeState,
+    volumeExpanded: Boolean,
+    onVolumeExpandedChanged: (Boolean) -> Unit,
+    onToggleMute: () -> Unit,
+    onVolumeChanged: (Float) -> Unit,
     onMenuExpandedChanged: (Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -158,9 +162,13 @@ fun VideoControlsOverlay(
                         onSelected = onVideoScaleModeChanged,
                         onExpandedChanged = onMenuExpandedChanged,
                     )
-                    IconButton(onClick = {}) {
-                        Icon(Icons.AutoMirrored.Default.VolumeUp, "音量")
-                    }
+                    PlaybackVolumeControl(
+                        state = volumeState,
+                        expanded = volumeExpanded,
+                        onExpandedChanged = onVolumeExpandedChanged,
+                        onToggleMute = onToggleMute,
+                        onVolumeChanged = onVolumeChanged,
+                    )
                     IconButton(onClick = onLock) {
                         Icon(Icons.Default.Lock, "锁定控制")
                     }

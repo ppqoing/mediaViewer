@@ -1,8 +1,6 @@
 package com.local.mediaviewer.ui.player
 
-import android.media.AudioManager
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +29,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.mediaviewer.player.PlayerUiState
@@ -52,6 +48,8 @@ fun VideoPlayerScreen(
     controller: PlaybackController,
     fullscreenController: FullscreenStateController,
     preferences: PlayerPreferencesRepository,
+    volumeController: PlayerVolumeController,
+    brightnessController: PlayerBrightnessController,
     onPlay: () -> Unit,
     onPause: () -> Unit,
     onReplay: () -> Unit,
@@ -72,11 +70,22 @@ fun VideoPlayerScreen(
     val hasShownVideoGestures by preferences.hasShownVideoGestures
         .collectAsStateWithLifecycle(initialValue = false)
     val scope = rememberCoroutineScope()
+    val volumeState by volumeController.state.collectAsStateWithLifecycle()
     var interaction by remember { mutableStateOf(VideoInteractionState()) }
     var gestureHintDismissed by remember { mutableStateOf(false) }
+    var volumeExpanded by remember { mutableStateOf(false) }
 
     fun revealControls() {
         interaction = VideoInteractionReducer.revealControls(interaction)
+    }
+
+    fun setVolumeExpanded(expanded: Boolean) {
+        volumeExpanded = expanded
+        interaction = interaction.copy(menuExpanded = expanded)
+        if (expanded) {
+            volumeController.refresh()
+            revealControls()
+        }
     }
 
     LaunchedEffect(
@@ -155,8 +164,8 @@ fun VideoPlayerScreen(
                         enabled = !interaction.controlsLocked,
                         durationMs = state.durationMs,
                         positionMs = state.positionMs,
-                        volumeController = rememberPlayerVolumeController(),
-                        brightnessController = rememberPlayerBrightnessController(),
+                        volumeController = volumeController,
+                        brightnessController = brightnessController,
                         onSingleTap = {
                             interaction = VideoInteractionReducer.toggleControls(interaction)
                         },
@@ -211,6 +220,11 @@ fun VideoPlayerScreen(
                                 revealControls()
                                 onVideoScaleModeChanged(it)
                             },
+                            volumeState = volumeState,
+                            volumeExpanded = volumeExpanded,
+                            onVolumeExpandedChanged = ::setVolumeExpanded,
+                            onToggleMute = volumeController::toggleMute,
+                            onVolumeChanged = volumeController::setFraction,
                             onMenuExpandedChanged = { expanded ->
                                 revealControls()
                                 interaction = interaction.copy(menuExpanded = expanded)
@@ -236,6 +250,13 @@ fun VideoPlayerScreen(
                     onSpeedChanged = onSpeedChanged,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        PlaybackVolumeControl(
+                            state = volumeState,
+                            expanded = volumeExpanded,
+                            onExpandedChanged = ::setVolumeExpanded,
+                            onToggleMute = volumeController::toggleMute,
+                            onVolumeChanged = volumeController::setFraction,
+                        )
                         VideoScaleMenu(state.videoScaleMode, onVideoScaleModeChanged)
                         IconButton(onClick = fullscreenController::enter) {
                             Icon(Icons.Default.Fullscreen, "全屏")
@@ -282,25 +303,4 @@ private fun ErrorPlayerContent(
         Button(onClick = onRetry) { Text("重试") }
         TextButton(onClick = onBack) { Text("返回") }
     }
-}
-
-@Composable
-private fun rememberPlayerVolumeController(): PlayerVolumeController {
-    val context = LocalContext.current
-    val audioManager = remember(context) {
-        requireNotNull(context.getSystemService(AudioManager::class.java))
-    }
-    return remember(audioManager) { SystemVolumeController(audioManager) }
-}
-
-@Composable
-private fun rememberPlayerBrightnessController(): PlayerBrightnessController {
-    val activity = requireNotNull(LocalActivity.current) {
-        "视频手势必须托管在 Activity 中"
-    }
-    val controller = remember(activity) { WindowBrightnessController(activity) }
-    DisposableEffect(controller) {
-        onDispose(controller::close)
-    }
-    return controller
 }
