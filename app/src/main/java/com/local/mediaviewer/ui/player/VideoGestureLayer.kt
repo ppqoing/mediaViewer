@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -75,10 +76,16 @@ fun VideoGestureLayer(
                             val startVolume = volumeController.state.value
                             var axis = VideoGestureAxis.UNDECIDED
                             var changed: PointerInputChange? = down
+                            var terminalEventType = PointerEventType.Unknown
                             var completed = false
                             try {
                                 while (changed != null && changed.pressed) {
                                     val event = awaitPointerEvent()
+                                    terminalEventType = event.type
+                                    if (event.type == PointerEventType.Unknown || event.type == PointerEventType.Exit) {
+                                        changed = null
+                                        break
+                                    }
                                     changed = event.changes.firstOrNull { it.id == down.id }
                                     if (changed == null) break
                                     val deltaX = changed.position.x - down.position.x
@@ -126,7 +133,7 @@ fun VideoGestureLayer(
 
                                 val endedWithUp = changed?.changedToUpIgnoreConsumed() == true
                                 when {
-                                    axis == VideoGestureAxis.SEEK -> when (seekGestureCompletion(endedWithUp)) {
+                                    axis == VideoGestureAxis.SEEK -> when (seekGestureCompletion(terminalEventType, endedWithUp)) {
                                         SeekGestureCompletion.COMMIT -> currentOnCommitScrub()
                                         SeekGestureCompletion.RESTORE_PREVIEW -> {
                                             currentOnPreviewScrub(gesturePositionMs)
@@ -203,8 +210,15 @@ internal enum class SeekGestureCompletion {
     RESTORE_PREVIEW,
 }
 
-internal fun seekGestureCompletion(endedWithUp: Boolean): SeekGestureCompletion =
-    if (endedWithUp) SeekGestureCompletion.COMMIT else SeekGestureCompletion.RESTORE_PREVIEW
+internal fun seekGestureCompletion(
+    eventType: PointerEventType,
+    endedWithUp: Boolean,
+): SeekGestureCompletion =
+    if (eventType == PointerEventType.Release && endedWithUp) {
+        SeekGestureCompletion.COMMIT
+    } else {
+        SeekGestureCompletion.RESTORE_PREVIEW
+    }
 
 private fun previewTarget(
     positionMs: Long,
