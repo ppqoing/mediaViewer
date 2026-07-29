@@ -110,8 +110,9 @@ class PlayerScreenTest {
             }
         }
 
-        rule.onNodeWithContentDescription("音量，当前 50%").assertIsDisplayed()
-        rule.onNodeWithContentDescription("音量，当前 50%").performClick()
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音").assertIsDisplayed()
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音").performClick()
+        rule.onNodeWithContentDescription("音量，当前 0%，已静音").assertIsDisplayed()
         rule.onNodeWithContentDescription("取消静音").assertIsDisplayed()
         rule.onNodeWithTag("volume_slider").assertIsDisplayed()
         rule.onNodeWithContentDescription("亮度").assertDoesNotExist()

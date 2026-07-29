@@ -22,11 +22,7 @@ fun PlaybackVolumeControl(
     modifier: Modifier = Modifier,
 ) {
     val fraction = if (state.maximum == 0) 0f else state.current.toFloat() / state.maximum
-    val description = if (state.muted) {
-        "音量，已静音"
-    } else {
-        "音量，当前 ${state.percent}%"
-    }
+    val description = state.accessibilityDescription()
 
     Box(modifier = modifier) {
         IconButton(
@@ -59,3 +55,6 @@ fun PlaybackVolumeControl(
         }
     }
 }
+
+internal fun VolumeState.accessibilityDescription(): String =
+    "音量，当前 $percent%，${if (muted) "已静音" else "未静音"}"

@@ -198,6 +198,9 @@ fun MediaViewerApp(container: AppContainer) {
             LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
                 player.onBackgrounded()
             }
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                volumeController.refresh()
+            }
             val leave = {
                 player.leave {
                     navController.popBackStack()
