@@ -6,10 +6,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.playback.PlaybackState
@@ -60,7 +63,7 @@ class PlaybackQueueUiTest {
         rule.onNodeWithContentDescription("正在播放：第一首").assertIsDisplayed()
         rule.onNodeWithText("第二首").performClick()
         assertEquals("b", selected)
-        rule.onNodeWithContentDescription("下移 第一首")
+        rule.onNodeWithContentDescription("拖动排序 第一首")
             .fetchSemanticsNode()
             .config[SemanticsActions.CustomActions]
             .first { it.label == "下移" }
@@ -70,6 +73,33 @@ class PlaybackQueueUiTest {
         assertEquals("c", removed)
         rule.onNodeWithContentDescription("清空其他").performClick()
         assertTrue(cleared)
+    }
+
+    @Test
+    fun draggingQueueHandleDownMovesItemOnce() {
+        var moved: Pair<String, Int>? = null
+        val queue = PlaybackQueue(
+            items = listOf(item("a", "第一首"), item("b", "第二首")),
+            currentMediaKey = "a",
+        )
+
+        rule.setContent {
+            MaterialTheme {
+                PlaybackQueueSheet(
+                    queue = queue,
+                    onSelect = {},
+                    onMove = { key, index -> moved = key to index },
+                    onRemove = {},
+                    onClearExceptCurrent = {},
+                    onStopAndClear = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("拖动排序 第一首")
+            .performTouchInput { swipeDown() }
+        assertEquals("a" to 1, moved)
     }
 
     @Test
@@ -84,8 +114,14 @@ class PlaybackQueueUiTest {
             }
         }
 
-        rule.onNodeWithContentDescription("播放模式：顺序播放").assertIsDisplayed().performClick()
-        rule.onNodeWithContentDescription("播放模式：列表循环").assertIsDisplayed().performClick()
+        rule.onNodeWithContentDescription("播放模式：顺序播放")
+            .assertIsDisplayed()
+            .assertIsSelected()
+            .performClick()
+        rule.onNodeWithContentDescription("播放模式：列表循环")
+            .assertIsDisplayed()
+            .assertIsSelected()
+            .performClick()
         rule.onNodeWithContentDescription("播放模式：单曲循环").assertIsDisplayed().performClick()
         rule.onNodeWithContentDescription("播放模式：随机播放").assertIsDisplayed()
     }

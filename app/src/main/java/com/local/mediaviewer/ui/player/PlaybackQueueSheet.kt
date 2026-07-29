@@ -7,12 +7,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -30,6 +33,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -149,8 +154,17 @@ private fun QueueItemRow(
         },
         trailingContent = {
             Row {
-                if (canMoveUp) MoveButton(item.name, "上移", onMoveUp)
-                if (canMoveDown) MoveButton(item.name, "下移", onMoveDown)
+                MoveHandle(
+                    name = item.name,
+                    onMoveUp = onMoveUp.takeIf { canMoveUp },
+                    onMoveDown = onMoveDown.takeIf { canMoveDown },
+                )
+                if (canMoveUp) IconButton(onClick = onMoveUp) {
+                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "上移 ${item.name}")
+                }
+                if (canMoveDown) IconButton(onClick = onMoveDown) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "下移 ${item.name}")
+                }
                 IconButton(onClick = onRemove) {
                     Icon(Icons.Default.Delete, contentDescription = "删除 ${item.name}")
                 }
@@ -160,16 +174,54 @@ private fun QueueItemRow(
 }
 
 @Composable
-private fun MoveButton(name: String, label: String, onMove: () -> Unit) {
+private fun MoveHandle(
+    name: String,
+    onMoveUp: (() -> Unit)?,
+    onMoveDown: (() -> Unit)?,
+) {
+    val dragThresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
     IconButton(
-        onClick = onMove,
-        modifier = Modifier.semantics {
-            contentDescription = "$label $name"
-            customActions = listOf(CustomAccessibilityAction(label) {
-                onMove()
-                true
-            })
-        },
+        onClick = {},
+        modifier = Modifier
+            .semantics {
+                contentDescription = "拖动排序 $name"
+                customActions = buildList {
+                    onMoveUp?.let { move ->
+                        add(CustomAccessibilityAction("上移") { move(); true })
+                    }
+                    onMoveDown?.let { move ->
+                        add(CustomAccessibilityAction("下移") { move(); true })
+                    }
+                }
+            }
+            .pointerInput(dragThresholdPx, onMoveUp, onMoveDown) {
+                var accumulatedDrag = 0f
+                var moveTriggered = false
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        accumulatedDrag = 0f
+                        moveTriggered = false
+                    },
+                    onVerticalDrag = { change, dragAmount ->
+                        if (moveTriggered) {
+                            change.consume()
+                        } else {
+                            accumulatedDrag += dragAmount
+                            val move = when {
+                                accumulatedDrag <= -dragThresholdPx -> onMoveUp
+                                accumulatedDrag >= dragThresholdPx -> onMoveDown
+                                else -> null
+                            }
+                            if (move != null) {
+                                move()
+                                accumulatedDrag = 0f
+                                moveTriggered = true
+                                change.consume()
+                            }
+                        }
+                    },
+                )
+            },
     ) {
         Icon(Icons.Default.DragHandle, contentDescription = null)
     }
