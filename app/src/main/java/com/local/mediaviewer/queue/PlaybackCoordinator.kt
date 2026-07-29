@@ -440,6 +440,7 @@ class PlaybackCoordinator(
     private suspend fun advance(reason: QueueAdvanceReason) {
         val next = QueueNavigator.next(queue, reason)
         if (next == null) {
+            updatePlayWhenReady(false)
             engine.stop()
             return
         }

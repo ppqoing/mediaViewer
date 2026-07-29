@@ -389,6 +389,12 @@ fun MediaViewerApp(
             )
         }
     }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) {
+        container.playbackController.onAppStarted()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        container.playbackController.onAppStopped()
+    }
         if (showsMiniPlayer) {
             NowPlayingBar(
                 state = playbackSession,

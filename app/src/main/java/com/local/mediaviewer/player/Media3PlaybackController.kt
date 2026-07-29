@@ -104,7 +104,13 @@ class Media3PlaybackController(
         override fun onDisconnected(controller: MediaController) {
             scope.launch {
                 controllerHandles[controller]?.let(
-                    connectionMachine::onDisconnected,
+                    { handle ->
+                        connectionMachine.onDisconnected(
+                            value = handle,
+                            shouldReconnect =
+                                mutableSessionState.value.playWhenReady,
+                        )
+                    },
                 )
             }
         }
@@ -269,6 +275,16 @@ class Media3PlaybackController(
             PlaybackMode.SHUFFLE,
             -> Player.REPEAT_MODE_OFF
         }
+    }
+
+    override fun onAppStarted() {
+        connectionMachine.demandConnection()
+    }
+
+    override fun onAppStopped() {
+        connectionMachine.onAppStopped(
+            playWhenReady = mutableSessionState.value.playWhenReady,
+        )
     }
 
     override fun attachVideoOutput(host: ViewGroup) {

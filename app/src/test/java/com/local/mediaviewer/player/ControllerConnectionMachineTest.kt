@@ -46,12 +46,65 @@ class ControllerConnectionMachineTest {
         machine.start()
         machine.onConnected(requested.single(), "first")
 
-        machine.onDisconnected("first")
+        machine.onDisconnected("first", shouldReconnect = true)
 
         assertEquals(listOf("first"), released)
         assertEquals(2, requested.size)
         assertEquals(null, machine.currentOrNull())
         assertEquals(ControllerConnectionState.Connecting, states.last())
+    }
+
+    @Test
+    fun `暂停态断开进入休眠且下一条用户命令才重新连接`() {
+        val requested = mutableListOf<Long>()
+        val released = mutableListOf<String>()
+        val executed = mutableListOf<String>()
+        val states = mutableListOf<ControllerConnectionState>()
+        val machine = ControllerConnectionMachine<String>(
+            maxPendingCommands = 4,
+            onStateChanged = states::add,
+            requestConnection = requested::add,
+            release = released::add,
+        )
+        machine.start()
+        machine.onConnected(requested.single(), "first")
+
+        machine.onDisconnected("first", shouldReconnect = false)
+
+        assertEquals(1, requested.size)
+        assertEquals(listOf("first"), released)
+        assertEquals(ControllerConnectionState.Dormant, states.last())
+
+        machine.submit { executed += "$it:play" }
+        assertEquals(2, requested.size)
+        machine.onConnected(requested.last(), "second")
+
+        assertEquals(listOf("second:play"), executed)
+    }
+
+    @Test
+    fun `暂停态应用停止释放连接而播放态应用停止保持连接`() {
+        val requested = mutableListOf<Long>()
+        val released = mutableListOf<String>()
+        val machine = ControllerConnectionMachine<String>(
+            maxPendingCommands = 4,
+            onStateChanged = {},
+            requestConnection = requested::add,
+            release = released::add,
+        )
+        machine.start()
+        machine.onConnected(requested.single(), "playing")
+
+        machine.onAppStopped(playWhenReady = true)
+
+        assertEquals("playing", machine.currentOrNull())
+        assertTrue(released.isEmpty())
+
+        machine.onAppStopped(playWhenReady = false)
+
+        assertEquals(null, machine.currentOrNull())
+        assertEquals(listOf("playing"), released)
+        assertEquals(1, requested.size)
     }
 
     @Test

@@ -58,6 +58,37 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
+    fun `顺序队列到末尾清除播放意图并停止引擎`() = runTest {
+        val engine = FakeEngine()
+        val coordinator = coordinator(engine, scope = this)
+        coordinator.replaceQueue(listOf(item("a")), "a")
+        advanceUntilIdle()
+
+        engine.emit(PlaybackState(status = PlaybackStatus.ENDED))
+        advanceUntilIdle()
+
+        assertFalse(coordinator.sessionState.value.playWhenReady)
+        assertEquals(1, engine.stopCalls)
+        coordinator.close()
+    }
+
+    @Test
+    fun `随机队列到末尾清除播放意图并停止引擎`() = runTest {
+        val engine = FakeEngine()
+        val coordinator = coordinator(engine, scope = this)
+        coordinator.setPlaybackMode(PlaybackMode.SHUFFLE)
+        coordinator.replaceQueue(listOf(item("a")), "a")
+        advanceUntilIdle()
+
+        engine.emit(PlaybackState(status = PlaybackStatus.ENDED))
+        advanceUntilIdle()
+
+        assertFalse(coordinator.sessionState.value.playWhenReady)
+        assertEquals(1, engine.stopCalls)
+        coordinator.close()
+    }
+
+    @Test
     fun `启动路径冷恢复不触发引擎直到用户播放并只恢复一次位置`() = runTest {
         val engine = FakeEngine()
         val repository = FakeQueueRepository(
@@ -142,6 +173,7 @@ private class FakeEngine : PlaybackEngine {
     val prepareCalls = mutableListOf<String>()
     val seekCalls = mutableListOf<Long>()
     var playCalls = 0
+    var stopCalls = 0
 
     fun emit(state: PlaybackState) {
         mutableState.value = state
@@ -159,7 +191,9 @@ private class FakeEngine : PlaybackEngine {
         playCalls += 1
     }
     override fun pause() = Unit
-    override fun stop() = Unit
+    override fun stop() {
+        stopCalls += 1
+    }
     override fun seekTo(positionMs: Long) {
         seekCalls += positionMs
     }

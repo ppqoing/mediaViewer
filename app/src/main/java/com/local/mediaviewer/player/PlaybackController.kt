@@ -14,6 +14,8 @@ sealed interface ControllerConnectionState {
 
     data object Connected : ControllerConnectionState
 
+    data object Dormant : ControllerConnectionState
+
     data class Failed(
         val message: String,
     ) : ControllerConnectionState
@@ -89,4 +91,8 @@ interface QueuePlaybackController : PlaybackController {
     fun clearAll()
 
     fun setPlaybackMode(mode: PlaybackMode)
+
+    fun onAppStarted() = Unit
+
+    fun onAppStopped() = Unit
 }

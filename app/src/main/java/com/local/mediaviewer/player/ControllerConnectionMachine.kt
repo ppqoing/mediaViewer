@@ -11,6 +11,7 @@ internal class ControllerConnectionMachine<T : Any>(
     private val pendingCommands = ArrayDeque<(T) -> Unit>()
     private var generation = 0L
     private var current: T? = null
+    private var connectionInProgress = false
     private var started = false
     private var closed = false
 
@@ -21,7 +22,7 @@ internal class ControllerConnectionMachine<T : Any>(
     fun start() {
         if (started || closed) return
         started = true
-        beginConnection()
+        demandConnection()
     }
 
     fun submit(command: (T) -> Unit) {
@@ -34,6 +35,7 @@ internal class ControllerConnectionMachine<T : Any>(
             pendingCommands.removeFirst()
         }
         pendingCommands.addLast(command)
+        demandConnection()
     }
 
     fun onConnected(
@@ -45,6 +47,7 @@ internal class ControllerConnectionMachine<T : Any>(
             return
         }
         current?.takeIf { it !== value }?.let(release)
+        connectionInProgress = false
         current = value
         onStateChanged(ControllerConnectionState.Connected)
         while (pendingCommands.isNotEmpty() && current === value) {
@@ -57,16 +60,29 @@ internal class ControllerConnectionMachine<T : Any>(
         message: String,
     ) {
         if (closed || generation != this.generation) return
+        connectionInProgress = false
         current?.let(release)
         current = null
         onStateChanged(ControllerConnectionState.Failed(message))
         beginConnection()
     }
 
-    fun onDisconnected(value: T) {
+    fun onDisconnected(
+        value: T,
+        shouldReconnect: Boolean,
+    ) {
         if (closed || current !== value) return
         current = null
         release(value)
+        if (shouldReconnect) beginConnection() else enterDormant()
+    }
+
+    fun onAppStopped(playWhenReady: Boolean) {
+        if (!playWhenReady) enterDormant()
+    }
+
+    fun demandConnection() {
+        if (closed || current != null || connectionInProgress) return
         beginConnection()
     }
 
@@ -83,14 +99,25 @@ internal class ControllerConnectionMachine<T : Any>(
         if (closed) return
         closed = true
         pendingCommands.clear()
+        connectionInProgress = false
         current?.let(release)
         current = null
     }
 
     private fun beginConnection() {
-        if (closed) return
+        if (closed || current != null || connectionInProgress) return
+        connectionInProgress = true
         generation += 1
         onStateChanged(ControllerConnectionState.Connecting)
         requestConnection(generation)
+    }
+
+    private fun enterDormant() {
+        if (closed) return
+        generation += 1
+        connectionInProgress = false
+        current?.let(release)
+        current = null
+        onStateChanged(ControllerConnectionState.Dormant)
     }
 }

@@ -35,6 +35,8 @@ class PlaybackReleaseSequenceTest {
                 saveCurrentSnapshot = {
                     coordinator.saveCurrentSnapshot()
                     events += "save"
+                    coordinator.setPlayWhenReadyFromSession(false)
+                    events += "clear-intent"
                 },
                 captureCurrentSnapshot = { "snapshot" },
                 persistAfterDestroy = {},
@@ -61,7 +63,8 @@ class PlaybackReleaseSequenceTest {
             assertTrue(firstStop.isCompleted)
             assertTrue(secondStop.isCompleted)
             assertEquals(1, releaseCalls)
-            assertEquals(listOf("save", "release"), events)
+            assertEquals(listOf("save", "clear-intent", "release"), events)
+            assertFalse(coordinator.sessionState.value.playWhenReady)
             coordinator.close()
         }
 

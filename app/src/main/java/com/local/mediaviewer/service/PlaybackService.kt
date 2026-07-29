@@ -206,7 +206,10 @@ class PlaybackService : MediaSessionService() {
             save = coordinator::saveCurrentSnapshot,
         )
         releaseSequence = PlaybackReleaseSequence(
-            saveCurrentSnapshot = coordinator::saveCurrentSnapshot,
+            saveCurrentSnapshot = {
+                coordinator.saveCurrentSnapshot()
+                coordinator.setPlayWhenReadyFromSession(false)
+            },
             captureCurrentSnapshot = coordinator::captureCurrentSnapshot,
             persistAfterDestroy = { snapshot ->
                 (application as MediaViewerApplication).persistPlaybackSnapshot {
