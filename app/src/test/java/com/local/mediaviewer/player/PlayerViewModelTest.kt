@@ -157,6 +157,69 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `端点刷新后从故障时位置继续播放`() =
+        runTest(dispatcher) {
+            val engine = FakeEngine()
+            val viewModel = PlayerViewModel(
+                request(),
+                engine,
+                FakeStore(resume = 30_000),
+                FakePlayerSession(
+                    refreshed = SessionEndpoint(
+                        "http://media.example:8080",
+                        "http://192.0.2.2:8080",
+                        "192.0.2.2",
+                    ),
+                ),
+            )
+            runCurrent()
+            engine.emit(
+                PlaybackState(
+                    status = PlaybackStatus.PLAYING,
+                    positionMs = 1_000,
+                    durationMs = 100_000,
+                    isSeekable = true,
+                ),
+            )
+            runCurrent()
+            assertEquals(listOf(30_000L), engine.seeks)
+
+            engine.emit(
+                PlaybackState(
+                    status = PlaybackStatus.PLAYING,
+                    positionMs = 40_000,
+                    durationMs = 100_000,
+                    isSeekable = true,
+                ),
+            )
+            engine.emit(
+                PlaybackState(
+                    status = PlaybackStatus.ERROR,
+                    positionMs = 40_000,
+                    durationMs = 100_000,
+                    errorMessage = "端点失效",
+                ),
+            )
+            runCurrent()
+            engine.emit(
+                PlaybackState(
+                    status = PlaybackStatus.PLAYING,
+                    positionMs = 0,
+                    durationMs = 100_000,
+                    isSeekable = true,
+                ),
+            )
+            runCurrent()
+
+            assertEquals(
+                listOf(30_000L, 40_000L),
+                engine.seeks,
+            )
+            viewModel.leave {}
+            runCurrent()
+        }
+
+    @Test
     fun `后台和离开保存快照且重复离开只完成一次`() =
         runTest(dispatcher) {
             val engine = FakeEngine()

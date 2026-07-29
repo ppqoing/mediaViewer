@@ -136,6 +136,8 @@ class PlayerViewModel(
     private suspend fun recoverEndpointOnce() {
         if (endpointRetryUsed) return
         endpointRetryUsed = true
+        val recoveryPositionMs =
+            engine.state.value.positionMs
         when (val refreshed = session.refreshAfterRequestFailure()) {
             is AppResult.Success -> {
                 currentRequest = currentRequest.copy(
@@ -143,6 +145,8 @@ class PlayerViewModel(
                         currentRequest.logicalUrl,
                     ),
                 )
+                pendingResumeMs = recoveryPositionMs
+                resumeApplied = false
                 lastStatus = PlaybackStatus.IDLE
                 mutableUiState.value = mutableUiState.value.copy(
                     errorMessage = null,
