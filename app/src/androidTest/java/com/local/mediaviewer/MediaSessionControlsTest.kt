@@ -90,12 +90,20 @@ class MediaSessionControlsTest {
                 play()
             }
             harness.waitUntil("fixture playback starts") {
-                first.read(Player::isPlaying)
+                first.read(Player::isPlaying) &&
+                    first.read(Player::getDuration) >= 18_000L &&
+                    first.read {
+                        it.isCommandAvailable(
+                            Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
+                        )
+                    }
             }
-            first.run { seekTo(1_000L) }
+            first.run { seekTo(12_000L) }
             harness.waitUntil("position becomes persistable") {
-                first.read(Player::getCurrentPosition) >= 750L
+                first.read(Player::getCurrentPosition) >= 11_500L
             }
+            val savedPosition =
+                first.read(Player::getCurrentPosition)
             val currentMediaKey =
                 harness.mediaQueue().first().mediaId
             val stopResult = first.read {
@@ -112,7 +120,7 @@ class MediaSessionControlsTest {
             }
             assertEquals(1, harness.container.playbackEngineCloseCount)
             assertTrue(
-                harness.container.persistedPosition(currentMediaKey) >= 750L,
+                harness.container.persistedPosition(currentMediaKey) >= 10_000L,
             )
 
             harness.connectController().use { restored ->
@@ -128,6 +136,27 @@ class MediaSessionControlsTest {
                     },
                 )
                 assertEquals(1, harness.container.playbackEngineCloseCount)
+
+                restored.run { play() }
+                harness.waitUntil(
+                    diagnostic = "first user play applies policy-approved resume",
+                    timeoutMs = 5_000L,
+                ) {
+                    restored.read(Player::getCurrentPosition) >=
+                        savedPosition - 1_500L
+                }
+                val resumedPosition =
+                    restored.read(Player::getCurrentPosition)
+                assertTrue(
+                    "expected resume near $savedPosition, got $resumedPosition",
+                    resumedPosition in
+                        (savedPosition - 1_500L)..(savedPosition + 6_000L),
+                )
+                restored.run { pause() }
+                harness.waitUntil("user pause clears playback intent") {
+                    !restored.read(Player::getPlayWhenReady) &&
+                        !restored.read(Player::isPlaying)
+                }
             }
         }
     }

@@ -3,6 +3,7 @@ package com.local.mediaviewer.testing
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Looper
+import androidx.room.Room
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
@@ -21,13 +22,15 @@ import com.local.mediaviewer.image.ReaderPreferencesRepository
 import com.local.mediaviewer.model.SessionEndpoint
 import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
+import com.local.mediaviewer.playback.MediaViewerDatabase
 import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackPositionStore
+import com.local.mediaviewer.playback.RoomPlaybackPositionStore
 import com.local.mediaviewer.player.Media3PlaybackController
 import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.queue.PlaybackCoordinator
-import com.local.mediaviewer.queue.PlaybackQueue
 import com.local.mediaviewer.queue.PlaybackQueueRepository
+import com.local.mediaviewer.queue.RoomPlaybackQueueRepository
 import com.local.mediaviewer.service.ACTION_STOP_AND_RELEASE
 import com.local.mediaviewer.service.PlaybackService
 import com.local.mediaviewer.session.ServerSessionManager
@@ -45,6 +48,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.runBlocking
 
 @UnstableApi
 class BackgroundPlaybackTestHarness : Closeable {
@@ -59,7 +63,10 @@ class BackgroundPlaybackTestHarness : Closeable {
         mkdirs()
     }
     private val server = MediaFixtureServer(
-        MediaFixtureFactory(fixtureDirectory).create(),
+        MediaFixtureFactory(
+            directory = fixtureDirectory,
+            videoDurationSeconds = 20,
+        ).create(),
     ).also(MediaFixtureServer::start)
     val container = BackgroundPlaybackAppContainer(
         context = application,
@@ -194,8 +201,14 @@ class BackgroundPlaybackAppContainer(
     private val playbackScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main.immediate,
     )
-    private val queueRepository = InMemoryBackgroundQueueRepository()
-    private val positionStore = InMemoryBackgroundPositionStore()
+    private val database = Room.inMemoryDatabaseBuilder(
+        appContext,
+        MediaViewerDatabase::class.java,
+    ).build()
+    private val queueRepository: PlaybackQueueRepository =
+        RoomPlaybackQueueRepository(database.playbackQueueDao())
+    private val positionStore: PlaybackPositionStore =
+        RoomPlaybackPositionStore(database.playbackPositionDao())
     private val endpoint = SessionEndpoint(
         logicalBaseUrl = "http://media.test:8080",
         requestBaseUrl = requestBaseUrl,
@@ -250,11 +263,14 @@ class BackgroundPlaybackAppContainer(
     }
 
     fun persistedPosition(mediaKey: String): Long =
-        positionStore.peek(mediaKey) ?: 0L
+        runBlocking {
+            positionStore.resumePosition(mediaKey) ?: 0L
+        }
 
     override fun close() {
         onMain { controller?.close() }
         playbackScope.cancel()
+        database.close()
         delegate.close()
     }
 }
@@ -282,48 +298,6 @@ private class FixtureServerSessionManager(
         AppResult.Success(
             (mutable.value as ServerSessionState.Connected).endpoint,
         )
-}
-
-private class InMemoryBackgroundQueueRepository :
-    PlaybackQueueRepository {
-    private val mutable = MutableStateFlow(PlaybackQueue())
-    override val queue: StateFlow<PlaybackQueue> = mutable
-
-    override suspend fun restore(): PlaybackQueue = mutable.value
-
-    override suspend fun save(queue: PlaybackQueue) {
-        mutable.value = queue
-    }
-}
-
-private class InMemoryBackgroundPositionStore :
-    PlaybackPositionStore {
-    private val positions = mutableMapOf<String, Long>()
-
-    override suspend fun resumePosition(mediaKey: String): Long? =
-        synchronized(positions) { positions[mediaKey] }
-
-    override suspend fun record(
-        mediaKey: String,
-        positionMs: Long,
-        durationMs: Long,
-        updatedAtEpochMs: Long,
-        ended: Boolean,
-    ) {
-        synchronized(positions) {
-            if (ended) positions.remove(mediaKey)
-            else positions[mediaKey] = positionMs
-        }
-    }
-
-    override suspend fun clear(mediaKey: String) {
-        synchronized(positions) {
-            positions.remove(mediaKey)
-        }
-    }
-
-    fun peek(mediaKey: String): Long? =
-        synchronized(positions) { positions[mediaKey] }
 }
 
 private class CountingPlaybackEngine(

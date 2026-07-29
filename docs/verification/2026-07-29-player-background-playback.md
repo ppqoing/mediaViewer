@@ -42,13 +42,16 @@ BUILD SUCCESSFUL
 以下测试源码已编译为 GREEN，但本记录不把“编译通过”写成“设备运行通过”：
 
 - `BackgroundPlaybackTest`
-  - 视频 Surface 解绑并退到后台后 position 继续增长且仍 playing
-  - 返回 Activity 后新 Surface attached，position 连续且不归零
+  - 渲染真实 `VlcSurface`，由 Activity `ON_STOP/ON_START` 自动触发
+    `Detached -> Attached`，测试体不直接调用视频输出绑定 API
+  - Activity 停止期间 position 继续增长且仍 playing，恢复后 position 连续
 - `MediaSessionControlsTest`
   - 独立 MediaController 的 pause/play/previous/next/seek 与应用控制器同步
   - active MediaStyle notification 包含当前标题和 session token
-  - STOP_AND_RELEASE 仅关闭一个 engine，持久队列和位置保留
-  - 冷连接恢复当前队列项，但 `playWhenReady=false` 且不自动播放
+  - 20 秒视频在约 12 秒位置 STOP_AND_RELEASE，仅关闭一个 engine
+  - 真实 Room repository 与 `PlaybackPositionPolicy` 保留队列和有效恢复位置
+  - 冷连接先保持 `playWhenReady=false` 且不自动播放；首次用户 play 后从保存
+    位置附近继续，再由用户 pause
 - `LibVlcVideoOutputTest`
   - VLCVideoLayout 可从旧 host 解绑并绑定到新 host
   - 回绑不改变播放器状态，旧/新 host 不残留 View

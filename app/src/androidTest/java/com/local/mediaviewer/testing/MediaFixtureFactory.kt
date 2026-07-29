@@ -23,6 +23,7 @@ data class MediaFixtures(
 
 class MediaFixtureFactory(
     private val directory: File,
+    private val videoDurationSeconds: Int = 4,
 ) {
     fun create(): MediaFixtures {
         check(directory.mkdirs() || directory.isDirectory)
@@ -103,7 +104,7 @@ class MediaFixtureFactory(
         val width = 160
         val height = 120
         val framesPerSecond = 10
-        val frameCount = 40
+        val frameCount = framesPerSecond * videoDurationSeconds
         val format = MediaFormat.createVideoFormat(
             MediaFormat.MIMETYPE_VIDEO_AVC,
             width,

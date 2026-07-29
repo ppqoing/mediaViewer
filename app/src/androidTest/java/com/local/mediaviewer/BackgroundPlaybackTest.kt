@@ -1,7 +1,6 @@
 package com.local.mediaviewer
 
-import android.view.ViewGroup
-import android.widget.FrameLayout
+import androidx.activity.compose.setContent
 import androidx.lifecycle.Lifecycle
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -10,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.player.Media3PlaybackController
 import com.local.mediaviewer.player.VideoOutputConnectionState
 import com.local.mediaviewer.testing.BackgroundPlaybackTestHarness
+import com.local.mediaviewer.ui.player.VlcSurface
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,13 +33,13 @@ class BackgroundPlaybackTest {
 
                     val uiController =
                         harness.container.playbackController as Media3PlaybackController
-                    scenario.onActivity { activity ->
-                        val host = FrameLayout(activity)
-                        activity.setContentView(
-                            host,
-                            ViewGroup.LayoutParams(800, 450),
-                        )
-                        uiController.attachVideoOutput(host)
+                    scenario.onActivity {
+                        it.setContent {
+                            VlcSurface(
+                                controller = uiController,
+                                keepScreenOn = true,
+                            )
+                        }
                     }
                     harness.waitUntil("first video output attaches") {
                         uiController.videoOutputState.value ==
@@ -50,10 +50,13 @@ class BackgroundPlaybackTest {
                     harness.waitUntil("seek returns to fixture start") {
                         systemController.read(Player::getCurrentPosition) < 750L
                     }
-                    uiController.detachVideoOutput()
                     val beforeBackground =
                         systemController.read(Player::getCurrentPosition)
-                    scenario.onActivity { it.moveTaskToBack(true) }
+                    scenario.moveToState(Lifecycle.State.CREATED)
+                    harness.waitUntil("video output detaches on Activity stop") {
+                        uiController.videoOutputState.value ==
+                            VideoOutputConnectionState.Detached
+                    }
 
                     Thread.sleep(2_000L)
 
@@ -66,14 +69,6 @@ class BackgroundPlaybackTest {
                     assertTrue(systemController.read(Player::isPlaying))
 
                     scenario.moveToState(Lifecycle.State.RESUMED)
-                    scenario.onActivity { activity ->
-                        val replacement = FrameLayout(activity)
-                        activity.setContentView(
-                            replacement,
-                            ViewGroup.LayoutParams(800, 450),
-                        )
-                        uiController.attachVideoOutput(replacement)
-                    }
                     harness.waitUntil("replacement video output attaches") {
                         uiController.videoOutputState.value ==
                             VideoOutputConnectionState.Attached
