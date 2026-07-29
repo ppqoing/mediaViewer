@@ -64,6 +64,96 @@ object QueueNavigator {
         return queue.withUpdatedItems(updated)
     }
 
+    fun addAll(
+        queue: PlaybackQueue,
+        index: Int,
+        items: List<QueueMediaItem>,
+    ): PlaybackQueue {
+        val inserted = distinctPlayable(items)
+        if (inserted.isEmpty()) return queue
+        val insertedKeys = inserted.mapTo(mutableSetOf()) { it.mediaKey }
+        val retained = queue.items.filterNot { it.mediaKey in insertedKeys }.toMutableList()
+        retained.addAll(index.coerceIn(0, retained.size), inserted)
+        return queue.withUpdatedItems(retained)
+    }
+
+    fun moveRange(
+        queue: PlaybackQueue,
+        fromIndex: Int,
+        toIndex: Int,
+        newIndex: Int,
+    ): PlaybackQueue {
+        val from = fromIndex.coerceIn(0, queue.items.size)
+        val to = toIndex.coerceIn(from, queue.items.size)
+        if (from == to) return queue
+        val moved = queue.items.subList(from, to)
+        val retained = queue.items.toMutableList().apply {
+            subList(from, to).clear()
+        }
+        retained.addAll(newIndex.coerceIn(0, retained.size), moved)
+        return queue.withUpdatedItems(retained)
+    }
+
+    fun removeRange(
+        queue: PlaybackQueue,
+        fromIndex: Int,
+        toIndex: Int,
+    ): PlaybackQueue {
+        val from = fromIndex.coerceIn(0, queue.items.size)
+        val to = toIndex.coerceIn(from, queue.items.size)
+        if (from == to) return queue
+        val removedKeys = queue.items.subList(from, to).mapTo(mutableSetOf()) { it.mediaKey }
+        val removedCurrent = queue.currentMediaKey in removedKeys
+        val retained = queue.items.filterNot { it.mediaKey in removedKeys }
+        val nextCurrent = if (removedCurrent) {
+            retained.getOrNull(from)?.mediaKey ?: retained.lastOrNull()?.mediaKey
+        } else {
+            queue.currentMediaKey
+        }
+        return queue.withUpdatedItems(retained, nextCurrent)
+    }
+
+    fun replaceRange(
+        queue: PlaybackQueue,
+        fromIndex: Int,
+        toIndex: Int,
+        items: List<QueueMediaItem>,
+    ): PlaybackQueue {
+        val from = fromIndex.coerceIn(0, queue.items.size)
+        val to = toIndex.coerceIn(from, queue.items.size)
+        val replacement = distinctPlayable(items)
+        val replacedKeys = queue.items.subList(from, to).mapTo(mutableSetOf()) { it.mediaKey }
+        val replacedCurrent = queue.currentMediaKey in replacedKeys
+        val updated = queue.items.toMutableList().apply {
+            subList(from, to).clear()
+            addAll(from, replacement)
+        }
+        val nextCurrent = if (replacedCurrent) {
+            replacement.firstOrNull()?.mediaKey
+                ?: updated.getOrNull(from)?.mediaKey
+                ?: updated.lastOrNull()?.mediaKey
+        } else {
+            queue.currentMediaKey
+        }
+        val next = queue.withUpdatedItems(updated, nextCurrent)
+        if (queue.mode != PlaybackMode.SHUFFLE || !replacedCurrent || replacement.isEmpty()) {
+            return next
+        }
+
+        val replacementKeys = replacement.map { it.mediaKey }.filter { key ->
+            next.items.any { it.mediaKey == key }
+        }
+        val retainedOrder = queue.shuffleOrder.filter { key ->
+            next.items.any { it.mediaKey == key } && key !in replacementKeys
+        }.toMutableList()
+        val insertionIndex = queue.shuffleCursor.coerceIn(0, retainedOrder.size)
+        retainedOrder.addAll(insertionIndex, replacementKeys)
+        return next.copy(
+            shuffleOrder = retainedOrder,
+            shuffleCursor = retainedOrder.indexOf(nextCurrent),
+        )
+    }
+
     fun remove(
         queue: PlaybackQueue,
         mediaKey: String,

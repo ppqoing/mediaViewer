@@ -50,7 +50,7 @@ class VlcSessionPlayer(
         return State.Builder()
             .setAvailableCommands(commandsFor(playback))
             .setPlayWhenReady(
-                playback.status == PlaybackStatus.PLAYING,
+                session.playWhenReady,
                 Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST,
             )
             .setPlaybackState(
@@ -138,8 +138,11 @@ class VlcSessionPlayer(
         toIndex: Int,
         newMediaItems: List<MediaItem>,
     ): ListenableFuture<*> = immediate {
-        coordinator.removeRange(fromIndex, toIndex)
-        coordinator.add(fromIndex, newMediaItems.map(MediaItemMapper::fromMedia3))
+        coordinator.replaceRange(
+            fromIndex = fromIndex,
+            toIndex = toIndex,
+            items = newMediaItems.map(MediaItemMapper::fromMedia3),
+        )
     }
 
     override fun handleSetMediaItems(

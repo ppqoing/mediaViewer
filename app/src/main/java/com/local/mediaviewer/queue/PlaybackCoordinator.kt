@@ -24,6 +24,7 @@ import kotlin.random.Random
 
 data class PlaybackSessionState(
     val playback: PlaybackState = PlaybackState(),
+    val playWhenReady: Boolean = false,
     val queue: PlaybackQueue = PlaybackQueue(),
     val currentItem: QueueMediaItem? = null,
     val errorMessage: String? = null,
@@ -89,12 +90,14 @@ class PlaybackCoordinator(
             playback = if (autoPlay) engine.state.value else engine.state.value.copy(
                 status = PlaybackStatus.PAUSED,
             ),
+            playWhenReady = autoPlay,
             error = null,
         )
         if (autoPlay) loadCurrent(autoPlay = true)
     }
 
     override fun replaceQueue(items: List<QueueMediaItem>, startMediaKey: String) = launchMutation {
+        updatePlayWhenReady(true)
         setQueue(
             QueueNavigator.replace(items, startMediaKey, queue.mode, random).copy(
                 playbackSpeed = queue.playbackSpeed,
@@ -114,16 +117,23 @@ class PlaybackCoordinator(
 
     override fun select(mediaKey: String) = launchMutation {
         if (queue.items.none { it.mediaKey == mediaKey }) return@launchMutation
+        updatePlayWhenReady(true)
         setQueue(QueueNavigator.select(queue, mediaKey), persist = true)
         loadCurrent(autoPlay = true)
     }
 
     override fun skipPrevious() = launchMutation {
-        QueueNavigator.previous(queue)?.let { selectAndLoad(it) }
+        QueueNavigator.previous(queue)?.let {
+            updatePlayWhenReady(true)
+            selectAndLoad(it, autoPlay = true)
+        }
     }
 
     override fun skipNext() = launchMutation {
-        QueueNavigator.next(queue, QueueAdvanceReason.USER)?.let { selectAndLoad(it) }
+        QueueNavigator.next(queue, QueueAdvanceReason.USER)?.let {
+            updatePlayWhenReady(true)
+            selectAndLoad(it, autoPlay = true)
+        }
     }
 
     override fun move(mediaKey: String, toIndex: Int) = launchMutation {
@@ -138,6 +148,7 @@ class PlaybackCoordinator(
             clearPendingResume()
             engine.stop()
         } else if (wasCurrent) {
+            updatePlayWhenReady(true)
             loadCurrent(autoPlay = true)
         }
     }
@@ -157,6 +168,7 @@ class PlaybackCoordinator(
     }
 
     override fun clearAll() = launchMutation {
+        updatePlayWhenReady(false)
         setQueue(
             PlaybackQueue(mode = queue.mode, playbackSpeed = queue.playbackSpeed),
             persist = true,
@@ -178,12 +190,19 @@ class PlaybackCoordinator(
     }
 
     override fun play() = launchMutation {
+        updatePlayWhenReady(true)
         playCurrent()
     }
 
-    override fun pause() = launchMutation { engine.pause() }
+    override fun pause() = launchMutation {
+        updatePlayWhenReady(false)
+        engine.pause()
+    }
 
-    override fun stop() = launchMutation { engine.stop() }
+    override fun stop() = launchMutation {
+        updatePlayWhenReady(false)
+        engine.stop()
+    }
 
     override fun seekTo(positionMs: Long) = launchMutation {
         engine.seekTo(positionMs)
@@ -194,6 +213,7 @@ class PlaybackCoordinator(
     }
 
     suspend fun setPlayWhenReadyFromSession(playWhenReady: Boolean) = mutate {
+        updatePlayWhenReady(playWhenReady)
         if (playWhenReady) playCurrent() else engine.pause()
     }
 
@@ -205,7 +225,7 @@ class PlaybackCoordinator(
         val selected = queue.items.getOrNull(mediaItemIndex) ?: return@mutate
         if (selected.mediaKey != queue.currentMediaKey) {
             setQueue(QueueNavigator.select(queue, selected.mediaKey), persist = true)
-            loadCurrent(autoPlay = true)
+            loadCurrent(autoPlay = mutableSessionState.value.playWhenReady)
         }
         if (positionMs >= 0L) engine.seekTo(positionMs)
     }
@@ -215,22 +235,11 @@ class PlaybackCoordinator(
     }
 
     suspend fun add(index: Int, items: List<QueueMediaItem>) = mutate {
-        val insertedKeys = items.mapTo(mutableSetOf()) { it.mediaKey }
-        val retained = queue.items.filterNot { it.mediaKey in insertedKeys }.toMutableList()
-        retained.addAll(index.coerceIn(0, retained.size), items)
-        replaceItems(retained, queue.currentMediaKey)
+        applyQueueEdit(QueueNavigator.addAll(queue, index, items))
     }
 
     suspend fun moveRange(fromIndex: Int, toIndex: Int, newIndex: Int) = mutate {
-        val from = fromIndex.coerceIn(0, queue.items.size)
-        val to = toIndex.coerceIn(from, queue.items.size)
-        if (from == to) return@mutate
-        val moved = queue.items.subList(from, to)
-        val retained = queue.items.toMutableList().apply {
-            subList(from, to).clear()
-        }
-        retained.addAll(newIndex.coerceIn(0, retained.size), moved)
-        replaceItems(retained, queue.currentMediaKey)
+        applyQueueEdit(QueueNavigator.moveRange(queue, fromIndex, toIndex, newIndex))
     }
 
     suspend fun removeRange(fromIndex: Int, toIndex: Int) = mutate {
@@ -239,14 +248,25 @@ class PlaybackCoordinator(
         if (from == to) return@mutate
         val removedKeys = queue.items.subList(from, to).mapTo(mutableSetOf()) { it.mediaKey }
         val removedCurrent = queue.currentMediaKey in removedKeys
-        val retained = queue.items.filterNot { it.mediaKey in removedKeys }
-        val nextCurrentMediaKey = if (removedCurrent) {
-            retained.getOrNull(from)?.mediaKey ?: retained.lastOrNull()?.mediaKey
-        } else {
-            queue.currentMediaKey
+        applyQueueEdit(QueueNavigator.removeRange(queue, from, to))
+        if (removedCurrent && queue.currentItem != null) {
+            loadCurrent(autoPlay = mutableSessionState.value.playWhenReady)
         }
-        replaceItems(retained, nextCurrentMediaKey)
-        if (removedCurrent && queue.currentItem != null) loadCurrent(autoPlay = true)
+    }
+
+    suspend fun replaceRange(
+        fromIndex: Int,
+        toIndex: Int,
+        items: List<QueueMediaItem>,
+    ) = mutate {
+        val from = fromIndex.coerceIn(0, queue.items.size)
+        val to = toIndex.coerceIn(from, queue.items.size)
+        val replacedCurrent = queue.currentMediaKey in
+            queue.items.subList(from, to).map { it.mediaKey }
+        applyQueueEdit(QueueNavigator.replaceRange(queue, from, to, items))
+        if (replacedCurrent && queue.currentItem != null) {
+            loadCurrent(autoPlay = mutableSessionState.value.playWhenReady)
+        }
     }
 
     suspend fun replaceFromMedia3(
@@ -259,7 +279,7 @@ class PlaybackCoordinator(
         replaceItems(items, startMediaKey)
         if (queue.currentItem != null) {
             loadCurrent(
-                autoPlay = mutableSessionState.value.playback.status == PlaybackStatus.PLAYING,
+                autoPlay = mutableSessionState.value.playWhenReady,
             )
             if (startPositionMs >= 0L) engine.seekTo(startPositionMs)
         }
@@ -318,6 +338,10 @@ class PlaybackCoordinator(
                 random = random,
             ).copy(playbackSpeed = queue.playbackSpeed)
         }
+        applyQueueEdit(next)
+    }
+
+    private suspend fun applyQueueEdit(next: PlaybackQueue) {
         setQueue(next, persist = true)
         if (next.items.isEmpty()) {
             loadedMediaKey = null
@@ -332,12 +356,12 @@ class PlaybackCoordinator(
             engine.stop()
             return
         }
-        selectAndLoad(next)
+        selectAndLoad(next, autoPlay = mutableSessionState.value.playWhenReady)
     }
 
-    private suspend fun selectAndLoad(mediaKey: String) {
+    private suspend fun selectAndLoad(mediaKey: String, autoPlay: Boolean) {
         setQueue(QueueNavigator.select(queue, mediaKey), persist = true)
-        loadCurrent(autoPlay = true)
+        loadCurrent(autoPlay = autoPlay)
     }
 
     private suspend fun loadCurrent(autoPlay: Boolean) {
@@ -394,12 +418,18 @@ class PlaybackCoordinator(
         updateSession(error = message)
     }
 
+    private fun updatePlayWhenReady(playWhenReady: Boolean) {
+        updateSession(playWhenReady = playWhenReady)
+    }
+
     private fun updateSession(
         playback: PlaybackState = mutableSessionState.value.playback,
+        playWhenReady: Boolean = mutableSessionState.value.playWhenReady,
         error: String? = mutableSessionState.value.errorMessage,
     ) {
         mutableSessionState.value = PlaybackSessionState(
             playback = playback,
+            playWhenReady = playWhenReady,
             queue = queue,
             currentItem = queue.currentItem,
             errorMessage = error,

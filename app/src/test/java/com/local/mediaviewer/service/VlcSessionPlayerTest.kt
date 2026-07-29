@@ -49,15 +49,16 @@ class VlcSessionPlayerTest {
         fixture.coordinator.replaceQueue(listOf(item("a")), "a")
         settle()
         val cases = listOf(
-            PlaybackStatus.OPENING to Player.STATE_BUFFERING,
-            PlaybackStatus.BUFFERING to Player.STATE_BUFFERING,
-            PlaybackStatus.PLAYING to Player.STATE_READY,
-            PlaybackStatus.PAUSED to Player.STATE_READY,
-            PlaybackStatus.ENDED to Player.STATE_ENDED,
-            PlaybackStatus.ERROR to Player.STATE_IDLE,
+            Triple(PlaybackStatus.OPENING, Player.STATE_BUFFERING, true),
+            Triple(PlaybackStatus.BUFFERING, Player.STATE_BUFFERING, true),
+            Triple(PlaybackStatus.PLAYING, Player.STATE_READY, true),
+            Triple(PlaybackStatus.PAUSED, Player.STATE_READY, false),
+            Triple(PlaybackStatus.ENDED, Player.STATE_ENDED, false),
+            Triple(PlaybackStatus.ERROR, Player.STATE_IDLE, false),
         )
 
-        for ((status, expectedState) in cases) {
+        for ((status, expectedState, playIntent) in cases) {
+            fixture.coordinator.setPlayWhenReadyFromSession(playIntent)
             fixture.engine.emit(
                 PlaybackState(
                     status = status,
@@ -71,7 +72,7 @@ class VlcSessionPlayerTest {
             settle()
 
             assertEquals(expectedState, fixture.player.playbackState)
-            assertEquals(status == PlaybackStatus.PLAYING, fixture.player.playWhenReady)
+            assertEquals(playIntent, fixture.player.playWhenReady)
             assertEquals(12_345L, fixture.player.currentPosition)
             assertEquals(60_000L, fixture.player.duration)
             assertEquals(15_000L, fixture.player.bufferedPosition)
@@ -176,6 +177,52 @@ class VlcSessionPlayerTest {
     }
 
     @Test
+    fun `buffering play intent survives until pause and Media3 next stays paused`() = runTest {
+        val fixture = fixture(this)
+        fixture.coordinator.replaceQueue(listOf(item("a"), item("b"), item("c")), "a")
+        settle()
+        fixture.engine.emit(PlaybackState(status = PlaybackStatus.BUFFERING, isSeekable = true))
+        settle()
+
+        assertTrue(fixture.player.playWhenReady)
+
+        fixture.engine.clearCalls()
+        fixture.player.pause()
+        settle()
+        assertFalse(fixture.player.playWhenReady)
+        assertEquals(1, fixture.engine.pauseCalls)
+
+        fixture.engine.clearCalls()
+        fixture.player.seekToNextMediaItem()
+        settle()
+        assertEquals("b", fixture.coordinator.sessionState.value.currentItem?.mediaKey)
+        assertEquals(0, fixture.engine.playCalls)
+
+        fixture.coordinator.skipNext()
+        settle()
+        assertEquals("c", fixture.coordinator.sessionState.value.currentItem?.mediaKey)
+        assertEquals(1, fixture.engine.playCalls)
+        fixture.close()
+    }
+
+    @Test
+    fun `Media3 next continues playback when play intent is true`() = runTest {
+        val fixture = fixture(this)
+        fixture.coordinator.replaceQueue(listOf(item("a"), item("b")), "a")
+        fixture.engine.emit(PlaybackState(status = PlaybackStatus.PLAYING, isSeekable = true))
+        settle()
+        fixture.engine.clearCalls()
+
+        fixture.player.seekToNextMediaItem()
+        settle()
+
+        assertEquals("b", fixture.coordinator.sessionState.value.currentItem?.mediaKey)
+        assertEquals(1, fixture.engine.playCalls)
+        assertTrue(fixture.player.playWhenReady)
+        fixture.close()
+    }
+
+    @Test
     fun `delegates add move remove and replace media items`() = runTest {
         val fixture = fixture(this)
         fixture.coordinator.replaceQueue(listOf(item("a"), item("b")), "a")
@@ -238,6 +285,151 @@ class VlcSessionPlayerTest {
     }
 
     @Test
+    fun `paused Media3 replacement atomically selects replacement without playing`() = runTest {
+        val fixture = fixture(this)
+        fixture.coordinator.replaceQueue(listOf(item("a"), item("b"), item("c")), "b")
+        settle()
+        fixture.player.pause()
+        settle()
+        fixture.engine.clearCalls()
+        fixture.repository.clearSaveCalls()
+
+        fixture.player.replaceMediaItems(1, 2, listOf(media3Item("x"), media3Item("y")))
+        settle()
+
+        assertEquals(listOf("a", "x", "y", "c"), fixture.keys())
+        assertEquals("x", fixture.coordinator.sessionState.value.currentItem?.mediaKey)
+        assertEquals(1, fixture.repository.saveCalls)
+        assertEquals(0, fixture.engine.playCalls)
+        assertEquals(requestUrlFor("x"), fixture.engine.prepareCalls.single())
+        fixture.close()
+    }
+
+    @Test
+    fun `playing Media3 replacement atomically selects and plays replacement`() = runTest {
+        val fixture = fixture(this)
+        fixture.coordinator.replaceQueue(listOf(item("a"), item("b"), item("c")), "b")
+        fixture.engine.emit(PlaybackState(status = PlaybackStatus.PLAYING, isSeekable = true))
+        settle()
+        fixture.engine.clearCalls()
+        fixture.repository.clearSaveCalls()
+
+        fixture.player.replaceMediaItem(1, media3Item("x"))
+        settle()
+
+        assertEquals(listOf("a", "x", "c"), fixture.keys())
+        assertEquals("x", fixture.coordinator.sessionState.value.currentItem?.mediaKey)
+        assertEquals(1, fixture.repository.saveCalls)
+        assertEquals(1, fixture.engine.playCalls)
+        assertEquals(requestUrlFor("x"), fixture.engine.prepareCalls.single())
+        fixture.close()
+    }
+
+    @Test
+    fun `replacing sole current item loads replacement without transient stop`() = runTest {
+        val fixture = fixture(this)
+        fixture.coordinator.replaceQueue(listOf(item("a")), "a")
+        settle()
+        fixture.player.pause()
+        settle()
+        fixture.engine.clearCalls()
+        fixture.repository.clearSaveCalls()
+
+        fixture.player.replaceMediaItem(0, media3Item("x"))
+        settle()
+
+        assertEquals(listOf("x"), fixture.keys())
+        assertEquals("x", fixture.coordinator.sessionState.value.currentItem?.mediaKey)
+        assertEquals(1, fixture.repository.saveCalls)
+        assertEquals(0, fixture.engine.stopCalls)
+        assertEquals(listOf(requestUrlFor("x")), fixture.engine.prepareCalls)
+        fixture.close()
+    }
+
+    @Test
+    fun `shuffle batch add keeps played prefix and inserts new keys after cursor`() = runTest {
+        val (fixture, before) = advancedShuffleFixture()
+        fixture.repository.clearSaveCalls()
+
+        fixture.coordinator.add(2, listOf(item("x"), item("y")))
+        settle()
+
+        val after = fixture.coordinator.sessionState.value.queue
+        assertEquals(before.shuffleCursor, after.shuffleCursor)
+        assertEquals(
+            before.shuffleOrder.take(before.shuffleCursor + 1),
+            after.shuffleOrder.take(after.shuffleCursor + 1),
+        )
+        assertEquals(
+            listOf("x", "y"),
+            after.shuffleOrder.drop(after.shuffleCursor + 1).take(2),
+        )
+        assertEquals(1, fixture.repository.saveCalls)
+        fixture.close()
+    }
+
+    @Test
+    fun `shuffle batch move changes presentation order without changing shuffle history`() = runTest {
+        val (fixture, before) = advancedShuffleFixture()
+        fixture.repository.clearSaveCalls()
+
+        fixture.coordinator.moveRange(3, 4, 0)
+        settle()
+
+        val after = fixture.coordinator.sessionState.value.queue
+        assertEquals(before.shuffleOrder, after.shuffleOrder)
+        assertEquals(before.shuffleCursor, after.shuffleCursor)
+        assertEquals(1, fixture.repository.saveCalls)
+        fixture.close()
+    }
+
+    @Test
+    fun `shuffle batch remove only drops pending key and keeps cursor`() = runTest {
+        val (fixture, before) = advancedShuffleFixture()
+        val removedKey = before.shuffleOrder.last()
+        val removedIndex = before.items.indexOfFirst { it.mediaKey == removedKey }
+        fixture.repository.clearSaveCalls()
+
+        fixture.coordinator.removeRange(removedIndex, removedIndex + 1)
+        settle()
+
+        val after = fixture.coordinator.sessionState.value.queue
+        assertEquals(before.shuffleOrder.filterNot { it == removedKey }, after.shuffleOrder)
+        assertEquals(before.shuffleCursor, after.shuffleCursor)
+        assertEquals(1, fixture.repository.saveCalls)
+        fixture.close()
+    }
+
+    @Test
+    fun `shuffle range replacement keeps played prefix and queues replacements next`() = runTest {
+        val (fixture, before) = advancedShuffleFixture()
+        val replacedKey = before.shuffleOrder.last()
+        val replacedIndex = before.items.indexOfFirst { it.mediaKey == replacedKey }
+        fixture.repository.clearSaveCalls()
+
+        fixture.coordinator.replaceRange(
+            replacedIndex,
+            replacedIndex + 1,
+            listOf(item("x"), item("y")),
+        )
+        settle()
+
+        val after = fixture.coordinator.sessionState.value.queue
+        assertEquals(before.shuffleCursor, after.shuffleCursor)
+        assertEquals(
+            before.shuffleOrder.take(before.shuffleCursor + 1),
+            after.shuffleOrder.take(after.shuffleCursor + 1),
+        )
+        assertEquals(
+            listOf("x", "y"),
+            after.shuffleOrder.drop(after.shuffleCursor + 1).take(2),
+        )
+        assertFalse(replacedKey in after.shuffleOrder)
+        assertEquals(1, fixture.repository.saveCalls)
+        fixture.close()
+    }
+
+    @Test
     fun `maps repeat and shuffle as mutually exclusive queue modes`() = runTest {
         val fixture = fixture(this)
         fixture.coordinator.replaceQueue(listOf(item("a"), item("b")), "a")
@@ -282,15 +474,17 @@ class VlcSessionPlayerTest {
 
     private fun fixture(scope: CoroutineScope): Fixture {
         val engine = FakeEngine()
+        val repository = FakeQueueRepository()
         val coordinator = PlaybackCoordinator(
             engine = engine,
-            queueRepository = FakeQueueRepository(),
+            queueRepository = repository,
             positionStore = FakePositionStore(),
             session = FakeSession(),
             scope = scope,
         )
         return Fixture(
             engine = engine,
+            repository = repository,
             coordinator = coordinator,
             player = VlcSessionPlayer(Looper.getMainLooper(), coordinator, scope),
         )
@@ -301,6 +495,26 @@ class VlcSessionPlayerTest {
         shadowOf(Looper.getMainLooper()).idle()
         advanceUntilIdle()
         shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    private suspend fun TestScope.advancedShuffleFixture(): Pair<Fixture, PlaybackQueue> {
+        val fixture = fixture(this)
+        fixture.coordinator.replaceQueue(
+            listOf(item("a"), item("b"), item("c"), item("d")),
+            "a",
+        )
+        settle()
+        fixture.coordinator.setPlaybackModeFromSession(PlaybackMode.SHUFFLE)
+        settle()
+        val initial = fixture.coordinator.sessionState.value.queue
+        val nextKey = initial.shuffleOrder[1]
+        fixture.coordinator.seek(
+            mediaItemIndex = initial.items.indexOfFirst { it.mediaKey == nextKey },
+            positionMs = 0L,
+            seekCommand = Player.COMMAND_SEEK_TO_MEDIA_ITEM,
+        )
+        settle()
+        return fixture to fixture.coordinator.sessionState.value.queue
     }
 
     private fun item(key: String) = QueueMediaItem(
@@ -330,8 +544,11 @@ class VlcSessionPlayerTest {
         )
         .build()
 
+    private fun requestUrlFor(key: String) = "http://10.0.0.9:8080/$key.mp4"
+
     private class Fixture(
         val engine: FakeEngine,
+        val repository: FakeQueueRepository,
         val coordinator: PlaybackCoordinator,
         val player: VlcSessionPlayer,
     ) {
@@ -349,6 +566,7 @@ private class FakeEngine : PlaybackEngine {
     override val state: StateFlow<PlaybackState> = mutableState
     val seekCalls = mutableListOf<Long>()
     val speedCalls = mutableListOf<Float>()
+    val prepareCalls = mutableListOf<String>()
     var playCalls = 0
     var pauseCalls = 0
     var stopCalls = 0
@@ -360,12 +578,15 @@ private class FakeEngine : PlaybackEngine {
     fun clearCalls() {
         seekCalls.clear()
         speedCalls.clear()
+        prepareCalls.clear()
         playCalls = 0
         pauseCalls = 0
         stopCalls = 0
     }
 
-    override fun prepare(url: String) = Unit
+    override fun prepare(url: String) {
+        prepareCalls += url
+    }
     override fun attachVideoOutput(host: ViewGroup) = Unit
     override fun detachVideoOutput() = Unit
     override fun setVideoScaleMode(mode: VideoScaleMode) = Unit
@@ -389,10 +610,17 @@ private class FakeEngine : PlaybackEngine {
 
 private class FakeQueueRepository : PlaybackQueueRepository {
     private val mutableQueue = MutableStateFlow(PlaybackQueue())
+    var saveCalls = 0
+        private set
     override val queue: StateFlow<PlaybackQueue> = mutableQueue
     override suspend fun restore(): PlaybackQueue = mutableQueue.value
     override suspend fun save(queue: PlaybackQueue) {
+        saveCalls += 1
         mutableQueue.value = queue
+    }
+
+    fun clearSaveCalls() {
+        saveCalls = 0
     }
 }
 
