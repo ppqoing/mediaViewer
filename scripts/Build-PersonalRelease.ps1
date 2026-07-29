@@ -44,6 +44,21 @@ function Invoke-Checked {
     }
 }
 
+function Invoke-SigningChecked {
+    param(
+        [Parameter(Mandatory)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
+
+    $null = @(& $FilePath @Arguments 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "APK 签名命令失败，退出码 $LASTEXITCODE"
+    }
+}
+
 function Find-BuildTools {
     param(
         [Parameter(Mandatory)]
@@ -88,12 +103,15 @@ $zipalign = Join-Path $buildTools 'zipalign.exe'
 $apksigner = Join-Path $buildTools 'apksigner.bat'
 $module = Join-Path $PSScriptRoot 'ReleaseApkTools.psm1'
 
+if (-not (Test-Path -LiteralPath $keystoreFullPath -PathType Leaf)) {
+    throw '缺少必需签名文件'
+}
+
 foreach ($required in @(
     $gradle,
     $aapt,
     $zipalign,
     $apksigner,
-    $keystoreFullPath,
     $module
 )) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
@@ -198,7 +216,7 @@ try {
     Set-Item `
         -Path "Env:$apksignerPasswordVariable" `
         -Value $password
-    Invoke-Checked $apksigner @(
+    Invoke-SigningChecked $apksigner @(
         'sign',
         '--ks', $keystoreFullPath,
         '--ks-key-alias', $KeyAlias,
