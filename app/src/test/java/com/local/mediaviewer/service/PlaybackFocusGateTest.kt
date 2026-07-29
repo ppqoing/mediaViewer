@@ -16,7 +16,8 @@ class PlaybackFocusGateTest {
         val errors = mutableListOf<String>()
         val gate = PlaybackFocusGate(
             acquireFocus = { false },
-            pause = {},
+            pauseForInterruption = {},
+            pausePermanently = {},
             resume = {},
             publishError = errors::add,
         )
@@ -31,14 +32,15 @@ class PlaybackFocusGateTest {
         var resumes = 0
         val gate = PlaybackFocusGate(
             acquireFocus = { true },
-            pause = { pauses += 1 },
+            pauseForInterruption = { pauses += 1 },
+            pausePermanently = { pauses += 1 },
             resume = { resumes += 1 },
             publishError = {},
         )
 
         assertTrue(gate.onUserPlayRequest())
         gate.onInterruption(PlaybackInterruption.TransientLoss, wasPlaying = true)
-        gate.onInterruption(PlaybackInterruption.FocusGained, wasPlaying = false)
+        gate.onInterruption(PlaybackInterruption.FocusGained, wasPlaying = true)
 
         assertEquals(1, pauses)
         assertEquals(1, resumes)
@@ -49,6 +51,10 @@ class PlaybackFocusGateTest {
 
         assertEquals(2, pauses)
         assertEquals(1, resumes)
+
+        gate.onInterruption(PlaybackInterruption.TransientLoss, wasPlaying = true)
+        gate.onInterruption(PlaybackInterruption.FocusGained, wasPlaying = false)
+        assertEquals(1, resumes)
     }
 
     @Test
@@ -57,7 +63,8 @@ class PlaybackFocusGateTest {
         var resumes = 0
         val gate = PlaybackFocusGate(
             acquireFocus = { true },
-            pause = { pauses += 1 },
+            pauseForInterruption = { pauses += 1 },
+            pausePermanently = { pauses += 1 },
             resume = { resumes += 1 },
             publishError = {},
         )
@@ -84,6 +91,42 @@ class PlaybackFocusGateTest {
         assertTrue(coordinator.sessionState.value.playWhenReady)
 
         coordinator.setPlayWhenReadyFromSession(false)
+        advanceUntilIdle()
+        assertFalse(coordinator.sessionState.value.playWhenReady)
+        coordinator.close()
+    }
+
+    @Test
+    fun `permanent and noisy losses clear session intent and qualify task removal`() = runTest {
+        val coordinator = serviceTestCoordinator(this)
+        val gate = PlaybackFocusGate(
+            acquireFocus = { true },
+            pauseForInterruption = coordinator::pauseForInterruption,
+            pausePermanently = coordinator::pause,
+            resume = coordinator::play,
+            publishError = {},
+        )
+
+        coordinator.replaceQueue(listOf(serviceTestItem("a")), "a")
+        advanceUntilIdle()
+        gate.onInterruption(PlaybackInterruption.TransientLoss, wasPlaying = true)
+        advanceUntilIdle()
+        assertTrue(coordinator.sessionState.value.playWhenReady)
+
+        gate.onInterruption(PlaybackInterruption.PermanentLoss, wasPlaying = true)
+        advanceUntilIdle()
+        assertFalse(coordinator.sessionState.value.playWhenReady)
+        assertTrue(
+            shouldStopAfterTaskRemoved(
+                releaseStarted = false,
+                playWhenReady = coordinator.sessionState.value.playWhenReady,
+                hasConnectedControllers = false,
+            ),
+        )
+
+        coordinator.replaceQueue(listOf(serviceTestItem("a")), "a")
+        advanceUntilIdle()
+        gate.onInterruption(PlaybackInterruption.BecomingNoisy, wasPlaying = true)
         advanceUntilIdle()
         assertFalse(coordinator.sessionState.value.playWhenReady)
         coordinator.close()

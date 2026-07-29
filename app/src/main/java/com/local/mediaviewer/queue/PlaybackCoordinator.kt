@@ -36,6 +36,14 @@ data class PlaybackResumptionSnapshot(
     val startPositionMs: Long = 0L,
 )
 
+data class PlaybackPersistenceSnapshot(
+    val queue: PlaybackQueue,
+    val currentMediaKey: String?,
+    val positionMs: Long,
+    val durationMs: Long,
+    val updatedAtEpochMs: Long,
+)
+
 class PlaybackCoordinator(
     private val engine: PlaybackEngine,
     private val queueRepository: PlaybackQueueRepository,
@@ -120,17 +128,32 @@ class PlaybackCoordinator(
             )
         }
 
+    fun captureCurrentSnapshot(): PlaybackPersistenceSnapshot {
+        val state = mutableSessionState.value
+        return PlaybackPersistenceSnapshot(
+            queue = state.queue,
+            currentMediaKey = state.currentItem?.mediaKey,
+            positionMs = state.playback.positionMs,
+            durationMs = state.playback.durationMs,
+            updatedAtEpochMs = System.currentTimeMillis(),
+        )
+    }
+
+    suspend fun persistSnapshot(snapshot: PlaybackPersistenceSnapshot) {
+        queueRepository.save(snapshot.queue)
+        snapshot.currentMediaKey?.let { mediaKey ->
+            positionStore.record(
+                mediaKey = mediaKey,
+                positionMs = snapshot.positionMs,
+                durationMs = snapshot.durationMs,
+                updatedAtEpochMs = snapshot.updatedAtEpochMs,
+            )
+        }
+    }
+
     suspend fun saveCurrentSnapshot() = mutate {
         runCatching {
-            queueRepository.save(queue)
-            val current = queue.currentItem ?: return@runCatching
-            val playback = mutableSessionState.value.playback
-            positionStore.record(
-                mediaKey = current.mediaKey,
-                positionMs = playback.positionMs,
-                durationMs = playback.durationMs,
-                updatedAtEpochMs = System.currentTimeMillis(),
-            )
+            persistSnapshot(captureCurrentSnapshot())
         }.onFailure {
             setError(it.message ?: "播放状态保存失败")
         }

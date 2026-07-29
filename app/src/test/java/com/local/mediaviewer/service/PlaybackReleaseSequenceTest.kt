@@ -30,9 +30,18 @@ class PlaybackReleaseSequenceTest {
             runCurrent()
             repository.restoreStarted.await()
             var releaseCalls = 0
+            val events = mutableListOf<String>()
             val sequence = PlaybackReleaseSequence(
-                saveCurrentSnapshot = coordinator::saveCurrentSnapshot,
-                releaseResources = { releaseCalls += 1 },
+                saveCurrentSnapshot = {
+                    coordinator.saveCurrentSnapshot()
+                    events += "save"
+                },
+                captureCurrentSnapshot = { "snapshot" },
+                persistAfterDestroy = {},
+                releaseResources = {
+                    events += "release"
+                    releaseCalls += 1
+                },
             )
 
             val firstStop = async { sequence.releaseAfterSave() }
@@ -52,8 +61,32 @@ class PlaybackReleaseSequenceTest {
             assertTrue(firstStop.isCompleted)
             assertTrue(secondStop.isCompleted)
             assertEquals(1, releaseCalls)
+            assertEquals(listOf("save", "release"), events)
             coordinator.close()
         }
+
+    @Test
+    fun `destroy captures persistence request and closes synchronously without dispatcher progress`() {
+        var releaseCalls = 0
+        var captured = 0
+        var pendingSnapshot: String? = null
+        val sequence = PlaybackReleaseSequence(
+            saveCurrentSnapshot = { error("explicit stop not used") },
+            captureCurrentSnapshot = {
+                captured += 1
+                "snapshot"
+            },
+            persistAfterDestroy = { pendingSnapshot = it },
+            releaseResources = { releaseCalls += 1 },
+        )
+
+        sequence.releaseFromDestroy()
+        sequence.releaseFromDestroy()
+
+        assertEquals(1, captured)
+        assertEquals("snapshot", pendingSnapshot)
+        assertEquals(1, releaseCalls)
+    }
 }
 
 private class BlockingRestoreRepository : PlaybackQueueRepository {
