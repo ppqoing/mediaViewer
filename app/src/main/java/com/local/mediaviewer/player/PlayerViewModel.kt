@@ -6,6 +6,8 @@ import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
+import com.local.mediaviewer.queue.QueueAdvanceReason
+import com.local.mediaviewer.queue.QueueNavigator
 import com.local.mediaviewer.session.ServerSessionManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -64,6 +66,29 @@ class PlayerViewModel(
                 lastStatus = state.status
             }
         }
+        (controller as? QueuePlaybackController)?.let { queueController ->
+            viewModelScope.launch {
+                queueController.sessionState.collect { sessionState ->
+                    val queue = sessionState.queue
+                    mutableUiState.value = mutableUiState.value
+                        .withEngine(sessionState.playback)
+                        .copy(
+                            currentMediaKey = queue.currentMediaKey,
+                            queueSize = queue.items.size,
+                            playbackMode = queue.mode,
+                            canSkipPrevious =
+                                QueueNavigator.previous(queue) != null,
+                            canSkipNext = QueueNavigator.next(
+                                queue,
+                                QueueAdvanceReason.USER,
+                            ) != null,
+                            errorMessage = sessionState.errorMessage
+                                ?: sessionState.playback.errorMessage,
+                            playbackSpeed = queue.playbackSpeed,
+                        )
+                }
+            }
+        }
         periodicSaveJob = viewModelScope.launch {
             while (isActive) {
                 delay(SAVE_INTERVAL_MS)
@@ -92,9 +117,9 @@ class PlayerViewModel(
         controller.play()
     }
 
-    fun previous() = Unit
+    fun previous() = (controller as? QueuePlaybackController)?.skipPrevious()
 
-    fun next() = Unit
+    fun next() = (controller as? QueuePlaybackController)?.skipNext()
 
     fun retry() {
         endpointRetryUsed = false

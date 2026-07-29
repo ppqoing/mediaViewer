@@ -21,8 +21,10 @@ import com.local.mediaviewer.playback.MediaViewerDatabaseFactory
 import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.RoomPlaybackPositionStore
-import com.local.mediaviewer.player.EnginePlaybackController
 import com.local.mediaviewer.player.PlaybackController
+import com.local.mediaviewer.queue.PlaybackCoordinator
+import com.local.mediaviewer.queue.PlaybackQueueRepository
+import com.local.mediaviewer.queue.RoomPlaybackQueueRepository
 import com.local.mediaviewer.session.DefaultServerSessionManager
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.settings.DataStoreServerSettingsRepository
@@ -31,6 +33,9 @@ import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import com.local.mediaviewer.settings.ServerSettingsRepository
 import com.local.mediaviewer.settings.playerPreferencesDataStore
 import com.local.mediaviewer.settings.serverSettingsDataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 interface AppContainer {
     val settingsRepository: ServerSettingsRepository
@@ -94,6 +99,14 @@ class DefaultAppContainer(context: Context) : AppContainer {
         RoomPlaybackPositionStore(database.playbackPositionDao())
     }
 
+    private val playbackQueueRepository: PlaybackQueueRepository by lazy {
+        RoomPlaybackQueueRepository(database.playbackQueueDao())
+    }
+
+    private val playbackScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate,
+    )
+
     override val imageLoader: ImageLoader by lazy {
         MediaImageLoaderFactory.create(appContext)
     }
@@ -105,7 +118,15 @@ class DefaultAppContainer(context: Context) : AppContainer {
             activePlaybackEngine?.close()
             AndroidVlcPlaybackEngine(appContext).also { engine ->
                 activePlaybackEngine = engine
-            }.let(::EnginePlaybackController)
+            }.let { engine ->
+                PlaybackCoordinator(
+                    engine = engine,
+                    queueRepository = playbackQueueRepository,
+                    positionStore = playbackPositionStore,
+                    session = sessionManager,
+                    scope = playbackScope,
+                )
+            }
         }
     }
 }

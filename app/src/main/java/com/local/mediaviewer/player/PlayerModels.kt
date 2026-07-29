@@ -4,6 +4,7 @@ import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
+import com.local.mediaviewer.queue.PlaybackMode
 
 data class PlayerRequest(
     val name: String,
@@ -27,6 +28,9 @@ data class PlayerUiState(
         VideoScaleMode = VideoScaleMode.BEST_FIT,
     val previewPositionMs: Long? = null,
     val playbackSpeed: Float = 1f,
+    val currentMediaKey: String? = null,
+    val queueSize: Int = 0,
+    val playbackMode: PlaybackMode = PlaybackMode.SEQUENTIAL,
     val canSkipPrevious: Boolean = false,
     val canSkipNext: Boolean = false,
 )
