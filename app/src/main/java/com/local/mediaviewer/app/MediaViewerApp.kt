@@ -33,10 +33,13 @@ import com.local.mediaviewer.image.ImageReaderViewModel
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.model.RootShare
 import com.local.mediaviewer.navigation.BrowserRoute
+import com.local.mediaviewer.navigation.CurrentPlayerNavigationRequests
 import com.local.mediaviewer.navigation.HomeRoute
 import com.local.mediaviewer.navigation.ImageReaderRoute
 import com.local.mediaviewer.navigation.PlayerRoute
+import com.local.mediaviewer.navigation.PlayerRouteContent
 import com.local.mediaviewer.navigation.SettingsRoute
+import com.local.mediaviewer.navigation.resolvePlayerRouteContent
 import com.local.mediaviewer.player.PlayerRequest
 import com.local.mediaviewer.player.PlayerViewModel
 import com.local.mediaviewer.settings.SettingsViewModel
@@ -53,16 +56,38 @@ import com.local.mediaviewer.ui.player.WindowBrightnessController
 import com.local.mediaviewer.ui.settings.SettingsScreen
 
 @Composable
-fun MediaViewerApp(container: AppContainer) {
+fun MediaViewerApp(
+    container: AppContainer,
+    currentPlayerNavigationRequests:
+        CurrentPlayerNavigationRequests = remember {
+            CurrentPlayerNavigationRequests()
+        },
+) {
     val navController = rememberNavController()
     val playbackSession by container.playbackController.sessionState
         .collectAsStateWithLifecycle()
     val currentEntry by navController.currentBackStackEntryAsState()
+    val currentPlayerRequestNonce by currentPlayerNavigationRequests
+        .requestNonce
+        .collectAsStateWithLifecycle()
     var queueSheetVisible by remember { mutableStateOf(false) }
     val showsMiniPlayer = playbackSession.currentItem != null && (
         currentEntry?.destination?.hasRoute<HomeRoute>() == true ||
             currentEntry?.destination?.hasRoute<BrowserRoute>() == true
         )
+
+    LaunchedEffect(
+        currentPlayerRequestNonce,
+        playbackSession.currentItem,
+    ) {
+        currentPlayerNavigationRequests
+            .consumeIfReady(playbackSession.currentItem)
+            ?.let { mediaKey ->
+                navController.navigate(PlayerRoute(mediaKey)) {
+                    launchSingleTop = true
+                }
+            }
+    }
 
     Box {
         NavHost(
@@ -195,13 +220,21 @@ fun MediaViewerApp(container: AppContainer) {
                 },
             )
         }
-        composable<PlayerRoute> { entry ->
-            val route = entry.toRoute<PlayerRoute>()
-            val item = playbackSession.queue.items.firstOrNull {
-                it.mediaKey == route.mediaKey
-            } ?: return@composable
+        composable<PlayerRoute> {
+            val item = when (
+                val content = resolvePlayerRouteContent(playbackSession)
+            ) {
+                PlayerRouteContent.Waiting -> return@composable
+                PlayerRouteContent.Empty -> {
+                    LaunchedEffect(Unit) {
+                        navController.popBackStack()
+                    }
+                    return@composable
+                }
+                is PlayerRouteContent.Ready -> content.item
+            }
             val player: PlayerViewModel = viewModel(
-                key = "player:${route.mediaKey}",
+                key = "player-session",
                 factory = viewModelFactory {
                     initializer {
                         PlayerViewModel(
@@ -209,7 +242,7 @@ fun MediaViewerApp(container: AppContainer) {
                                 name = item.name,
                                 logicalUrl = item.logicalUrl,
                                 requestUrl = item.logicalUrl,
-                                mediaKey = route.mediaKey,
+                                mediaKey = item.mediaKey,
                                 kind = item.kind,
                             ),
                             controller = container.playbackController,
@@ -247,7 +280,7 @@ fun MediaViewerApp(container: AppContainer) {
                 }
             }
 
-            if (item.kind == MediaKind.AUDIO) {
+            if (state.kind == MediaKind.AUDIO) {
                 AudioPlayerScreen(
                     state = state,
                     onPlay = player::play,

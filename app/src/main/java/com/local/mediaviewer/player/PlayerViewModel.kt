@@ -67,9 +67,23 @@ class PlayerViewModel(
             viewModelScope.launch {
                 queueController.sessionState.collect { sessionState ->
                     val queue = sessionState.queue
+                    val currentItem = sessionState.currentItem
+                    if (currentItem != null) {
+                        currentRequest = PlayerRequest(
+                            name = currentItem.name,
+                            logicalUrl = currentItem.logicalUrl,
+                            requestUrl = currentItem.logicalUrl,
+                            mediaKey = currentItem.mediaKey,
+                            kind = currentItem.kind,
+                        )
+                    }
                     mutableUiState.value = mutableUiState.value
                         .withEngine(sessionState.playback)
                         .copy(
+                            name = currentItem?.name
+                                ?: mutableUiState.value.name,
+                            kind = currentItem?.kind
+                                ?: mutableUiState.value.kind,
                             currentMediaKey = queue.currentMediaKey,
                             queueSize = queue.items.size,
                             playbackMode = queue.mode,

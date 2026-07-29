@@ -12,6 +12,8 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.local.mediaviewer.MainActivity
 import com.local.mediaviewer.MediaViewerApplication
+import com.local.mediaviewer.navigation.ACTION_OPEN_CURRENT_PLAYER
+import com.local.mediaviewer.navigation.EXTRA_OPEN_CURRENT_PLAYER
 import com.local.mediaviewer.playback.PlaybackInterruption
 import com.local.mediaviewer.playback.PlaybackInterruptions
 import com.local.mediaviewer.queue.PlaybackCoordinator
@@ -280,9 +282,10 @@ class PlaybackService : MediaSessionService() {
     private fun currentPlayerPendingIntent(): PendingIntent = PendingIntent.getActivity(
         this,
         0,
-        Intent(this, MainActivity::class.java).addFlags(
-            Intent.FLAG_ACTIVITY_SINGLE_TOP,
-        ),
+        Intent(this, MainActivity::class.java)
+            .setAction(ACTION_OPEN_CURRENT_PLAYER)
+            .putExtra(EXTRA_OPEN_CURRENT_PLAYER, true)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 

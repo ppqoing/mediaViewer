@@ -348,6 +348,69 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun `队列当前项从音频切到视频后页面元数据跟随会话`() =
+        runTest(dispatcher) {
+            val audio = queueItem("a", "A.mp3", MediaKind.AUDIO)
+            val video = queueItem("b", "B.mp4", MediaKind.VIDEO)
+            val controller = FakeQueuePlaybackController(
+                items = listOf(audio, video),
+                currentMediaKey = audio.mediaKey,
+            )
+            val viewModel = PlayerViewModel(
+                initialRequest = request().copy(
+                    name = audio.name,
+                    mediaKey = audio.mediaKey,
+                    kind = audio.kind,
+                ),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            runCurrent()
+
+            controller.selectCurrent(
+                mediaKey = video.mediaKey,
+                playback = PlaybackState(status = PlaybackStatus.PLAYING),
+            )
+            runCurrent()
+
+            assertEquals(video.mediaKey, viewModel.uiState.value.currentMediaKey)
+            assertEquals("B.mp4", viewModel.uiState.value.name)
+            assertEquals(MediaKind.VIDEO, viewModel.uiState.value.kind)
+        }
+
+    @Test
+    fun `删除路由对应旧项后页面继续显示新的当前项`() =
+        runTest(dispatcher) {
+            val first = queueItem("a", "A.mp3", MediaKind.AUDIO)
+            val second = queueItem("b", "B.mp4", MediaKind.VIDEO)
+            val controller = FakeQueuePlaybackController(
+                items = listOf(first, second),
+                currentMediaKey = first.mediaKey,
+            )
+            val viewModel = PlayerViewModel(
+                initialRequest = request().copy(
+                    name = first.name,
+                    mediaKey = first.mediaKey,
+                    kind = first.kind,
+                ),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            runCurrent()
+
+            controller.removeAndSelect(first.mediaKey, second.mediaKey)
+            runCurrent()
+
+            assertEquals(second.mediaKey, viewModel.uiState.value.currentMediaKey)
+            assertEquals("B.mp4", viewModel.uiState.value.name)
+            assertEquals(MediaKind.VIDEO, viewModel.uiState.value.kind)
+        }
+
+    @Test
     fun `离开保存快照但不释放应用级控制器且重复离开只完成一次`() =
         runTest(dispatcher) {
             val controller = FakePlaybackController()
@@ -546,11 +609,12 @@ private fun request() = PlayerRequest(
 private fun queueItem(
     mediaKey: String,
     name: String,
+    kind: MediaKind = MediaKind.VIDEO,
 ) = QueueMediaItem(
     mediaKey = mediaKey,
     name = name,
     logicalUrl = "http://media.example:8080/middle/$name",
-    kind = MediaKind.VIDEO,
+    kind = kind,
 )
 
 private class FakePlaybackController : PlaybackController {
@@ -708,6 +772,23 @@ private class FakeQueuePlaybackController(
         this.playback.value = playback
         mutableSession.value = mutableSession.value.copy(
             playback = playback,
+            queue = queue,
+            currentItem = queue.currentItem,
+        )
+    }
+
+    fun removeAndSelect(
+        removedMediaKey: String,
+        selectedMediaKey: String,
+    ) {
+        val items = mutableSession.value.queue.items.filterNot {
+            it.mediaKey == removedMediaKey
+        }
+        val queue = mutableSession.value.queue.copy(
+            items = items,
+            currentMediaKey = selectedMediaKey,
+        )
+        mutableSession.value = mutableSession.value.copy(
             queue = queue,
             currentItem = queue.currentItem,
         )
