@@ -1,7 +1,7 @@
 # mediaviewer arm64 压缩 Release 验收记录
 
-- 完成时间：2026-07-29 11:38:36 +08:00
-- Git 修订：5ced77a1240478111ccf12f75c64f11ed733fbeb
+- 完成时间：2026-07-29 12:06:42 +08:00
+- Git 修订：9b38b34a38a37162f81666a4d16f464537351b6f
 - 包名：com.local.mediaviewer
 - 版本：1.0.1 (2)
 - ABI：arm64-v8a
