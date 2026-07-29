@@ -1,7 +1,6 @@
 package com.local.mediaviewer.app
 
 import android.content.Context
-import androidx.room.Room
 import coil3.ImageLoader
 import com.local.mediaviewer.browser.BrowserRepository
 import com.local.mediaviewer.browser.DefaultBrowserRepository
@@ -18,6 +17,7 @@ import com.local.mediaviewer.network.OkHttpDirectoryProbeTransport
 import com.local.mediaviewer.network.SystemIpv4Resolver
 import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
 import com.local.mediaviewer.playback.MediaViewerDatabase
+import com.local.mediaviewer.playback.MediaViewerDatabaseFactory
 import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.RoomPlaybackPositionStore
@@ -87,11 +87,7 @@ class DefaultAppContainer(context: Context) : AppContainer {
         )
 
     private val database: MediaViewerDatabase by lazy {
-        Room.databaseBuilder(
-            appContext,
-            MediaViewerDatabase::class.java,
-            "mediaviewer.db",
-        ).build()
+        MediaViewerDatabaseFactory.create(appContext)
     }
 
     override val playbackPositionStore: PlaybackPositionStore by lazy {
