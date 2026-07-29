@@ -94,6 +94,40 @@ function Find-BuildTools {
 $repositoryRoot = [IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
+$distDirectory = [IO.Path]::GetFullPath(
+    (Join-Path $repositoryRoot 'dist')
+)
+$finalApk = [IO.Path]::GetFullPath(
+    (Join-Path $distDirectory $artifactName)
+)
+$checksumPath = [IO.Path]::GetFullPath(
+    "$finalApk.sha256"
+)
+$distPrefix = $distDirectory.TrimEnd(
+    [IO.Path]::DirectorySeparatorChar
+) + [IO.Path]::DirectorySeparatorChar
+if (
+    -not $finalApk.StartsWith(
+        $distPrefix,
+        [StringComparison]::OrdinalIgnoreCase
+    ) -or
+    -not $checksumPath.StartsWith(
+        $distPrefix,
+        [StringComparison]::OrdinalIgnoreCase
+    ) -or
+    [IO.Path]::GetFileName($finalApk) -ne $artifactName -or
+    [IO.Path]::GetFileName($checksumPath) -ne "$artifactName.sha256"
+) {
+    throw '个人 Release 交付路径校验失败'
+}
+New-Item `
+    -ItemType Directory `
+    -Path $distDirectory `
+    -Force | Out-Null
+Remove-Item `
+    -LiteralPath @($finalApk, $checksumPath) `
+    -Force `
+    -ErrorAction SilentlyContinue
 $sdkRootFullPath = [IO.Path]::GetFullPath($SdkRoot)
 $keystoreFullPath = [IO.Path]::GetFullPath($KeystorePath)
 $gradle = Join-Path $repositoryRoot 'gradlew.bat'
@@ -303,20 +337,24 @@ if (Test-Path -LiteralPath $debugApk -PathType Leaf) {
     $debugCertificateComparison = '此前证书对比：通过'
 }
 
-$distDirectory = Join-Path $repositoryRoot 'dist'
-New-Item `
-    -ItemType Directory `
-    -Path $distDirectory `
-    -Force | Out-Null
-$finalApk = Join-Path $distDirectory $artifactName
-$checksumPath = "$finalApk.sha256"
-Copy-Item `
-    -LiteralPath $signedStagingApk `
-    -Destination $finalApk `
-    -Force
+$stagingChecksumPath = "$signedStagingApk.sha256"
 $delivery = Write-VerifiedSha256 `
-    -ApkPath $finalApk `
-    -ChecksumPath $checksumPath
+    -ApkPath $signedStagingApk `
+    -ChecksumPath $stagingChecksumPath
+try {
+    Move-Item `
+        -LiteralPath $signedStagingApk `
+        -Destination $finalApk
+    Move-Item `
+        -LiteralPath $stagingChecksumPath `
+        -Destination $checksumPath
+} catch {
+    Remove-Item `
+        -LiteralPath @($finalApk, $checksumPath) `
+        -Force `
+        -ErrorAction SilentlyContinue
+    throw
+}
 $revision = (& git -C $repositoryRoot rev-parse HEAD).Trim()
 $completedAt = [DateTimeOffset]::Now.ToString(
     'yyyy-MM-dd HH:mm:ss zzz'
