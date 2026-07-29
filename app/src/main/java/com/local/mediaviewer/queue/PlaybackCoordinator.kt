@@ -178,11 +178,7 @@ class PlaybackCoordinator(
     }
 
     override fun play() = launchMutation {
-        if (queue.currentItem != null && loadedMediaKey != queue.currentMediaKey) {
-            loadCurrent(autoPlay = true)
-        } else {
-            engine.play()
-        }
+        playCurrent()
     }
 
     override fun pause() = launchMutation { engine.pause() }
@@ -194,8 +190,83 @@ class PlaybackCoordinator(
     }
 
     override fun setPlaybackSpeed(speed: Float) = launchMutation {
-        engine.setPlaybackSpeed(speed)
-        setQueue(queue.copy(playbackSpeed = speed), persist = true)
+        updatePlaybackSpeed(speed)
+    }
+
+    suspend fun setPlayWhenReadyFromSession(playWhenReady: Boolean) = mutate {
+        if (playWhenReady) playCurrent() else engine.pause()
+    }
+
+    suspend fun seek(
+        mediaItemIndex: Int,
+        positionMs: Long,
+        @Suppress("UNUSED_PARAMETER") seekCommand: Int,
+    ) = mutate {
+        val selected = queue.items.getOrNull(mediaItemIndex) ?: return@mutate
+        if (selected.mediaKey != queue.currentMediaKey) {
+            setQueue(QueueNavigator.select(queue, selected.mediaKey), persist = true)
+            loadCurrent(autoPlay = true)
+        }
+        if (positionMs >= 0L) engine.seekTo(positionMs)
+    }
+
+    suspend fun setPlaybackSpeedFromSession(speed: Float) = mutate {
+        updatePlaybackSpeed(speed)
+    }
+
+    suspend fun add(index: Int, items: List<QueueMediaItem>) = mutate {
+        val insertedKeys = items.mapTo(mutableSetOf()) { it.mediaKey }
+        val retained = queue.items.filterNot { it.mediaKey in insertedKeys }.toMutableList()
+        retained.addAll(index.coerceIn(0, retained.size), items)
+        replaceItems(retained, queue.currentMediaKey)
+    }
+
+    suspend fun moveRange(fromIndex: Int, toIndex: Int, newIndex: Int) = mutate {
+        val from = fromIndex.coerceIn(0, queue.items.size)
+        val to = toIndex.coerceIn(from, queue.items.size)
+        if (from == to) return@mutate
+        val moved = queue.items.subList(from, to)
+        val retained = queue.items.toMutableList().apply {
+            subList(from, to).clear()
+        }
+        retained.addAll(newIndex.coerceIn(0, retained.size), moved)
+        replaceItems(retained, queue.currentMediaKey)
+    }
+
+    suspend fun removeRange(fromIndex: Int, toIndex: Int) = mutate {
+        val from = fromIndex.coerceIn(0, queue.items.size)
+        val to = toIndex.coerceIn(from, queue.items.size)
+        if (from == to) return@mutate
+        val removedKeys = queue.items.subList(from, to).mapTo(mutableSetOf()) { it.mediaKey }
+        val removedCurrent = queue.currentMediaKey in removedKeys
+        val retained = queue.items.filterNot { it.mediaKey in removedKeys }
+        val nextCurrentMediaKey = if (removedCurrent) {
+            retained.getOrNull(from)?.mediaKey ?: retained.lastOrNull()?.mediaKey
+        } else {
+            queue.currentMediaKey
+        }
+        replaceItems(retained, nextCurrentMediaKey)
+        if (removedCurrent && queue.currentItem != null) loadCurrent(autoPlay = true)
+    }
+
+    suspend fun replaceFromMedia3(
+        items: List<QueueMediaItem>,
+        startIndex: Int,
+        startPositionMs: Long,
+    ) = mutate {
+        val startMediaKey = items.getOrNull(startIndex)?.mediaKey
+            ?: items.firstOrNull()?.mediaKey
+        replaceItems(items, startMediaKey)
+        if (queue.currentItem != null) {
+            loadCurrent(
+                autoPlay = mutableSessionState.value.playback.status == PlaybackStatus.PLAYING,
+            )
+            if (startPositionMs >= 0L) engine.seekTo(startPositionMs)
+        }
+    }
+
+    suspend fun setPlaybackModeFromSession(mode: PlaybackMode) = mutate {
+        setQueue(QueueNavigator.setMode(queue, mode, random), persist = true)
     }
 
     override fun attachVideoOutput(host: ViewGroup) = engine.attachVideoOutput(host)
@@ -212,7 +283,46 @@ class PlaybackCoordinator(
 
     private fun launchMutation(block: suspend () -> Unit) {
         coordinatorScope.launch {
-            mutex.withLock { block() }
+            mutate(block)
+        }
+    }
+
+    private suspend fun mutate(block: suspend () -> Unit) {
+        mutex.withLock { block() }
+    }
+
+    private suspend fun playCurrent() {
+        if (queue.currentItem != null && loadedMediaKey != queue.currentMediaKey) {
+            loadCurrent(autoPlay = true)
+        } else {
+            engine.play()
+        }
+    }
+
+    private suspend fun updatePlaybackSpeed(speed: Float) {
+        engine.setPlaybackSpeed(speed)
+        setQueue(queue.copy(playbackSpeed = speed), persist = true)
+    }
+
+    private suspend fun replaceItems(
+        items: List<QueueMediaItem>,
+        requestedCurrentMediaKey: String?,
+    ) {
+        val next = if (items.isEmpty()) {
+            PlaybackQueue(mode = queue.mode, playbackSpeed = queue.playbackSpeed)
+        } else {
+            QueueNavigator.replace(
+                items = items,
+                startMediaKey = requestedCurrentMediaKey ?: items.first().mediaKey,
+                mode = queue.mode,
+                random = random,
+            ).copy(playbackSpeed = queue.playbackSpeed)
+        }
+        setQueue(next, persist = true)
+        if (next.items.isEmpty()) {
+            loadedMediaKey = null
+            clearPendingResume()
+            engine.stop()
         }
     }
 
