@@ -177,7 +177,9 @@ class PlaybackCoordinator(
             ),
             persist = true,
         )
-        loadCurrent(autoPlay = true)
+        if (queue.currentItem != null) {
+            loadCurrent(autoPlay = true)
+        }
     }
 
     override fun playNext(item: QueueMediaItem) = launchMutation {
@@ -224,11 +226,7 @@ class PlaybackCoordinator(
     override fun remove(mediaKey: String) = launchMutation {
         val wasCurrent = queue.currentMediaKey == mediaKey
         setQueue(QueueNavigator.remove(queue, mediaKey, random), persist = true)
-        if (queue.currentItem == null) {
-            loadedMediaKey = null
-            clearPendingResume()
-            engine.stop()
-        } else if (wasCurrent) {
+        if (wasCurrent && queue.currentItem != null) {
             updatePlayWhenReady(true)
             loadCurrent(autoPlay = true)
         }
@@ -249,14 +247,10 @@ class PlaybackCoordinator(
     }
 
     override fun clearAll() = launchMutation {
-        updatePlayWhenReady(false)
         setQueue(
             PlaybackQueue(mode = queue.mode, playbackSpeed = queue.playbackSpeed),
             persist = true,
         )
-        loadedMediaKey = null
-        clearPendingResume()
-        engine.stop()
     }
 
     override fun setPlaybackMode(mode: PlaybackMode) = launchMutation {
@@ -441,11 +435,6 @@ class PlaybackCoordinator(
 
     private suspend fun applyQueueEdit(next: PlaybackQueue) {
         setQueue(next, persist = true)
-        if (next.items.isEmpty()) {
-            loadedMediaKey = null
-            clearPendingResume()
-            engine.stop()
-        }
     }
 
     private suspend fun advance(reason: QueueAdvanceReason) {
@@ -546,7 +535,20 @@ class PlaybackCoordinator(
             endpointRecoveryUsedForMediaKey = null
         }
         queue = next
-        updateSession()
+        if (next.items.isEmpty()) {
+            loadedMediaKey = null
+            clearPendingResume()
+            pauseCorrectionIssued = false
+            engine.stop()
+            updateSession(
+                playback = PlaybackState(
+                    playbackSpeed = next.playbackSpeed,
+                ),
+                playWhenReady = false,
+            )
+        } else {
+            updateSession()
+        }
         if (!persist) return
         runCatching { queueRepository.save(next) }
             .onFailure { setError(it.message ?: "播放队列保存失败") }

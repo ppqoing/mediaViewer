@@ -68,6 +68,28 @@ GREEN:
   successful `PLAYING` or a current-item change.
 - Queue-backed view models no longer perform a duplicate endpoint refresh.
 
+### Fix Round 2 — terminal persistence ownership
+
+RED:
+
+- A queue-backed view model observed an `ENDED` engine state after the
+  coordinator had already selected B and incorrectly recorded A's terminal
+  position against B.
+- Removing the only item, replacing with an empty queue, Media3 batch-removing
+  every item, and Media3 setting an empty playlist could retain
+  `playWhenReady=true`.
+
+GREEN:
+
+- Queue-backed view models no longer persist `ENDED`; the coordinator owns all
+  queue terminal and transition snapshots. Legacy non-queue controllers retain
+  the existing view-model save behavior.
+- `setQueue` now owns the empty-queue invariant for every caller: it first
+  persists the old current item, then clears loaded/resume state, stops the
+  engine, and publishes an idle session with `playWhenReady=false`.
+- Focused regressions cover the A-ended/B-current intermediate state and all
+  four empty-queue entry paths.
+
 ## Verification
 
 Focused RED/GREEN suites:
@@ -84,7 +106,7 @@ Final local gate (fresh rerun):
 ```text
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug assembleRelease compileDebugAndroidTestKotlin
 BUILD SUCCESSFUL
-241 JVM tests, 0 failures
+246 JVM tests, 0 failures
 ```
 
 The first full-gate run exposed three `VlcSessionPlayerTest` failures caused by

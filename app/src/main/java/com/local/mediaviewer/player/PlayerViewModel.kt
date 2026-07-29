@@ -50,7 +50,8 @@ class PlayerViewModel(
                 applyResumeIfReady()
                 if (
                     state.status == PlaybackStatus.ENDED &&
-                    lastStatus != PlaybackStatus.ENDED
+                    lastStatus != PlaybackStatus.ENDED &&
+                    controller !is QueuePlaybackController
                 ) {
                     saveSnapshot(ended = true)
                 }

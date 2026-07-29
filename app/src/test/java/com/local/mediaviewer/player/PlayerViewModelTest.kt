@@ -350,6 +350,38 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun `队列结束切项中间态不由视图模型把旧结束位置保存到新当前项`() =
+        runTest(dispatcher) {
+            val first = queueItem("a", "A.mp4")
+            val second = queueItem("b", "B.mp4")
+            val controller = FakeQueuePlaybackController(
+                items = listOf(first, second),
+                currentMediaKey = first.mediaKey,
+            )
+            val store = FakeStore()
+            PlayerViewModel(
+                initialRequest = request().copy(mediaKey = first.mediaKey),
+                controller = controller,
+                positionStore = store,
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            runCurrent()
+
+            controller.emitEndedThenSelectCurrent(
+                endedPlayback = PlaybackState(
+                    status = PlaybackStatus.ENDED,
+                    positionMs = 90_000L,
+                    durationMs = 90_000L,
+                ),
+                selectedMediaKey = second.mediaKey,
+            )
+            runCurrent()
+
+            assertTrue(store.records.isEmpty())
+        }
+
+    @Test
     fun `队列当前项从音频切到视频后页面元数据跟随会话`() =
         runTest(dispatcher) {
             val audio = queueItem("a", "A.mp3", MediaKind.AUDIO)
@@ -788,6 +820,20 @@ private class FakeQueuePlaybackController(
         }
         val queue = mutableSession.value.queue.copy(
             items = items,
+            currentMediaKey = selectedMediaKey,
+        )
+        mutableSession.value = mutableSession.value.copy(
+            queue = queue,
+            currentItem = queue.currentItem,
+        )
+    }
+
+    fun emitEndedThenSelectCurrent(
+        endedPlayback: PlaybackState,
+        selectedMediaKey: String,
+    ) {
+        playback.value = endedPlayback
+        val queue = mutableSession.value.queue.copy(
             currentMediaKey = selectedMediaKey,
         )
         mutableSession.value = mutableSession.value.copy(

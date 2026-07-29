@@ -77,18 +77,91 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
+    fun `删除唯一当前项统一清除播放意图并停止引擎`() = runTest {
+        val engine = FakeEngine()
+        val coordinator = coordinator(engine, scope = this)
+        coordinator.replaceQueue(listOf(item("a")), "a")
+        advanceUntilIdle()
+        val stopsBefore = engine.stopCalls
+
+        coordinator.remove("a")
+        advanceUntilIdle()
+
+        assertTrue(coordinator.sessionState.value.queue.items.isEmpty())
+        assertFalse(coordinator.sessionState.value.playWhenReady)
+        assertTrue(engine.stopCalls > stopsBefore)
+        coordinator.close()
+    }
+
+    @Test
+    fun `替换为空队列统一清除播放意图并停止引擎`() = runTest {
+        val engine = FakeEngine()
+        val coordinator = coordinator(engine, scope = this)
+        coordinator.replaceQueue(listOf(item("a")), "a")
+        advanceUntilIdle()
+        val stopsBefore = engine.stopCalls
+
+        coordinator.replaceQueue(emptyList(), "missing")
+        advanceUntilIdle()
+
+        assertTrue(coordinator.sessionState.value.queue.items.isEmpty())
+        assertFalse(coordinator.sessionState.value.playWhenReady)
+        assertTrue(engine.stopCalls > stopsBefore)
+        coordinator.close()
+    }
+
+    @Test
+    fun `Media3 批量删除全部项目统一清除意图并停止引擎`() = runTest {
+        val engine = FakeEngine()
+        val coordinator = coordinator(engine, scope = this)
+        coordinator.replaceQueue(listOf(item("a"), item("b")), "a")
+        advanceUntilIdle()
+        val stopsBefore = engine.stopCalls
+
+        coordinator.removeRange(0, 2)
+        advanceUntilIdle()
+
+        assertTrue(coordinator.sessionState.value.queue.items.isEmpty())
+        assertFalse(coordinator.sessionState.value.playWhenReady)
+        assertTrue(engine.stopCalls > stopsBefore)
+        coordinator.close()
+    }
+
+    @Test
+    fun `Media3 设置空播放列表统一清除意图并停止引擎`() = runTest {
+        val engine = FakeEngine()
+        val coordinator = coordinator(engine, scope = this)
+        coordinator.replaceQueue(listOf(item("a")), "a")
+        advanceUntilIdle()
+        val stopsBefore = engine.stopCalls
+
+        coordinator.replaceFromMedia3(
+            items = emptyList(),
+            startIndex = 0,
+            startPositionMs = 0L,
+        )
+        advanceUntilIdle()
+
+        assertTrue(coordinator.sessionState.value.queue.items.isEmpty())
+        assertFalse(coordinator.sessionState.value.playWhenReady)
+        assertTrue(engine.stopCalls > stopsBefore)
+        coordinator.close()
+    }
+
+    @Test
     fun `随机队列到末尾清除播放意图并停止引擎`() = runTest {
         val engine = FakeEngine()
         val coordinator = coordinator(engine, scope = this)
         coordinator.setPlaybackMode(PlaybackMode.SHUFFLE)
         coordinator.replaceQueue(listOf(item("a")), "a")
         advanceUntilIdle()
+        val stopsBefore = engine.stopCalls
 
         engine.emit(PlaybackState(status = PlaybackStatus.ENDED))
         advanceUntilIdle()
 
         assertFalse(coordinator.sessionState.value.playWhenReady)
-        assertEquals(1, engine.stopCalls)
+        assertTrue(engine.stopCalls > stopsBefore)
         coordinator.close()
     }
 
