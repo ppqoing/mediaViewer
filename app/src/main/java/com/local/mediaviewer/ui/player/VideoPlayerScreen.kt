@@ -37,6 +37,7 @@ import com.local.mediaviewer.player.VideoInteractionReducer
 import com.local.mediaviewer.player.VideoInteractionState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
+import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -61,6 +62,9 @@ fun VideoPlayerScreen(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSpeedChanged: (Float) -> Unit,
+    playbackMode: PlaybackMode? = null,
+    onPlaybackModeChanged: (PlaybackMode) -> Unit = {},
+    onOpenQueue: (() -> Unit)? = null,
     onRetry: () -> Unit,
     onResumeHintShown: () -> Unit = {},
     onVideoScaleModeChanged: (VideoScaleMode) -> Unit,
@@ -248,6 +252,9 @@ fun VideoPlayerScreen(
                     onPrevious = onPrevious,
                     onNext = onNext,
                     onSpeedChanged = onSpeedChanged,
+                    playbackMode = playbackMode,
+                    onPlaybackModeChanged = onPlaybackModeChanged,
+                    onOpenQueue = onOpenQueue,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         PlaybackVolumeControl(

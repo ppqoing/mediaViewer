@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -11,6 +12,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.app.MediaViewerApp
 import com.local.mediaviewer.image.ImageReaderMode
+import com.local.mediaviewer.model.MediaKind
+import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.testing.FakeAppContainer
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -84,6 +87,24 @@ class MediaViewerNavigationTest {
             .onFirst()
             .assertIsDisplayed()
         rule.onNodeWithTag("media_image").assertExists()
+    }
+
+    @Test
+    fun homeShowsMiniPlayerForCurrentQueueItem() {
+        container.queuePlaybackController.replaceQueue(
+            listOf(
+                QueueMediaItem(
+                    mediaKey = "queue-song",
+                    name = "队列歌曲.mp3",
+                    logicalUrl = "http://media.test/queue-song.mp3",
+                    kind = MediaKind.AUDIO,
+                ),
+            ),
+            "queue-song",
+        )
+
+        rule.onNodeWithText("队列歌曲.mp3").assertIsDisplayed()
+        rule.onNodeWithContentDescription("打开队列").assertIsDisplayed()
     }
 
     private fun openNestedDirectory() {

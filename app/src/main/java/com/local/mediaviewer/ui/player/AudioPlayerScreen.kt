@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.queue.PlaybackMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +46,9 @@ fun AudioPlayerScreen(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSpeedChanged: (Float) -> Unit,
+    playbackMode: PlaybackMode? = null,
+    onPlaybackModeChanged: (PlaybackMode) -> Unit = {},
+    onOpenQueue: (() -> Unit)? = null,
     onRetry: () -> Unit,
     volumeController: PlayerVolumeController,
     onResumeHintShown: () -> Unit = {},
@@ -102,6 +106,9 @@ fun AudioPlayerScreen(
                 onPrevious = onPrevious,
                 onNext = onNext,
                 onSpeedChanged = onSpeedChanged,
+                playbackMode = playbackMode,
+                onPlaybackModeChanged = onPlaybackModeChanged,
+                onOpenQueue = onOpenQueue,
             ) {
                 PlaybackVolumeControl(
                     state = volumeState,

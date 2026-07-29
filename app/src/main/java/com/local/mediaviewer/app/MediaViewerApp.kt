@@ -7,7 +7,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.material3.SnackbarHostState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -17,7 +22,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.toRoute
 import com.local.mediaviewer.browser.BrowserViewModel
 import com.local.mediaviewer.browser.BrowserPlaybackAction
@@ -38,6 +45,8 @@ import com.local.mediaviewer.ui.home.HomeScreen
 import com.local.mediaviewer.ui.image.ImageReaderScreen
 import com.local.mediaviewer.ui.player.AudioPlayerScreen
 import com.local.mediaviewer.ui.player.FullscreenController
+import com.local.mediaviewer.ui.player.NowPlayingBar
+import com.local.mediaviewer.ui.player.PlaybackQueueSheet
 import com.local.mediaviewer.ui.player.SystemVolumeController
 import com.local.mediaviewer.ui.player.VideoPlayerScreen
 import com.local.mediaviewer.ui.player.WindowBrightnessController
@@ -46,10 +55,20 @@ import com.local.mediaviewer.ui.settings.SettingsScreen
 @Composable
 fun MediaViewerApp(container: AppContainer) {
     val navController = rememberNavController()
-    NavHost(
-        navController = navController,
-        startDestination = HomeRoute,
-    ) {
+    val playbackSession by container.queuePlaybackController.sessionState
+        .collectAsStateWithLifecycle()
+    val currentEntry by navController.currentBackStackEntryAsState()
+    var queueSheetVisible by remember { mutableStateOf(false) }
+    val showsMiniPlayer = playbackSession.currentItem != null && (
+        currentEntry?.destination?.hasRoute<HomeRoute>() == true ||
+            currentEntry?.destination?.hasRoute<BrowserRoute>() == true
+        )
+
+    Box {
+        NavHost(
+            navController = navController,
+            startDestination = HomeRoute,
+        ) {
         composable<HomeRoute> {
             val home: HomeViewModel = viewModel(
                 factory = viewModelFactory {
@@ -178,9 +197,6 @@ fun MediaViewerApp(container: AppContainer) {
         }
         composable<PlayerRoute> { entry ->
             val route = entry.toRoute<PlayerRoute>()
-            val playbackSession by container.queuePlaybackController
-                .sessionState
-                .collectAsStateWithLifecycle()
             val item = playbackSession.queue.items.firstOrNull {
                 it.mediaKey == route.mediaKey
             } ?: return@composable
@@ -249,6 +265,9 @@ fun MediaViewerApp(container: AppContainer) {
                     onPrevious = player::previous,
                     onNext = player::next,
                     onSpeedChanged = player::setPlaybackSpeed,
+                    playbackMode = playbackSession.queue.mode,
+                    onPlaybackModeChanged = container.queuePlaybackController::setPlaybackMode,
+                    onOpenQueue = { queueSheetVisible = true },
                     onRetry = player::retry,
                     volumeController = volumeController,
                     onResumeHintShown = player::onResumeHintShown,
@@ -279,6 +298,9 @@ fun MediaViewerApp(container: AppContainer) {
                     onPrevious = player::previous,
                     onNext = player::next,
                     onSpeedChanged = player::setPlaybackSpeed,
+                    playbackMode = playbackSession.queue.mode,
+                    onPlaybackModeChanged = container.queuePlaybackController::setPlaybackMode,
+                    onOpenQueue = { queueSheetVisible = true },
                     onRetry = player::retry,
                     onResumeHintShown = player::onResumeHintShown,
                     onVideoScaleModeChanged =
@@ -335,6 +357,42 @@ fun MediaViewerApp(container: AppContainer) {
                 onBack = {
                     navController.popBackStack()
                 },
+            )
+        }
+    }
+        if (showsMiniPlayer) {
+            NowPlayingBar(
+                state = playbackSession,
+                onToggle = {
+                    if (playbackSession.playback.status ==
+                        com.local.mediaviewer.playback.PlaybackStatus.PLAYING
+                    ) container.queuePlaybackController.pause()
+                    else container.queuePlaybackController.play()
+                },
+                onNext = container.queuePlaybackController::skipNext,
+                onOpenQueue = { queueSheetVisible = true },
+                onOpenPlayer = {
+                    playbackSession.currentItem?.let { item ->
+                        navController.navigate(PlayerRoute(item.mediaKey)) {
+                            launchSingleTop = true
+                        }
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
+        if (queueSheetVisible) {
+            PlaybackQueueSheet(
+                queue = playbackSession.queue,
+                onSelect = {
+                    container.queuePlaybackController.select(it)
+                    queueSheetVisible = false
+                },
+                onMove = container.queuePlaybackController::move,
+                onRemove = container.queuePlaybackController::remove,
+                onClearExceptCurrent = container.queuePlaybackController::clearExceptCurrent,
+                onStopAndClear = container.queuePlaybackController::clearAll,
+                onDismiss = { queueSheetVisible = false },
             )
         }
     }

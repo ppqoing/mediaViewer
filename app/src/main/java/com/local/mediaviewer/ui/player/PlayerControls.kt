@@ -7,10 +7,15 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerUiState
+import com.local.mediaviewer.queue.PlaybackMode
 
 @Composable
 fun PlayerControls(
@@ -26,6 +31,9 @@ fun PlayerControls(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSpeedChanged: (Float) -> Unit,
+    playbackMode: PlaybackMode? = null,
+    onPlaybackModeChanged: (PlaybackMode) -> Unit = {},
+    onOpenQueue: (() -> Unit)? = null,
     secondaryControls: @Composable RowScope.() -> Unit = {},
 ) {
     Column(
@@ -58,6 +66,17 @@ fun PlayerControls(
                 current = state.playbackSpeed,
                 onSpeedChanged = onSpeedChanged,
             )
+            playbackMode?.let { mode ->
+                PlaybackModeButton(
+                    mode = mode,
+                    onModeChanged = onPlaybackModeChanged,
+                )
+            }
+            onOpenQueue?.let { openQueue ->
+                IconButton(onClick = openQueue) {
+                    Icon(Icons.Default.QueueMusic, contentDescription = "打开队列")
+                }
+            }
             secondaryControls()
         }
     }
