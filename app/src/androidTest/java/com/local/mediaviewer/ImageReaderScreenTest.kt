@@ -1,12 +1,19 @@
 package com.local.mediaviewer
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import coil3.ImageLoader
 import com.local.mediaviewer.image.ImageItemFailure
@@ -16,10 +23,14 @@ import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.image.ImageReaderUiState
 import com.local.mediaviewer.image.ImageSortOrder
 import com.local.mediaviewer.image.MediaImageLoaderFactory
+import com.local.mediaviewer.ui.image.ComicHorizontalOffsetSemanticsKey
+import com.local.mediaviewer.ui.image.ComicScaleSemanticsKey
 import com.local.mediaviewer.ui.image.ImageReaderScreen
 import java.time.Instant
+import kotlin.math.abs
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -126,6 +137,70 @@ class ImageReaderScreenTest {
     }
 
     @Test
+    fun comicDoubleTapResetsSharedTransform() {
+        setScreen(contentState(ImageReaderMode.COMIC))
+        zoomAndPanComic()
+        assertTrue(comicScale() > 1f)
+        assertTrue(abs(comicOffset()) > 0.1f)
+
+        rule.onNodeWithTag("comic_reader")
+            .performTouchInput {
+                doubleClick()
+            }
+
+        assertEquals(1f, comicScale(), 0.001f)
+        assertEquals(0f, comicOffset(), 0.001f)
+    }
+
+    @Test
+    fun comicTransformSurvivesReaderModeSwitches() {
+        rule.setContent {
+            var state by remember {
+                mutableStateOf(contentState())
+            }
+            MaterialTheme {
+                ImageReaderScreen(
+                    state = state,
+                    imageLoader = loader,
+                    onModeChanged = {
+                        state = state.copy(mode = it)
+                    },
+                    onSortChanged = {},
+                    onAnchorChanged = {},
+                    onRetryDirectory = {},
+                    onImageLoadError = { _, _ -> },
+                    onImageLoadSuccess = {},
+                    onRetryImage = {},
+                    onBack = {},
+                )
+            }
+        }
+        zoomAndPanComic()
+        val scaleBeforeSwitch = comicScale()
+        val offsetBeforeSwitch = comicOffset()
+
+        rule.onNodeWithTag("reader_mode_toggle")
+            .performClick()
+        rule.onNodeWithTag("media_image")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("reader_mode_toggle")
+            .performClick()
+        rule.onNodeWithTag("comic_reader")
+            .assertIsDisplayed()
+
+        assertEquals(
+            scaleBeforeSwitch,
+            comicScale(),
+            0.001f,
+        )
+        assertEquals(
+            offsetBeforeSwitch,
+            comicOffset(),
+            0.001f,
+        )
+    }
+
+    @Test
     fun itemFailureIsInlineAndRetriesOnlyThatImage() {
         val base = contentState()
         val failedUrl = base.anchorLogicalUrl
@@ -190,6 +265,76 @@ class ImageReaderScreenTest {
             }
         }
     }
+
+    private fun zoomAndPanComic() {
+        rule.onNodeWithTag("comic_reader")
+            .performTouchInput {
+                val middle = center
+                down(
+                    pointerId = 0,
+                    position =
+                        middle + Offset(-40f, 0f),
+                )
+                down(
+                    pointerId = 1,
+                    position =
+                        middle + Offset(40f, 0f),
+                )
+                moveTo(
+                    pointerId = 0,
+                    position =
+                        middle + Offset(-100f, 0f),
+                    delayMillis = 100L,
+                )
+                moveTo(
+                    pointerId = 1,
+                    position =
+                        middle + Offset(100f, 0f),
+                    delayMillis = 100L,
+                )
+                moveTo(
+                    pointerId = 0,
+                    position =
+                        middle + Offset(-160f, 0f),
+                    delayMillis = 100L,
+                )
+                moveTo(
+                    pointerId = 1,
+                    position =
+                        middle + Offset(160f, 0f),
+                    delayMillis = 100L,
+                )
+                up(pointerId = 0)
+                up(pointerId = 1)
+            }
+        rule.onNodeWithTag("comic_reader")
+            .performTouchInput {
+                val start = center
+                down(
+                    pointerId = 0,
+                    position = start,
+                )
+                moveTo(
+                    pointerId = 0,
+                    position =
+                        start + Offset(80f, 0f),
+                    delayMillis = 200L,
+                )
+                up(pointerId = 0)
+            }
+    }
+
+    private fun comicScale(): Float =
+        rule.onNodeWithTag("comic_item:b.png")
+            .fetchSemanticsNode()
+            .config[ComicScaleSemanticsKey]
+
+    private fun comicOffset(): Float =
+        rule.onNodeWithTag("comic_item:b.png")
+            .fetchSemanticsNode()
+            .config[
+                ComicHorizontalOffsetSemanticsKey
+            ]
 }
 
 private fun contentState(

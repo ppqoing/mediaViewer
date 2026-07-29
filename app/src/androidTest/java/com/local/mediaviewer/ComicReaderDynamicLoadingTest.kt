@@ -2,11 +2,16 @@ package com.local.mediaviewer
 
 import android.content.Context
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.core.app.ApplicationProvider
 import coil3.ImageLoader
+import com.local.mediaviewer.image.ComicTransform
 import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.ImageSortOrder
 import com.local.mediaviewer.image.MediaImageLoaderFactory
@@ -82,6 +87,9 @@ class ComicReaderDynamicLoadingTest {
             )
         }
         rule.setContent {
+            var transform by remember {
+                mutableStateOf(ComicTransform())
+            }
             MaterialTheme {
                 ComicReader(
                     images = images,
@@ -94,6 +102,10 @@ class ComicReaderDynamicLoadingTest {
                     itemFailures = emptyMap(),
                     itemRequestGenerations =
                         emptyMap(),
+                    transform = transform,
+                    onTransformChanged = {
+                        transform = it
+                    },
                     onAnchorChanged = {},
                     onImageLoadError = { _, _ -> },
                     onImageLoadSuccess = {},

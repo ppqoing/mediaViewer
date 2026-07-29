@@ -2,6 +2,10 @@ package com.local.mediaviewer
 
 import android.content.Context
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
@@ -17,6 +21,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import com.local.mediaviewer.app.MediaViewerApp
+import com.local.mediaviewer.image.ComicTransform
 import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.ImageSortOrder
 import com.local.mediaviewer.model.MediaKind
@@ -164,6 +169,9 @@ class MediaEnhancementsEndToEndTest {
             }
             .sortedBy(ImageReaderItem::name)
         rule.setContent {
+            var transform by remember {
+                mutableStateOf(ComicTransform())
+            }
             MaterialTheme {
                 ComicReader(
                     images = items,
@@ -177,6 +185,10 @@ class MediaEnhancementsEndToEndTest {
                     itemFailures = emptyMap(),
                     itemRequestGenerations =
                         emptyMap(),
+                    transform = transform,
+                    onTransformChanged = {
+                        transform = it
+                    },
                     onAnchorChanged = {},
                     onImageLoadError = { _, _ -> },
                     onImageLoadSuccess = {},

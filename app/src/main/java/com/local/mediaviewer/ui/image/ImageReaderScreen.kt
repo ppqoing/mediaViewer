@@ -17,10 +17,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import coil3.ImageLoader
+import com.local.mediaviewer.image.ComicTransform
 import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.image.ImageReaderUiState
 import com.local.mediaviewer.image.ImageLoadFailureKind
@@ -43,6 +49,11 @@ fun ImageReaderScreen(
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
+    var comicTransform by rememberSaveable(
+        stateSaver = comicTransformSaver,
+    ) {
+        mutableStateOf(ComicTransform())
+    }
     val content =
         state as? ImageReaderUiState.Content
     val current = content
@@ -143,6 +154,11 @@ fun ImageReaderScreen(
                             itemRequestGenerations =
                                 state
                                     .itemRequestGenerations,
+                            transform =
+                                comicTransform,
+                            onTransformChanged = {
+                                comicTransform = it
+                            },
                             onAnchorChanged =
                                 onAnchorChanged,
                             onImageLoadError =
@@ -192,3 +208,18 @@ fun ImageReaderScreen(
         }
     }
 }
+
+private val comicTransformSaver = listSaver(
+    save = {
+        listOf(
+            it.scale,
+            it.horizontalOffsetPx,
+        )
+    },
+    restore = {
+        ComicTransform(
+            scale = it[0],
+            horizontalOffsetPx = it[1],
+        )
+    },
+)

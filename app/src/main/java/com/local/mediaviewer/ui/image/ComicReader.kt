@@ -20,11 +20,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.listSaver
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -72,6 +71,8 @@ fun ComicReader(
     requestGeneration: Int,
     itemFailures: Map<String, ImageItemFailure>,
     itemRequestGenerations: Map<String, Int>,
+    transform: ComicTransform,
+    onTransformChanged: (ComicTransform) -> Unit,
     onAnchorChanged: (String) -> Unit,
     onImageLoadError:
         (String, ImageLoadFailureKind) -> Unit,
@@ -90,23 +91,11 @@ fun ComicReader(
         initialFirstVisibleItemIndex =
             initialAnchorIndex,
     )
-    var transform by rememberSaveable(
-        stateSaver = listSaver(
-            save = {
-                listOf(
-                    it.scale,
-                    it.horizontalOffsetPx,
-                )
-            },
-            restore = {
-                ComicTransform(
-                    scale = it[0],
-                    horizontalOffsetPx = it[1],
-                )
-            },
-        ),
-    ) {
-        mutableStateOf(ComicTransform())
+    val currentTransform = remember {
+        mutableStateOf(transform)
+    }
+    SideEffect {
+        currentTransform.value = transform
     }
 
     BoxWithConstraints(
@@ -126,21 +115,25 @@ fun ComicReader(
             ).toDp()
         }
         val dragState = rememberDraggableState { delta ->
-            transform = ComicTransformReducer.gesture(
-                current = transform,
+            val updated = ComicTransformReducer.gesture(
+                current = currentTransform.value,
                 zoomChange = 1f,
                 panXPx = delta,
                 viewportWidthPx =
                     viewportWidthPx.toFloat(),
             )
+            currentTransform.value = updated
+            onTransformChanged(updated)
         }
 
         LaunchedEffect(viewportWidthPx) {
-            transform = ComicTransformReducer.clamp(
-                current = transform,
+            val updated = ComicTransformReducer.clamp(
+                current = currentTransform.value,
                 viewportWidthPx =
                     viewportWidthPx.toFloat(),
             )
+            currentTransform.value = updated
+            onTransformChanged(updated)
         }
         LaunchedEffect(images, sortOrder) {
             val anchorIndex =
@@ -169,20 +162,31 @@ fun ComicReader(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("comic_reader")
-                .comicTransformGestures {
+                .comicTransformGestures(
+                    onDoubleTap = {
+                        val reset =
+                            ComicTransformReducer.reset()
+                        currentTransform.value = reset
+                        onTransformChanged(reset)
+                    },
+                    onGesture = {
                         zoomChange,
                         panXPx,
                     ->
-                    transform =
-                        ComicTransformReducer.gesture(
-                            current = transform,
+                        val updated =
+                            ComicTransformReducer.gesture(
+                            current =
+                                currentTransform.value,
                             zoomChange = zoomChange,
                             panXPx = panXPx,
                             viewportWidthPx =
                                 viewportWidthPx
                                     .toFloat(),
                         )
-                }
+                        currentTransform.value = updated
+                        onTransformChanged(updated)
+                    },
+                )
                 .draggable(
                     state = dragState,
                     orientation =
