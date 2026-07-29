@@ -1,6 +1,111 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Get-ZipArchiveCompressionMethods {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ApkPath
+    )
+
+    $stream = [IO.File]::OpenRead($ApkPath)
+    try {
+        $minimumEndOfCentralDirectorySize = 22
+        $maximumCommentLength = 65535
+        if ($stream.Length -lt $minimumEndOfCentralDirectorySize) {
+            throw 'APK 不是有效的 ZIP：缺少中央目录结束记录'
+        }
+
+        $searchLength = [int][math]::Min(
+            $stream.Length,
+            $minimumEndOfCentralDirectorySize + $maximumCommentLength
+        )
+        $tail = [byte[]]::new($searchLength)
+        $stream.Position = $stream.Length - $searchLength
+        [void]$stream.Read($tail, 0, $tail.Length)
+
+        $endOfCentralDirectoryOffset = -1
+        for ($index = $tail.Length - $minimumEndOfCentralDirectorySize;
+            $index -ge 0;
+            $index--) {
+            if ([BitConverter]::ToUInt32($tail, $index) -ne 0x06054b50) {
+                continue
+            }
+            $commentLength = [BitConverter]::ToUInt16($tail, $index + 20)
+            if ($index + $minimumEndOfCentralDirectorySize +
+                $commentLength -eq $tail.Length) {
+                $endOfCentralDirectoryOffset = $index
+                break
+            }
+        }
+        if ($endOfCentralDirectoryOffset -lt 0) {
+            throw 'APK 不是有效的 ZIP：找不到中央目录结束记录'
+        }
+
+        $entryCount = [BitConverter]::ToUInt16(
+            $tail,
+            $endOfCentralDirectoryOffset + 10
+        )
+        $centralDirectoryOffset = [BitConverter]::ToUInt32(
+            $tail,
+            $endOfCentralDirectoryOffset + 16
+        )
+        if ($entryCount -eq [uint16]::MaxValue -or
+            $centralDirectoryOffset -eq [uint32]::MaxValue) {
+            throw '不支持 ZIP64 APK'
+        }
+
+        $stream.Position = $centralDirectoryOffset
+        $reader = [IO.BinaryReader]::new(
+            $stream,
+            [Text.Encoding]::UTF8,
+            $true
+        )
+        try {
+            $methods = @{}
+            for ($entryIndex = 0; $entryIndex -lt $entryCount; $entryIndex++) {
+                if ($reader.ReadUInt32() -ne 0x02014b50) {
+                    throw 'APK 不是有效的 ZIP：中央目录条目无效'
+                }
+                [void]$reader.ReadUInt16()
+                [void]$reader.ReadUInt16()
+                $flags = $reader.ReadUInt16()
+                $compressionMethod = $reader.ReadUInt16()
+                [void]$reader.ReadUInt16()
+                [void]$reader.ReadUInt16()
+                [void]$reader.ReadUInt32()
+                [void]$reader.ReadUInt32()
+                [void]$reader.ReadUInt32()
+                $nameLength = $reader.ReadUInt16()
+                $extraLength = $reader.ReadUInt16()
+                $commentLength = $reader.ReadUInt16()
+                [void]$reader.ReadUInt16()
+                [void]$reader.ReadUInt16()
+                [void]$reader.ReadUInt32()
+                [void]$reader.ReadUInt32()
+
+                $nameBytes = $reader.ReadBytes($nameLength)
+                if ($nameBytes.Length -ne $nameLength) {
+                    throw 'APK 不是有效的 ZIP：条目路径不完整'
+                }
+                $encoding = if ($flags -band 0x0800) {
+                    [Text.Encoding]::UTF8
+                } else {
+                    [Text.Encoding]::GetEncoding(437)
+                }
+                $name = $encoding.GetString($nameBytes)
+                $stream.Position += $extraLength + $commentLength
+                $methods[$name] = [int]$compressionMethod
+            }
+            $methods
+        } finally {
+            $reader.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 function Get-ApkArchiveInventory {
     [CmdletBinding()]
     param(
@@ -14,6 +119,7 @@ function Get-ApkArchiveInventory {
     }
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $compressionMethods = Get-ZipArchiveCompressionMethods -ApkPath $resolvedApk
     $archive = [IO.Compression.ZipFile]::OpenRead($resolvedApk)
     try {
         @(
@@ -22,15 +128,17 @@ function Get-ApkArchiveInventory {
                 if ($entry.FullName -match '^lib/([^/]+)/[^/]+\.so$') {
                     $abi = $Matches[1]
                 }
+                if (-not $compressionMethods.ContainsKey($entry.FullName)) {
+                    throw "APK ZIP 中央目录缺少条目：$($entry.FullName)"
+                }
+                $compressionMethod = $compressionMethods[$entry.FullName]
                 [PSCustomObject]@{
                     Path = $entry.FullName
                     Abi = $abi
                     Length = [int64]$entry.Length
                     CompressedLength = [int64]$entry.CompressedLength
-                    IsCompressed = (
-                        $entry.Length -gt 0 -and
-                        $entry.CompressedLength -lt $entry.Length
-                    )
+                    CompressionMethod = [int]$compressionMethod
+                    IsCompressed = ($compressionMethod -eq 8)
                 }
             }
         )

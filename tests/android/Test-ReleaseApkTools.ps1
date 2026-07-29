@@ -21,7 +21,9 @@ function New-TestApk {
         ),
 
         [switch]$StoreNative,
-        [switch]$StoreDex
+        [switch]$StoreDex,
+
+        [byte[]]$Payload = [byte[]]::new(8192)
     )
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -30,8 +32,7 @@ function New-TestApk {
         [IO.Compression.ZipArchiveMode]::Create
     )
     try {
-        $payload = [byte[]]::new(8192)
-        [Array]::Fill[byte]($payload, 65)
+        [Array]::Fill[byte]($Payload, 65)
         foreach ($name in $NativeEntries) {
             $level = if ($StoreNative) {
                 [IO.Compression.CompressionLevel]::NoCompression
@@ -41,7 +42,7 @@ function New-TestApk {
             $entry = $archive.CreateEntry($name, $level)
             $stream = $entry.Open()
             try {
-                $stream.Write($payload, 0, $payload.Length)
+                $stream.Write($Payload, 0, $Payload.Length)
             } finally {
                 $stream.Dispose()
             }
@@ -54,7 +55,7 @@ function New-TestApk {
         $dex = $archive.CreateEntry('classes.dex', $dexLevel)
         $dexStream = $dex.Open()
         try {
-            $dexStream.Write($payload, 0, $payload.Length)
+            $dexStream.Write($Payload, 0, $Payload.Length)
         } finally {
             $dexStream.Dispose()
         }
@@ -89,6 +90,19 @@ function Assert-ThrowsLike {
     }
 }
 
+function Get-FirstZipLocalCompressionMethod {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $header = [IO.File]::ReadAllBytes($Path)
+    if ([BitConverter]::ToUInt32($header, 0) -ne 0x04034b50) {
+        throw '测试 APK 缺少 ZIP 本地文件头'
+    }
+    [BitConverter]::ToUInt16($header, 8)
+}
+
 $testRoot = Join-Path `
     ([IO.Path]::GetTempPath()) `
     ("mediaviewer-release-test-" + [guid]::NewGuid().ToString('N'))
@@ -101,6 +115,29 @@ try {
         -MaximumBytes 1MB
     if ($result.Abi -ne 'arm64-v8a') {
         throw "返回了错误 ABI：$($result.Abi)"
+    }
+
+    $deflateButLargerApk = Join-Path $testRoot 'deflate-but-larger.apk'
+    New-TestApk -Path $deflateButLargerApk -Payload ([byte[]]@(65))
+    $deflateArchive = [IO.Compression.ZipFile]::OpenRead(
+        $deflateButLargerApk
+    )
+    try {
+        $deflateEntry = $deflateArchive.GetEntry('lib/arm64-v8a/libvlc.so')
+        if ($deflateEntry.CompressedLength -le $deflateEntry.Length) {
+            throw '测试 fixture 并非 DEFLATE 后更大'
+        }
+    } finally {
+        $deflateArchive.Dispose()
+    }
+    if ((Get-FirstZipLocalCompressionMethod -Path $deflateButLargerApk) -ne 8) {
+        throw '测试 fixture 并非 DEFLATE 条目'
+    }
+    $deflateButLargerResult = Assert-Arm64CompressedArchive `
+        -ApkPath $deflateButLargerApk `
+        -MaximumBytes 1MB
+    if ($deflateButLargerResult.Abi -ne 'arm64-v8a') {
+        throw 'DEFLATE 后更大的 APK 未通过 arm64 合约'
     }
 
     $foreignAbiApk = Join-Path $testRoot 'foreign-abi.apk'
