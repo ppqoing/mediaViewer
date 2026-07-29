@@ -1,10 +1,12 @@
 package com.local.mediaviewer.service
 
 import android.os.Binder
+import android.os.IBinder
 import android.os.Process
 import android.view.ViewGroup
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.queue.PlaybackCoordinator
+import java.util.concurrent.atomic.AtomicBoolean
 
 class LocalVideoOutputBinder internal constructor(
     private val coordinator: PlaybackCoordinator,
@@ -17,21 +19,38 @@ class LocalVideoOutputBinder internal constructor(
         processUid = Process::myUid,
     )
 
+    private val released = AtomicBoolean(false)
+    private val lock = Any()
     private var attachedHost: ViewGroup? = null
 
     fun attach(host: ViewGroup) {
         enforceSameUid()
-        if (attachedHost === host) return
-        coordinator.attachVideoOutput(host)
-        attachedHost = host
+        synchronized(lock) {
+            checkActive()
+            if (attachedHost === host) return
+            coordinator.attachVideoOutput(host)
+            attachedHost = host
+        }
     }
 
     fun detach() {
         enforceSameUid()
-        detachFromOwner()
+        synchronized(lock) {
+            checkActive()
+            detachLocked()
+        }
     }
 
-    internal fun detachFromOwner() {
+    internal fun invalidate() {
+        if (!released.compareAndSet(false, true)) return
+        synchronized(lock) {
+            detachLocked()
+        }
+    }
+
+    internal fun isReleased(): Boolean = released.get()
+
+    private fun detachLocked() {
         if (attachedHost == null) return
         coordinator.detachVideoOutput()
         attachedHost = null
@@ -39,13 +58,30 @@ class LocalVideoOutputBinder internal constructor(
 
     fun setScaleMode(mode: VideoScaleMode) {
         enforceSameUid()
-        coordinator.setVideoScaleMode(mode)
+        synchronized(lock) {
+            checkActive()
+            coordinator.setVideoScaleMode(mode)
+        }
     }
 
     private fun enforceSameUid() {
         if (callingUid() != processUid()) {
             throw SecurityException("本地视频输出仅允许应用自身进程访问")
         }
+    }
+
+    private fun checkActive() {
+        check(!released.get()) { "本地视频输出 binder 已释放" }
+    }
+}
+
+internal class LocalVideoOutputBindingChannel(
+    private val binder: LocalVideoOutputBinder,
+) {
+    fun bind(): IBinder? = if (binder.isReleased()) null else binder
+
+    fun invalidate() {
+        binder.invalidate()
     }
 }
 

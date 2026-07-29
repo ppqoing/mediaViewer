@@ -16,11 +16,37 @@ import com.local.mediaviewer.playback.PlaybackInterruption
 import com.local.mediaviewer.playback.PlaybackInterruptions
 import com.local.mediaviewer.queue.PlaybackCoordinator
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicBoolean
+
+internal class PlaybackReleaseSequence(
+    private val saveCurrentSnapshot: suspend () -> Unit,
+    private val releaseResources: () -> Unit,
+) {
+    private val started = AtomicBoolean(false)
+    private val completed = CompletableDeferred<Unit>()
+
+    fun isStarted(): Boolean = started.get()
+
+    suspend fun releaseAfterSave() {
+        if (!started.compareAndSet(false, true)) {
+            completed.await()
+            return
+        }
+        try {
+            saveCurrentSnapshot()
+            releaseResources()
+            completed.complete(Unit)
+        } catch (error: Throwable) {
+            completed.completeExceptionally(error)
+            throw error
+        }
+    }
+}
 
 internal class PlaybackFocusGate(
     private val acquireFocus: () -> Boolean,
@@ -79,7 +105,8 @@ class PlaybackService : MediaSessionService() {
     private lateinit var interruptions: PlaybackInterruptions
     private lateinit var focusGate: PlaybackFocusGate
     private lateinit var localVideoBinder: LocalVideoOutputBinder
-    private var resourcesReleased = false
+    private lateinit var localVideoBindingChannel: LocalVideoOutputBindingChannel
+    private lateinit var releaseSequence: PlaybackReleaseSequence
 
     override fun onCreate() {
         super.onCreate()
@@ -92,7 +119,7 @@ class PlaybackService : MediaSessionService() {
         )
         focusGate = PlaybackFocusGate(
             acquireFocus = { interruptions.acquireFocus() },
-            pause = coordinator::pause,
+            pause = coordinator::pauseForInterruption,
             resume = coordinator::play,
             publishError = coordinator::publishError,
         )
@@ -121,23 +148,32 @@ class PlaybackService : MediaSessionService() {
                         focusGate.onUserPause()
                         interruptions.abandonFocus()
                     },
-                    onStopAndRelease = {
-                        mainHandler.post(::stopAndRelease)
-                    },
+                    onStopAndRelease = ::stopAndRelease,
                 ),
             )
             .setMediaButtonPreferences(mediaButtonPreferences())
             .build()
         localVideoBinder = LocalVideoOutputBinder(coordinator)
+        localVideoBindingChannel = LocalVideoOutputBindingChannel(localVideoBinder)
+        releaseSequence = PlaybackReleaseSequence(
+            saveCurrentSnapshot = coordinator::saveCurrentSnapshot,
+            releaseResources = {
+                localVideoBindingChannel.invalidate()
+                session.release()
+                player.release()
+                interruptions.close()
+                coordinator.close()
+            },
+        )
     }
 
     override fun onGetSession(
         controllerInfo: MediaSession.ControllerInfo,
-    ): MediaSession? = if (resourcesReleased) null else session
+    ): MediaSession? = if (releaseSequence.isStarted()) null else session
 
     override fun onBind(intent: Intent): IBinder? =
         if (intent.action == ACTION_LOCAL_VIDEO_OUTPUT) {
-            localVideoBinder
+            if (releaseSequence.isStarted()) null else localVideoBindingChannel.bind()
         } else {
             super.onBind(intent)
         }
@@ -148,7 +184,7 @@ class PlaybackService : MediaSessionService() {
         startId: Int,
     ): Int {
         if (intent?.action == ACTION_STOP_AND_RELEASE) {
-            stopAndRelease()
+            requestStopAndRelease()
             return START_NOT_STICKY
         }
         return super.onStartCommand(intent, flags, startId)
@@ -156,36 +192,34 @@ class PlaybackService : MediaSessionService() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         if (
-            !resourcesReleased &&
+            !releaseSequence.isStarted() &&
             !player.playWhenReady &&
             session.connectedControllers.isEmpty()
         ) {
-            stopAndRelease()
+            requestStopAndRelease()
         }
     }
 
     override fun onDestroy() {
-        releaseOwnedResources()
+        serviceScope.launch {
+            releaseSequence.releaseAfterSave()
+            serviceScope.cancel()
+        }
         super.onDestroy()
     }
 
-    private fun stopAndRelease() {
-        releaseOwnedResources()
-        stopSelf()
+    private fun requestStopAndRelease() {
+        serviceScope.launch {
+            stopAndRelease()
+        }
     }
 
-    private fun releaseOwnedResources() {
-        if (resourcesReleased) return
-        resourcesReleased = true
-        runBlocking {
-            coordinator.saveCurrentSnapshot()
+    private suspend fun stopAndRelease() {
+        releaseSequence.releaseAfterSave()
+        stopSelf()
+        mainHandler.post {
+            serviceScope.cancel()
         }
-        localVideoBinder.detachFromOwner()
-        session.release()
-        player.release()
-        interruptions.close()
-        coordinator.close()
-        serviceScope.cancel()
     }
 
     private fun currentPlayerPendingIntent(): PendingIntent = PendingIntent.getActivity(

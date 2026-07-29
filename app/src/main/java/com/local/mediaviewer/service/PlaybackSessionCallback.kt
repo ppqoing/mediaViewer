@@ -23,7 +23,7 @@ class PlaybackSessionCallback(
     ),
     private val beforePlay: () -> Boolean = { true },
     private val onUserPause: () -> Unit = {},
-    private val onStopAndRelease: () -> Unit = {},
+    private val onStopAndRelease: suspend () -> Unit = {},
 ) : MediaSession.Callback {
     private val stopAndReleaseCommand = SessionCommand(
         ACTION_STOP_AND_RELEASE,
@@ -73,10 +73,10 @@ class PlaybackSessionCallback(
                 SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED),
             )
         }
-        onStopAndRelease()
-        return Futures.immediateFuture(
-            SessionResult(SessionResult.RESULT_SUCCESS),
-        )
+        return scope.future {
+            onStopAndRelease()
+            SessionResult(SessionResult.RESULT_SUCCESS)
+        }
     }
 
     override fun onPlaybackResumption(

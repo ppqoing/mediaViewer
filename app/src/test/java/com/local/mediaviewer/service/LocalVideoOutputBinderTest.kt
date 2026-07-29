@@ -61,4 +61,38 @@ class LocalVideoOutputBinderTest {
         }
         coordinator.close()
     }
+
+    @Test
+    fun `released binder rejects old references and local channel cannot rebind`() = runTest {
+        val engine = ServiceTestEngine()
+        val coordinator = serviceTestCoordinator(this, engine)
+        val binder = LocalVideoOutputBinder(
+            coordinator = coordinator,
+            callingUid = { 42 },
+            processUid = { 42 },
+        )
+        val channel = LocalVideoOutputBindingChannel(binder)
+        val host = FrameLayout(
+            ApplicationProvider.getApplicationContext<Context>(),
+        )
+        binder.attach(host)
+
+        channel.invalidate()
+        val attachCalls = engine.attachedHosts.size
+        val detachCalls = engine.detachCalls
+        val scaleCalls = engine.scaleModes.size
+
+        assertEquals(null, channel.bind())
+        listOf<() -> Unit>(
+            { binder.attach(host) },
+            { binder.detach() },
+            { binder.setScaleMode(VideoScaleMode.BEST_FIT) },
+        ).forEach { operation ->
+            assertThrows(IllegalStateException::class.java, operation)
+        }
+        assertEquals(attachCalls, engine.attachedHosts.size)
+        assertEquals(detachCalls, engine.detachCalls)
+        assertEquals(scaleCalls, engine.scaleModes.size)
+        coordinator.close()
+    }
 }

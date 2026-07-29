@@ -77,7 +77,9 @@ class PlaybackInterruptionsTest {
         focusListener.onAudioFocusChange(
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
         )
+        assertFalse(interruptions.acquireFocus())
         focusListener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+        assertTrue(interruptions.acquireFocus())
 
         assertEquals(
             listOf(
@@ -122,10 +124,14 @@ class PlaybackInterruptionsTest {
                 .listener,
         )
         focusListener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS)
+        assertTrue(interruptions.acquireFocus())
         context.sendBroadcast(
             Intent(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
         )
         shadowOf(Looper.getMainLooper()).idle()
+        shadowOf(context.getSystemService(AudioManager::class.java))
+            .setNextFocusRequestResponse(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
+        assertFalse(interruptions.acquireFocus())
 
         assertEquals(
             listOf(

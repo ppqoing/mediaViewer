@@ -243,6 +243,10 @@ class PlaybackCoordinator(
         engine.pause()
     }
 
+    fun pauseForInterruption() = launchMutation {
+        engine.pause()
+    }
+
     override fun stop() = launchMutation {
         updatePlayWhenReady(false)
         engine.stop()

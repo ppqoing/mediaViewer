@@ -5,7 +5,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackFocusGateTest {
     @Test
     fun `failed focus acquisition blocks play and publishes Chinese error`() {
@@ -67,5 +71,21 @@ class PlaybackFocusGateTest {
 
         assertEquals(4, pauses)
         assertEquals(0, resumes)
+    }
+
+    @Test
+    fun `interruption pause keeps user play intent until explicit user pause`() = runTest {
+        val coordinator = serviceTestCoordinator(this)
+        coordinator.replaceQueue(listOf(serviceTestItem("a")), "a")
+        advanceUntilIdle()
+
+        coordinator.pauseForInterruption()
+        advanceUntilIdle()
+        assertTrue(coordinator.sessionState.value.playWhenReady)
+
+        coordinator.setPlayWhenReadyFromSession(false)
+        advanceUntilIdle()
+        assertFalse(coordinator.sessionState.value.playWhenReady)
+        coordinator.close()
     }
 }

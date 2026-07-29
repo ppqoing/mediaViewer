@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 internal fun serviceTestCoordinator(
     scope: CoroutineScope,
     engine: ServiceTestEngine = ServiceTestEngine(),
-    repository: ServiceTestQueueRepository = ServiceTestQueueRepository(),
+    repository: PlaybackQueueRepository = ServiceTestQueueRepository(),
     positions: ServiceTestPositionStore = ServiceTestPositionStore(),
 ): PlaybackCoordinator = PlaybackCoordinator(
     engine = engine,

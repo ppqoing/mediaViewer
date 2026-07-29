@@ -10,10 +10,12 @@ import androidx.media3.session.SessionResult
 import androidx.test.core.app.ApplicationProvider
 import com.local.mediaviewer.queue.PlaybackQueue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -150,15 +152,14 @@ class PlaybackSessionCallbackTest {
                     controller,
                 ).availableSessionCommands.contains(stopCommand),
             )
-            assertEquals(
-                SessionResult.RESULT_SUCCESS,
-                callback.onCustomCommand(
-                    sessionFixture.session,
-                    controller,
-                    stopCommand,
-                    Bundle.EMPTY,
-                ).get().resultCode,
+            val stopFuture = callback.onCustomCommand(
+                sessionFixture.session,
+                controller,
+                stopCommand,
+                Bundle.EMPTY,
             )
+            advanceUntilIdle()
+            assertEquals(SessionResult.RESULT_SUCCESS, stopFuture.get().resultCode)
             assertEquals(1, releases)
             assertEquals(listOf("a"), repository.queue.value.items.map { it.mediaKey })
 
@@ -166,6 +167,35 @@ class PlaybackSessionCallbackTest {
             sessionFixture.player.release()
             coordinator.close()
         }
+
+    @Test
+    fun `stop command future completes only after suspend release finishes`() = runTest {
+        val coordinator = serviceTestCoordinator(scope = this)
+        val allowRelease = CompletableDeferred<Unit>()
+        val callback = PlaybackSessionCallback(
+            coordinator = coordinator,
+            scope = this,
+            onStopAndRelease = { allowRelease.await() },
+        )
+        val sessionFixture = mediaSession(coordinator, this)
+
+        val future = callback.onCustomCommand(
+            sessionFixture.session,
+            controllerInfo(),
+            SessionCommand(ACTION_STOP_AND_RELEASE, Bundle.EMPTY),
+            Bundle.EMPTY,
+        )
+        advanceUntilIdle()
+        assertFalse(future.isDone)
+
+        allowRelease.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(SessionResult.RESULT_SUCCESS, future.get().resultCode)
+
+        sessionFixture.session.release()
+        sessionFixture.player.release()
+        coordinator.close()
+    }
 
     private fun mediaSession(
         coordinator: com.local.mediaviewer.queue.PlaybackCoordinator,

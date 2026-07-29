@@ -40,16 +40,19 @@ class PlaybackInterruptions(
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                abandonFocus()
                 onEvent(PlaybackInterruption.BecomingNoisy)
             }
         }
     }
     private var receiverRegistered = false
     private var focusHeld = false
+    private var focusLostTransiently = false
 
     @Synchronized
     fun acquireFocus(): Boolean {
         if (focusHeld) return true
+        if (focusLostTransiently) return false
         registerNoisyReceiver()
         focusHeld = audioManager.requestAudioFocus(focusRequest) ==
             AudioManager.AUDIOFOCUS_REQUEST_GRANTED
@@ -59,10 +62,11 @@ class PlaybackInterruptions(
 
     @Synchronized
     fun abandonFocus() {
-        if (focusHeld) {
+        if (focusHeld || focusLostTransiently) {
             audioManager.abandonAudioFocusRequest(focusRequest)
-            focusHeld = false
         }
+        focusHeld = false
+        focusLostTransiently = false
         unregisterNoisyReceiver()
     }
 
@@ -74,13 +78,39 @@ class PlaybackInterruptions(
     private fun onAudioFocusChange(change: Int) {
         when (change) {
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                markTransientLoss()
                 onEvent(PlaybackInterruption.TransientLoss)
-            AudioManager.AUDIOFOCUS_LOSS ->
+            }
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                markPermanentLoss()
                 onEvent(PlaybackInterruption.PermanentLoss)
-            AudioManager.AUDIOFOCUS_GAIN ->
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                markFocusGained()
                 onEvent(PlaybackInterruption.FocusGained)
+            }
         }
+    }
+
+    @Synchronized
+    private fun markTransientLoss() {
+        focusHeld = false
+        focusLostTransiently = true
+    }
+
+    @Synchronized
+    private fun markPermanentLoss() {
+        focusHeld = false
+        focusLostTransiently = false
+        unregisterNoisyReceiver()
+    }
+
+    @Synchronized
+    private fun markFocusGained() {
+        focusHeld = true
+        focusLostTransiently = false
+        registerNoisyReceiver()
     }
 
     private fun registerNoisyReceiver() {
