@@ -3,7 +3,6 @@ package com.local.mediaviewer.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.local.mediaviewer.core.AppResult
-import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
@@ -18,7 +17,7 @@ import kotlinx.coroutines.launch
 
 class PlayerViewModel(
     private val initialRequest: PlayerRequest,
-    val engine: PlaybackEngine,
+    val controller: PlaybackController,
     private val positionStore: PlaybackPositionStore,
     private val session: ServerSessionManager,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -43,11 +42,11 @@ class PlayerViewModel(
             pendingResumeMs = positionStore.resumePosition(
                 initialRequest.mediaKey,
             )
-            engine.prepare(currentRequest.requestUrl)
-            engine.play()
+            controller.prepare(currentRequest.requestUrl)
+            controller.play()
         }
         viewModelScope.launch {
-            engine.state.collect { state ->
+            controller.state.collect { state ->
                 mutableUiState.value = mutableUiState.value.withEngine(state)
                 applyResumeIfReady()
                 if (
@@ -73,16 +72,47 @@ class PlayerViewModel(
         }
     }
 
-    fun play() = engine.play()
+    fun play() = controller.play()
 
     fun pause() {
-        engine.pause()
+        controller.pause()
         viewModelScope.launch {
             saveSnapshot(ended = false)
         }
     }
 
-    fun seekTo(positionMs: Long) = engine.seekTo(positionMs)
+    fun seekTo(positionMs: Long) = controller.seekTo(positionMs)
+
+    fun seekBack() = seekBy(-SEEK_INCREMENT_MS)
+
+    fun seekForward() = seekBy(SEEK_INCREMENT_MS)
+
+    fun replay() {
+        controller.seekTo(0L)
+        controller.play()
+    }
+
+    fun beginScrub() = updateInteraction(
+        PlayerInteractionReducer::beginScrub,
+    )
+
+    fun previewScrub(positionMs: Long) {
+        mutableUiState.value = PlayerInteractionReducer.updateScrub(
+            mutableUiState.value,
+            positionMs,
+        )
+    }
+
+    fun commitScrub() {
+        val (next, target) =
+            PlayerInteractionReducer.finishScrub(mutableUiState.value)
+        mutableUiState.value = next
+        target?.let(controller::seekTo)
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        controller.setPlaybackSpeed(speed)
+    }
 
     fun setVideoScaleMode(mode: VideoScaleMode) {
         if (
@@ -90,14 +120,14 @@ class PlayerViewModel(
         ) {
             return
         }
-        engine.setVideoScaleMode(mode)
+        controller.setVideoScaleMode(mode)
         mutableUiState.value = mutableUiState.value.copy(
             videoScaleMode = mode,
         )
     }
 
     fun onBackgrounded() {
-        engine.pause()
+        controller.pause()
         viewModelScope.launch {
             saveSnapshot(ended = false)
         }
@@ -111,7 +141,7 @@ class PlayerViewModel(
             try {
                 saveSnapshot(ended = false)
             } finally {
-                engine.close()
+                controller.close()
                 onSaved()
             }
         }
@@ -119,13 +149,13 @@ class PlayerViewModel(
 
     private fun applyResumeIfReady() {
         val resume = pendingResumeMs ?: return
-        val state = engine.state.value
+        val state = controller.state.value
         if (
             !resumeApplied &&
             state.isSeekable &&
             state.durationMs > resume
         ) {
-            engine.seekTo(resume)
+            controller.seekTo(resume)
             resumeApplied = true
             mutableUiState.value = mutableUiState.value.copy(
                 resumedFromMs = resume,
@@ -137,7 +167,7 @@ class PlayerViewModel(
         if (endpointRetryUsed) return
         endpointRetryUsed = true
         val recoveryPositionMs =
-            engine.state.value.positionMs
+            controller.state.value.positionMs
         when (val refreshed = session.refreshAfterRequestFailure()) {
             is AppResult.Success -> {
                 currentRequest = currentRequest.copy(
@@ -151,8 +181,8 @@ class PlayerViewModel(
                 mutableUiState.value = mutableUiState.value.copy(
                     errorMessage = null,
                 )
-                engine.prepare(currentRequest.requestUrl)
-                engine.play()
+                controller.prepare(currentRequest.requestUrl)
+                controller.play()
             }
 
             is AppResult.Failure -> {
@@ -165,7 +195,7 @@ class PlayerViewModel(
     }
 
     private suspend fun saveSnapshot(ended: Boolean) {
-        val state = engine.state.value
+        val state = controller.state.value
         positionStore.record(
             mediaKey = currentRequest.mediaKey,
             positionMs = state.positionMs,
@@ -176,10 +206,29 @@ class PlayerViewModel(
     }
 
     override fun onCleared() {
-        engine.close()
+        controller.close()
+    }
+
+    private fun seekBy(deltaMs: Long) {
+        val state = mutableUiState.value
+        if (!state.isSeekable || state.durationMs <= 0L) return
+        controller.seekTo(
+            PlayerInteractionReducer.seekTarget(
+                state.positionMs,
+                state.durationMs,
+                deltaMs,
+            ),
+        )
+    }
+
+    private fun updateInteraction(
+        transform: (PlayerUiState) -> PlayerUiState,
+    ) {
+        mutableUiState.value = transform(mutableUiState.value)
     }
 
     private companion object {
         const val SAVE_INTERVAL_MS = 5_000L
+        const val SEEK_INCREMENT_MS = 10_000L
     }
 }

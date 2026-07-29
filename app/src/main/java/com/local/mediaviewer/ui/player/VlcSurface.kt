@@ -5,11 +5,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.viewinterop.AndroidView
-import com.local.mediaviewer.playback.PlaybackEngine
+import com.local.mediaviewer.player.PlaybackController
 
 @Composable
 fun VlcSurface(
-    engine: PlaybackEngine,
+    controller: PlaybackController,
     keepScreenOn: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -18,7 +18,7 @@ fun VlcSurface(
         factory = { context ->
             FrameLayout(context).also { host ->
                 host.keepScreenOn = keepScreenOn
-                engine.attachVideoOutput(host)
+                controller.attachVideoOutput(host)
             }
         },
         update = { host ->
@@ -26,7 +26,7 @@ fun VlcSurface(
         },
         onRelease = { host ->
             host.keepScreenOn = false
-            engine.detachVideoOutput()
+            controller.detachVideoOutput()
         },
     )
 }

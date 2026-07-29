@@ -25,7 +25,14 @@ data class PlayerUiState(
     val errorMessage: String? = null,
     val videoScaleMode:
         VideoScaleMode = VideoScaleMode.BEST_FIT,
+    val previewPositionMs: Long? = null,
+    val playbackSpeed: Float = 1f,
+    val canSkipPrevious: Boolean = false,
+    val canSkipNext: Boolean = false,
 )
+
+val PlayerUiState.displayedPositionMs: Long
+    get() = previewPositionMs ?: positionMs
 
 fun PlayerUiState.withEngine(state: PlaybackState) = copy(
     status = state.status,
@@ -34,4 +41,5 @@ fun PlayerUiState.withEngine(state: PlaybackState) = copy(
     bufferedPercent = state.bufferedPercent,
     isSeekable = state.isSeekable,
     errorMessage = state.errorMessage,
+    playbackSpeed = state.playbackSpeed,
 )

@@ -166,8 +166,8 @@ fun MediaViewerApp(container: AppContainer) {
                                 mediaKey = route.mediaKey,
                                 kind = route.kind,
                             ),
-                            engine =
-                                container.playbackEngineFactory.create(),
+                            controller =
+                                container.playbackControllerFactory(),
                             positionStore =
                                 container.playbackPositionStore,
                             session = container.sessionManager,
@@ -207,7 +207,7 @@ fun MediaViewerApp(container: AppContainer) {
             } else {
                 VideoPlayerScreen(
                     state = state,
-                    engine = player.engine,
+                    controller = player.controller,
                     fullscreenController = fullscreenController,
                     onPlay = player::play,
                     onPause = player::pause,

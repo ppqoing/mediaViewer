@@ -19,12 +19,11 @@ import com.local.mediaviewer.model.RootShare
 import com.local.mediaviewer.model.ServerConfig
 import com.local.mediaviewer.model.SessionEndpoint
 import com.local.mediaviewer.network.ConnectionTestResult
-import com.local.mediaviewer.playback.PlaybackEngine
-import com.local.mediaviewer.playback.PlaybackEngineFactory
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
+import com.local.mediaviewer.player.PlaybackController
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.settings.ServerSettingsRepository
@@ -68,10 +67,9 @@ class FakeAppContainer(
             endpoint = endpoint,
             template = directoryContent,
         )
-    override val playbackEngineFactory =
-        PlaybackEngineFactory {
-            FakePlaybackEngine()
-        }
+    override val playbackControllerFactory: () -> PlaybackController = {
+        FakePlaybackController()
+    }
     override val playbackPositionStore: PlaybackPositionStore =
         InMemoryPlaybackPositionStore()
     override val imageLoader: ImageLoader =
@@ -404,7 +402,7 @@ private fun fixtureEntry(
     kind = kind,
 )
 
-private class FakePlaybackEngine : PlaybackEngine {
+private class FakePlaybackController : PlaybackController {
     private val mutable = MutableStateFlow(
         PlaybackState(
             status = PlaybackStatus.IDLE,
@@ -426,6 +424,8 @@ private class FakePlaybackEngine : PlaybackEngine {
 
     override fun setVideoScaleMode(mode: VideoScaleMode) = Unit
 
+    override fun setPlaybackSpeed(speed: Float) = Unit
+
     override fun play() {
         mutable.value = mutable.value.copy(
             status = PlaybackStatus.PLAYING,
@@ -437,6 +437,8 @@ private class FakePlaybackEngine : PlaybackEngine {
             status = PlaybackStatus.PAUSED,
         )
     }
+
+    override fun stop() = Unit
 
     override fun seekTo(positionMs: Long) {
         mutable.value = mutable.value.copy(

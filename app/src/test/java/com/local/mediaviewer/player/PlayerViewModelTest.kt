@@ -5,7 +5,6 @@ import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.model.SessionEndpoint
 import com.local.mediaviewer.network.ConnectionTestResult
-import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
@@ -40,20 +39,20 @@ class PlayerViewModelTest {
 
     @Test
     fun `准备播放并在获得时长后恢复位置`() = runTest(dispatcher) {
-        val engine = FakeEngine()
+        val controller = FakePlaybackController()
         val store = FakeStore(resume = 30_000)
         val viewModel = PlayerViewModel(
             request(),
-            engine,
+            controller,
             store,
             FakePlayerSession(),
             clock = { 123L },
         )
         runCurrent()
-        assertEquals(listOf(request().requestUrl), engine.preparedUrls)
-        assertEquals(1, engine.playCalls)
+        assertEquals(listOf(request().requestUrl), controller.preparedUrls)
+        assertEquals(1, controller.playCalls)
 
-        engine.emit(
+        controller.emit(
             PlaybackState(
                 status = PlaybackStatus.PLAYING,
                 durationMs = 100_000,
@@ -63,7 +62,7 @@ class PlayerViewModelTest {
         )
         runCurrent()
 
-        assertEquals(listOf(30_000L), engine.seeks)
+        assertEquals(listOf(30_000L), controller.seekCalls)
         assertEquals(30_000L, viewModel.uiState.value.resumedFromMs)
         viewModel.leave {}
         runCurrent()
@@ -71,17 +70,17 @@ class PlayerViewModelTest {
 
     @Test
     fun `每五秒暂停和结束使用当前快照写入`() = runTest(dispatcher) {
-        val engine = FakeEngine()
+        val controller = FakePlaybackController()
         val store = FakeStore()
         val viewModel = PlayerViewModel(
             request(),
-            engine,
+            controller,
             store,
             FakePlayerSession(),
             clock = { 456L },
         )
         runCurrent()
-        engine.emit(
+        controller.emit(
             PlaybackState(
                 PlaybackStatus.PLAYING,
                 positionMs = 20_000,
@@ -96,7 +95,7 @@ class PlayerViewModelTest {
         runCurrent()
         assertTrue(store.records.size >= 2)
 
-        engine.emit(
+        controller.emit(
             PlaybackState(
                 PlaybackStatus.ENDED,
                 positionMs = 100_000,
@@ -112,7 +111,7 @@ class PlayerViewModelTest {
 
     @Test
     fun `第一次错误刷新 IPv4 并只重试一次`() = runTest(dispatcher) {
-        val engine = FakeEngine()
+        val controller = FakePlaybackController()
         val session = FakePlayerSession(
             refreshed = SessionEndpoint(
                 "http://media.example:8080",
@@ -122,14 +121,14 @@ class PlayerViewModelTest {
         )
         val viewModel = PlayerViewModel(
             request(),
-            engine,
+            controller,
             FakeStore(),
             session,
             clock = { 1L },
         )
         runCurrent()
 
-        engine.emit(
+        controller.emit(
             PlaybackState(
                 status = PlaybackStatus.ERROR,
                 errorMessage = "第一次失败",
@@ -138,12 +137,12 @@ class PlayerViewModelTest {
         runCurrent()
         assertEquals(1, session.refreshCalls)
         assertTrue(
-            engine.preparedUrls.last().startsWith(
+            controller.preparedUrls.last().startsWith(
                 "http://192.0.2.2:8080/",
             ),
         )
 
-        engine.emit(
+        controller.emit(
             PlaybackState(
                 status = PlaybackStatus.ERROR,
                 errorMessage = "仍然失败",
@@ -159,10 +158,10 @@ class PlayerViewModelTest {
     @Test
     fun `端点刷新后从故障时位置继续播放`() =
         runTest(dispatcher) {
-            val engine = FakeEngine()
+            val controller = FakePlaybackController()
             val viewModel = PlayerViewModel(
                 request(),
-                engine,
+                controller,
                 FakeStore(resume = 30_000),
                 FakePlayerSession(
                     refreshed = SessionEndpoint(
@@ -173,7 +172,7 @@ class PlayerViewModelTest {
                 ),
             )
             runCurrent()
-            engine.emit(
+            controller.emit(
                 PlaybackState(
                     status = PlaybackStatus.PLAYING,
                     positionMs = 1_000,
@@ -182,9 +181,9 @@ class PlayerViewModelTest {
                 ),
             )
             runCurrent()
-            assertEquals(listOf(30_000L), engine.seeks)
+            assertEquals(listOf(30_000L), controller.seekCalls)
 
-            engine.emit(
+            controller.emit(
                 PlaybackState(
                     status = PlaybackStatus.PLAYING,
                     positionMs = 40_000,
@@ -192,7 +191,7 @@ class PlayerViewModelTest {
                     isSeekable = true,
                 ),
             )
-            engine.emit(
+            controller.emit(
                 PlaybackState(
                     status = PlaybackStatus.ERROR,
                     positionMs = 40_000,
@@ -201,7 +200,7 @@ class PlayerViewModelTest {
                 ),
             )
             runCurrent()
-            engine.emit(
+            controller.emit(
                 PlaybackState(
                     status = PlaybackStatus.PLAYING,
                     positionMs = 0,
@@ -213,7 +212,7 @@ class PlayerViewModelTest {
 
             assertEquals(
                 listOf(30_000L, 40_000L),
-                engine.seeks,
+                controller.seekCalls,
             )
             viewModel.leave {}
             runCurrent()
@@ -222,17 +221,17 @@ class PlayerViewModelTest {
     @Test
     fun `后台和离开保存快照且重复离开只完成一次`() =
         runTest(dispatcher) {
-            val engine = FakeEngine()
+            val controller = FakePlaybackController()
             val store = FakeStore()
             val viewModel = PlayerViewModel(
                 request(),
-                engine,
+                controller,
                 store,
                 FakePlayerSession(),
                 clock = { 789L },
             )
             runCurrent()
-            engine.emit(
+            controller.emit(
                 PlaybackState(
                     status = PlaybackStatus.PLAYING,
                     positionMs = 40_000,
@@ -244,7 +243,7 @@ class PlayerViewModelTest {
 
             viewModel.onBackgrounded()
             runCurrent()
-            assertEquals(1, engine.pauseCalls)
+            assertEquals(1, controller.pauseCalls)
             assertEquals(40_000L, store.records.last().positionMs)
 
             var leaveCallbacks = 0
@@ -252,7 +251,7 @@ class PlayerViewModelTest {
             viewModel.leave { leaveCallbacks += 1 }
             runCurrent()
 
-            assertEquals(1, engine.closeCalls)
+            assertEquals(1, controller.closeCalls)
             assertEquals(1, leaveCallbacks)
             assertTrue(store.records.size >= 2)
         }
@@ -260,16 +259,16 @@ class PlayerViewModelTest {
     @Test
     fun `画面模式只更新当前播放器且不重启媒体`() =
         runTest(dispatcher) {
-            val engine = FakeEngine()
+            val controller = FakePlaybackController()
             val viewModel = PlayerViewModel(
                 request(),
-                engine,
+                controller,
                 FakeStore(),
                 FakePlayerSession(),
             )
             runCurrent()
-            val preparesBefore = engine.preparedUrls.size
-            val playsBefore = engine.playCalls
+            val preparesBefore = controller.preparedUrls.size
+            val playsBefore = controller.playCalls
 
             viewModel.setVideoScaleMode(
                 VideoScaleMode.STRETCH,
@@ -281,17 +280,17 @@ class PlayerViewModelTest {
             )
             assertEquals(
                 listOf(VideoScaleMode.STRETCH),
-                engine.scaleModes,
+                controller.scaleModes,
             )
             assertEquals(
                 preparesBefore,
-                engine.preparedUrls.size,
+                controller.preparedUrls.size,
             )
-            assertEquals(playsBefore, engine.playCalls)
+            assertEquals(playsBefore, controller.playCalls)
 
             val second = PlayerViewModel(
                 request().copy(mediaKey = "second"),
-                FakeEngine(),
+                FakePlaybackController(),
                 FakeStore(),
                 FakePlayerSession(),
             )
@@ -304,6 +303,112 @@ class PlayerViewModelTest {
             second.leave {}
             runCurrent()
         }
+
+    @Test
+    fun `拖动期间不 seek 且结束时只提交一次目标位置`() =
+        runTest(dispatcher) {
+            val controller = FakePlaybackController()
+            val viewModel = PlayerViewModel(
+                request(),
+                controller,
+                FakeStore(),
+                FakePlayerSession(),
+            )
+            runCurrent()
+            controller.emit(
+                PlaybackState(
+                    status = PlaybackStatus.PLAYING,
+                    positionMs = 10_000L,
+                    durationMs = 60_000L,
+                    isSeekable = true,
+                ),
+            )
+            runCurrent()
+
+            viewModel.beginScrub()
+            viewModel.previewScrub(20_000L)
+            viewModel.previewScrub(30_000L)
+            viewModel.previewScrub(40_000L)
+
+            assertEquals(40_000L, viewModel.uiState.value.displayedPositionMs)
+            assertTrue(controller.seekCalls.isEmpty())
+
+            viewModel.commitScrub()
+
+            assertEquals(listOf(40_000L), controller.seekCalls)
+            viewModel.leave {}
+            runCurrent()
+        }
+
+    @Test
+    fun `快退快进按十秒且截断到媒体边界`() = runTest(dispatcher) {
+        val controller = FakePlaybackController()
+        val viewModel = PlayerViewModel(
+            request(),
+            controller,
+            FakeStore(),
+            FakePlayerSession(),
+        )
+        runCurrent()
+        controller.emit(
+            PlaybackState(
+                status = PlaybackStatus.PLAYING,
+                positionMs = 3_000L,
+                durationMs = 60_000L,
+                isSeekable = true,
+            ),
+        )
+        runCurrent()
+
+        viewModel.seekBack()
+        controller.emit(
+            controller.state.value.copy(positionMs = 58_000L),
+        )
+        runCurrent()
+        viewModel.seekForward()
+
+        assertEquals(listOf(0L, 60_000L), controller.seekCalls)
+        viewModel.leave {}
+        runCurrent()
+    }
+
+    @Test
+    fun `重播从零开始并继续播放`() = runTest(dispatcher) {
+        val controller = FakePlaybackController()
+        val viewModel = PlayerViewModel(
+            request(),
+            controller,
+            FakeStore(),
+            FakePlayerSession(),
+        )
+        runCurrent()
+        val playsBefore = controller.playCalls
+
+        viewModel.replay()
+
+        assertEquals(listOf(0L), controller.seekCalls)
+        assertEquals(playsBefore + 1, controller.playCalls)
+        viewModel.leave {}
+        runCurrent()
+    }
+
+    @Test
+    fun `倍速命令委托给控制器`() = runTest(dispatcher) {
+        val controller = FakePlaybackController()
+        val viewModel = PlayerViewModel(
+            request(),
+            controller,
+            FakeStore(),
+            FakePlayerSession(),
+        )
+        runCurrent()
+
+        viewModel.setPlaybackSpeed(1.5f)
+
+        assertEquals(listOf(1.5f), controller.playbackSpeeds)
+        viewModel.leave {}
+        runCurrent()
+    }
 }
 
 private fun request() = PlayerRequest(
@@ -314,11 +419,12 @@ private fun request() = PlayerRequest(
     kind = MediaKind.VIDEO,
 )
 
-private class FakeEngine : PlaybackEngine {
+private class FakePlaybackController : PlaybackController {
     private val mutable = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = mutable
     val preparedUrls = mutableListOf<String>()
-    val seeks = mutableListOf<Long>()
+    val seekCalls = mutableListOf<Long>()
+    val playbackSpeeds = mutableListOf<Float>()
     val scaleModes = mutableListOf<VideoScaleMode>()
     var playCalls = 0
     var pauseCalls = 0
@@ -336,7 +442,9 @@ private class FakeEngine : PlaybackEngine {
         scaleModes += mode
     }
 
-    override fun setPlaybackSpeed(speed: Float) = Unit
+    override fun setPlaybackSpeed(speed: Float) {
+        playbackSpeeds += speed
+    }
 
     override fun play() {
         playCalls += 1
@@ -349,7 +457,7 @@ private class FakeEngine : PlaybackEngine {
     override fun stop() = Unit
 
     override fun seekTo(positionMs: Long) {
-        seeks += positionMs
+        seekCalls += positionMs
     }
 
     override fun close() {

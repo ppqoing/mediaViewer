@@ -29,7 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.mediaviewer.player.PlayerUiState
-import com.local.mediaviewer.playback.PlaybackEngine
+import com.local.mediaviewer.player.PlaybackController
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
 
@@ -37,7 +37,7 @@ import com.local.mediaviewer.playback.VideoScaleMode
 @Composable
 fun VideoPlayerScreen(
     state: PlayerUiState,
-    engine: PlaybackEngine,
+    controller: PlaybackController,
     fullscreenController: FullscreenStateController,
     onPlay: () -> Unit,
     onPause: () -> Unit,
@@ -85,7 +85,7 @@ fun VideoPlayerScreen(
                     .weight(1f),
             ) {
                 VlcSurface(
-                    engine = engine,
+                    controller = controller,
                     keepScreenOn =
                         state.status == PlaybackStatus.PLAYING,
                     modifier = Modifier.fillMaxSize(),

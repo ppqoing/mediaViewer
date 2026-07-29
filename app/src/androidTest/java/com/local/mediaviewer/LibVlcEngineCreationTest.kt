@@ -37,9 +37,9 @@ class LibVlcEngineCreationTest {
     fun appFactoryClosesPreviousEngineBeforeCreatingNext() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val container = DefaultAppContainer(context)
-        val first = container.playbackEngineFactory.create()
+        val first = container.playbackControllerFactory()
 
-        val second = container.playbackEngineFactory.create()
+        val second = container.playbackControllerFactory()
 
         assertThrows(IllegalStateException::class.java) {
             first.prepare("http://127.0.0.1:8080/middle/old.mp4")

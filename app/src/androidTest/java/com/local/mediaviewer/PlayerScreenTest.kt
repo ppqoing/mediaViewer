@@ -10,10 +10,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.player.PlayerUiState
-import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
+import com.local.mediaviewer.player.PlaybackController
 import com.local.mediaviewer.ui.player.AudioPlayerScreen
 import com.local.mediaviewer.ui.player.FullscreenStateController
 import com.local.mediaviewer.ui.player.VideoPlayerScreen
@@ -73,7 +73,7 @@ class PlayerScreenTest {
                         durationMs = 60_000,
                         isSeekable = true,
                     ),
-                    engine = ScreenFakePlaybackEngine(),
+                    controller = ScreenFakePlaybackController(),
                     fullscreenController =
                         fullscreenController,
                     onPlay = {},
@@ -126,7 +126,7 @@ private class ScreenFakeFullscreenController :
     }
 }
 
-private class ScreenFakePlaybackEngine : PlaybackEngine {
+private class ScreenFakePlaybackController : PlaybackController {
     private val mutable = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = mutable
 
@@ -138,9 +138,13 @@ private class ScreenFakePlaybackEngine : PlaybackEngine {
 
     override fun setVideoScaleMode(mode: VideoScaleMode) = Unit
 
+    override fun setPlaybackSpeed(speed: Float) = Unit
+
     override fun play() = Unit
 
     override fun pause() = Unit
+
+    override fun stop() = Unit
 
     override fun seekTo(positionMs: Long) = Unit
 
