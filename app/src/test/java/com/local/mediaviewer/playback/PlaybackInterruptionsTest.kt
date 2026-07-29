@@ -5,9 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.os.Looper
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -23,7 +20,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [29])
 class PlaybackInterruptionsTest {
     @Test
-    fun `播放获取焦点暂停释放且下次播放重新请求`() {
+    fun `获取和放弃焦点且下次获取会重新请求`() {
         val application =
             ApplicationProvider.getApplicationContext<Application>()
         shadowOf(application).grantPermissions(
@@ -35,16 +32,16 @@ class PlaybackInterruptionsTest {
         val shadowAudioManager = shadowOf(audioManager)
         val interruptions = PlaybackInterruptions(
             context = context,
-            onPauseRequested = {},
+            onEvent = {},
         )
 
-        assertTrue(interruptions.start())
+        assertTrue(interruptions.acquireFocus())
         val firstRequest = requireNotNull(
             shadowAudioManager
                 .lastAudioFocusRequest
                 .audioFocusRequest,
         )
-        interruptions.close()
+        interruptions.abandonFocus()
         assertSame(
             firstRequest,
             shadowAudioManager
@@ -54,100 +51,98 @@ class PlaybackInterruptionsTest {
         shadowAudioManager.setNextFocusRequestResponse(
             AudioManager.AUDIOFOCUS_REQUEST_FAILED,
         )
-        assertFalse(interruptions.start())
-        interruptions.close()
+        assertFalse(interruptions.acquireFocus())
+        interruptions.abandonFocus()
 
         shadowAudioManager.setNextFocusRequestResponse(
             AudioManager.AUDIOFOCUS_REQUEST_GRANTED,
         )
-        assertTrue(interruptions.start())
+        assertTrue(interruptions.acquireFocus())
         interruptions.close()
     }
 
     @Test
-    fun `播放结束和错误释放焦点`() {
+    fun `焦点暂失后恢复发出可恢复事件`() {
+        val context = testContext()
+        val events = mutableListOf<PlaybackInterruption>()
+        val interruptions = PlaybackInterruptions(context, events::add)
+
+        assertTrue(interruptions.acquireFocus())
+        val focusListener = requireNotNull(
+            shadowOf(context.getSystemService(AudioManager::class.java))
+                .lastAudioFocusRequest
+                .listener,
+        )
+        focusListener.onAudioFocusChange(
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+        )
+        focusListener.onAudioFocusChange(AudioManager.AUDIOFOCUS_GAIN)
+
+        assertEquals(
+            listOf(
+                PlaybackInterruption.TransientLoss,
+                PlaybackInterruption.FocusGained,
+            ),
+            events,
+        )
+        interruptions.close()
+    }
+
+    @Test
+    fun `焦点 duck 发出暂失事件`() {
+        val context = testContext()
+        val events = mutableListOf<PlaybackInterruption>()
+        val interruptions = PlaybackInterruptions(context, events::add)
+
+        assertTrue(interruptions.acquireFocus())
+        val focusListener = requireNotNull(
+            shadowOf(context.getSystemService(AudioManager::class.java))
+                .lastAudioFocusRequest
+                .listener,
+        )
+        focusListener.onAudioFocusChange(
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
+        )
+
+        assertEquals(listOf(PlaybackInterruption.TransientLoss), events)
+        interruptions.close()
+    }
+
+    @Test
+    fun `永久失焦和耳机断开不发出可恢复事件`() {
+        val context = testContext()
+        val events = mutableListOf<PlaybackInterruption>()
+        val interruptions = PlaybackInterruptions(context, events::add)
+
+        assertTrue(interruptions.acquireFocus())
+        val focusListener = requireNotNull(
+            shadowOf(context.getSystemService(AudioManager::class.java))
+                .lastAudioFocusRequest
+                .listener,
+        )
+        focusListener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS)
+        context.sendBroadcast(
+            Intent(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(
+            listOf(
+                PlaybackInterruption.PermanentLoss,
+                PlaybackInterruption.BecomingNoisy,
+            ),
+            events,
+        )
+        assertFalse(events.contains(PlaybackInterruption.FocusGained))
+        interruptions.close()
+    }
+
+    private fun testContext(): Context {
         val application =
             ApplicationProvider.getApplicationContext<Application>()
         shadowOf(application).grantPermissions(
             "${application.packageName}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
         )
-        val context: Context = application
-        val audioManager =
-            context.getSystemService(AudioManager::class.java)
-        val shadowAudioManager = shadowOf(audioManager)
-
-        listOf(
-            EngineEvent.EndReached,
-            EngineEvent.Error("无法播放"),
-        ).forEach { event ->
-            val interruptions = PlaybackInterruptions(
-                context = context,
-                onPauseRequested = {},
-            )
-            assertTrue(interruptions.start())
-            val request = requireNotNull(
-                shadowAudioManager
-                    .lastAudioFocusRequest
-                    .audioFocusRequest,
-            )
-
-            interruptions.onPlaybackEvent(event)
-
-            assertSame(
-                request,
-                shadowAudioManager
-                    .lastAbandonedAudioFocusRequest,
-            )
-            interruptions.close()
-        }
+        return application
     }
-
-    @Test
-    fun `耳机断开广播触发暂停且关闭后不再接收`() {
-        val application =
-            ApplicationProvider.getApplicationContext<Application>()
-        shadowOf(application).grantPermissions(
-            "${application.packageName}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
-        )
-        val context: Context = application
-        var pauses = 0
-        val interruptions = PlaybackInterruptions(
-            context = context,
-            onPauseRequested = { pauses += 1 },
-        )
-
-        assertTrue(interruptions.start())
-        assertTrue(interruptions.start())
-        context.sendBroadcast(
-            Intent(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
-        )
-        shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(1, pauses)
-
-        interruptions.close()
-        interruptions.close()
-        context.sendBroadcast(
-            Intent(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
-        )
-        shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(1, pauses)
-    }
-
-    @Test
-    fun `进程进入后台触发暂停`() {
-        var pauses = 0
-        val interruptions = PlaybackInterruptions(
-            context = ApplicationProvider.getApplicationContext(),
-            onPauseRequested = { pauses += 1 },
-        )
-
-        interruptions.onStop(TestLifecycleOwner())
-
-        assertEquals(1, pauses)
-    }
-}
-
-private class TestLifecycleOwner : LifecycleOwner {
-    private val registry = LifecycleRegistry(this)
-    override val lifecycle: Lifecycle = registry
 }

@@ -28,7 +28,6 @@ class AndroidVlcPlaybackEngine(
     private val mediaPlayer = MediaPlayer(libVlc)
     private val mutableState = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = mutableState.asStateFlow()
-    private val interruptions = PlaybackInterruptions(context, ::pause)
     private var videoHost: ViewGroup? = null
     private var videoLayout: VLCVideoLayout? = null
     private var videoScaleMode = VideoScaleMode.BEST_FIT
@@ -111,9 +110,7 @@ class AndroidVlcPlaybackEngine(
 
     override fun play() {
         if (closed.get()) return
-        if (interruptions.start()) {
-            mediaPlayer.play()
-        }
+        mediaPlayer.play()
     }
 
     override fun pause() {
@@ -121,13 +118,11 @@ class AndroidVlcPlaybackEngine(
         if (mediaPlayer.isPlaying) {
             mediaPlayer.pause()
         }
-        interruptions.close()
     }
 
     override fun stop() {
         if (closed.get()) return
         mediaPlayer.stop()
-        interruptions.close()
         mutableState.value = PlaybackState(
             playbackSpeed = mutableState.value.playbackSpeed,
         )
@@ -168,7 +163,6 @@ class AndroidVlcPlaybackEngine(
 
             else -> return
         }
-        interruptions.onPlaybackEvent(mapped)
         mutableState.value = EngineEventReducer.reduce(
             state = mutableState.value,
             event = mapped,
@@ -177,7 +171,6 @@ class AndroidVlcPlaybackEngine(
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
-        interruptions.close()
         mediaPlayer.setEventListener(null)
         runOnMainThread {
             detachVideoOutputInternal()

@@ -10,98 +10,97 @@ import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
+sealed interface PlaybackInterruption {
+    data object TransientLoss : PlaybackInterruption
+    data object PermanentLoss : PlaybackInterruption
+    data object FocusGained : PlaybackInterruption
+    data object BecomingNoisy : PlaybackInterruption
+}
+
 class PlaybackInterruptions(
     context: Context,
-    private val onPauseRequested: () -> Unit,
-) : AutoCloseable, DefaultLifecycleObserver {
+    private val onEvent: (PlaybackInterruption) -> Unit,
+) : AutoCloseable {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val audioManager =
-        appContext.getSystemService(AudioManager::class.java)
-    private val focusRequest = AudioFocusRequest.Builder(
-        AudioManager.AUDIOFOCUS_GAIN,
-    )
+    private val audioManager = appContext.getSystemService(AudioManager::class.java)
+    private val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
                 .build(),
         )
-        .setOnAudioFocusChangeListener { change ->
-            if (
-                change == AudioManager.AUDIOFOCUS_LOSS ||
-                change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT
-            ) {
-                onPauseRequested()
-            }
-        }
+        .setOnAudioFocusChangeListener(::onAudioFocusChange)
         .build()
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
-                onPauseRequested()
+                onEvent(PlaybackInterruption.BecomingNoisy)
             }
         }
     }
-    private var started = false
+    private var receiverRegistered = false
+    private var focusHeld = false
 
     @Synchronized
-    fun start(): Boolean {
-        if (!started) {
-            runOnMainThread {
-                ContextCompat.registerReceiver(
-                    appContext,
-                    noisyReceiver,
-                    IntentFilter(
-                        AudioManager.ACTION_AUDIO_BECOMING_NOISY,
-                    ),
-                    ContextCompat.RECEIVER_NOT_EXPORTED,
-                )
-                try {
-                    ProcessLifecycleOwner.get()
-                        .lifecycle
-                        .addObserver(this)
-                } catch (error: Throwable) {
-                    appContext.unregisterReceiver(noisyReceiver)
-                    throw error
-                }
-            }
-            started = true
-        }
-        return audioManager.requestAudioFocus(focusRequest) ==
+    fun acquireFocus(): Boolean {
+        if (focusHeld) return true
+        registerNoisyReceiver()
+        focusHeld = audioManager.requestAudioFocus(focusRequest) ==
             AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        if (!focusHeld) unregisterNoisyReceiver()
+        return focusHeld
     }
 
-    override fun onStop(owner: LifecycleOwner) {
-        onPauseRequested()
-    }
-
-    fun onPlaybackEvent(event: EngineEvent) {
-        if (
-            event == EngineEvent.EndReached ||
-            event is EngineEvent.Error
-        ) {
-            close()
+    @Synchronized
+    fun abandonFocus() {
+        if (focusHeld) {
+            audioManager.abandonAudioFocusRequest(focusRequest)
+            focusHeld = false
         }
+        unregisterNoisyReceiver()
     }
 
     @Synchronized
     override fun close() {
-        if (!started) return
+        abandonFocus()
+    }
+
+    private fun onAudioFocusChange(change: Int) {
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->
+                onEvent(PlaybackInterruption.TransientLoss)
+            AudioManager.AUDIOFOCUS_LOSS ->
+                onEvent(PlaybackInterruption.PermanentLoss)
+            AudioManager.AUDIOFOCUS_GAIN ->
+                onEvent(PlaybackInterruption.FocusGained)
+        }
+    }
+
+    private fun registerNoisyReceiver() {
+        if (receiverRegistered) return
         runOnMainThread {
-            ProcessLifecycleOwner.get()
-                .lifecycle
-                .removeObserver(this)
+            ContextCompat.registerReceiver(
+                appContext,
+                noisyReceiver,
+                IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+        }
+        receiverRegistered = true
+    }
+
+    private fun unregisterNoisyReceiver() {
+        if (!receiverRegistered) return
+        runOnMainThread {
             appContext.unregisterReceiver(noisyReceiver)
         }
-        audioManager.abandonAudioFocusRequest(focusRequest)
-        started = false
+        receiverRegistered = false
     }
 
     private fun runOnMainThread(action: () -> Unit) {
@@ -123,23 +122,15 @@ class PlaybackInterruptions(
                 }
             },
         ) {
-            "无法向主线程提交播放生命周期操作"
+            "无法向主线程提交音频焦点操作"
         }
         val finished = try {
-            completed.await(
-                MAIN_THREAD_TIMEOUT_SECONDS,
-                TimeUnit.SECONDS,
-            )
+            completed.await(MAIN_THREAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         } catch (error: InterruptedException) {
             Thread.currentThread().interrupt()
-            throw IllegalStateException(
-                "等待播放生命周期主线程操作时被中断",
-                error,
-            )
+            throw IllegalStateException("等待音频焦点主线程操作时被中断", error)
         }
-        check(finished) {
-            "播放生命周期主线程操作超时"
-        }
+        check(finished) { "音频焦点主线程操作超时" }
         failure?.let { throw it }
     }
 

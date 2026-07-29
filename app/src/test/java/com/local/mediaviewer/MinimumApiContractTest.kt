@@ -1,6 +1,10 @@
 package com.local.mediaviewer
 
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import androidx.test.core.app.ApplicationProvider
 import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.DefaultDispatcherProvider
@@ -34,5 +38,47 @@ class MinimumApiContractTest {
         assertSame(Dispatchers.IO, DefaultDispatcherProvider.io)
         assertSame(Dispatchers.Default, DefaultDispatcherProvider.default)
         assertSame(Dispatchers.Main, DefaultDispatcherProvider.main)
+    }
+
+    @Test
+    fun `后台播放服务声明媒体前台服务类型和所需权限`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val packageManager = context.packageManager
+        val service = ComponentName(
+            context.packageName,
+            "${context.packageName}.service.PlaybackService",
+        )
+
+        val info = packageManager.getServiceInfo(service, 0)
+
+        assertEquals(
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+            info.foregroundServiceType and
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+        )
+        val requestedPermissions = packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.GET_PERMISSIONS,
+        ).requestedPermissions.orEmpty().toSet()
+        assertEquals(
+            setOf(
+                "android.permission.FOREGROUND_SERVICE",
+                "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+            ),
+            requestedPermissions.intersect(
+                setOf(
+                    "android.permission.FOREGROUND_SERVICE",
+                    "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+                ),
+            ),
+        )
+        assertEquals(
+            emptyList<Any>(),
+            packageManager.queryBroadcastReceivers(
+                Intent(Intent.ACTION_BOOT_COMPLETED)
+                    .setPackage(context.packageName),
+                0,
+            ),
+        )
     }
 }
