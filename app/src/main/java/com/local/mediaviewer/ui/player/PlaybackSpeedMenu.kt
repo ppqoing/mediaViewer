@@ -22,12 +22,16 @@ import java.util.Locale
 fun PlaybackSpeedMenu(
     current: Float,
     onSpeedChanged: (Float) -> Unit,
+    onExpandedChanged: (Boolean) -> Unit = {},
 ) {
     var expanded by remember { mutableStateOf(false) }
     val description = "播放速度，当前 ${formatPlaybackSpeed(current)} 倍"
 
     TextButton(
-        onClick = { expanded = true },
+        onClick = {
+            expanded = true
+            onExpandedChanged(true)
+        },
         modifier = Modifier.semantics {
             contentDescription = description
         },
@@ -36,7 +40,10 @@ fun PlaybackSpeedMenu(
     }
     DropdownMenu(
         expanded = expanded,
-        onDismissRequest = { expanded = false },
+        onDismissRequest = {
+            expanded = false
+            onExpandedChanged(false)
+        },
     ) {
         PlaybackSpeeds.supported.forEach { speed ->
             DropdownMenuItem(
@@ -44,6 +51,7 @@ fun PlaybackSpeedMenu(
                 onClick = {
                     onSpeedChanged(speed)
                     expanded = false
+                    onExpandedChanged(false)
                 },
                 trailingIcon = {
                     if (speed == current) {

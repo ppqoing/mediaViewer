@@ -219,6 +219,7 @@ fun MediaViewerApp(container: AppContainer) {
                     state = state,
                     controller = player.controller,
                     fullscreenController = fullscreenController,
+                    preferences = container.playerPreferencesRepository,
                     onPlay = player::play,
                     onPause = player::pause,
                     onReplay = player::replay,

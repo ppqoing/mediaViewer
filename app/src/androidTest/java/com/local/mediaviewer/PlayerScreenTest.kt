@@ -18,6 +18,7 @@ import com.local.mediaviewer.player.PlaybackController
 import com.local.mediaviewer.ui.player.AudioPlayerScreen
 import com.local.mediaviewer.ui.player.FullscreenStateController
 import com.local.mediaviewer.ui.player.VideoPlayerScreen
+import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
@@ -96,6 +97,7 @@ class PlayerScreenTest {
                     controller = ScreenFakePlaybackController(),
                     fullscreenController =
                         fullscreenController,
+                    preferences = ScreenPlayerPreferencesRepository(),
                     onPlay = {},
                     onPause = {},
                     onReplay = {},
@@ -189,6 +191,15 @@ private class ScreenFakeFullscreenController :
 
     override fun close() {
         mutable.value = false
+    }
+}
+
+private class ScreenPlayerPreferencesRepository : PlayerPreferencesRepository {
+    private val mutable = MutableStateFlow(true)
+    override val hasShownVideoGestures: StateFlow<Boolean> = mutable
+
+    override suspend fun markVideoGesturesShown() {
+        mutable.value = true
     }
 }
 

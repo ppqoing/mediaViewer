@@ -30,13 +30,17 @@ fun videoScaleLabel(mode: VideoScaleMode): String =
 fun VideoScaleMenu(
     current: VideoScaleMode,
     onSelected: (VideoScaleMode) -> Unit,
+    onExpandedChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Box(modifier) {
         IconButton(
-            onClick = { expanded = true },
+            onClick = {
+                expanded = true
+                onExpandedChanged(true)
+            },
             modifier = Modifier.testTag("video_scale_menu"),
         ) {
             Icon(
@@ -47,13 +51,17 @@ fun VideoScaleMenu(
         }
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false },
+            onDismissRequest = {
+                expanded = false
+                onExpandedChanged(false)
+            },
         ) {
             VideoScaleMode.entries.forEach { mode ->
                 DropdownMenuItem(
                     text = { Text(videoScaleLabel(mode)) },
                     onClick = {
                         expanded = false
+                        onExpandedChanged(false)
                         onSelected(mode)
                     },
                     leadingIcon = if (mode == current) {

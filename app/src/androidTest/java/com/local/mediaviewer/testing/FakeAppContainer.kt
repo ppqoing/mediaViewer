@@ -27,6 +27,7 @@ import com.local.mediaviewer.player.PlaybackController
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.settings.ServerSettingsRepository
+import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +55,8 @@ class FakeAppContainer(
     override val readerPreferencesRepository:
         ReaderPreferencesRepository =
         readerPreferences
+    override val playerPreferencesRepository: PlayerPreferencesRepository =
+        FakePlayerPreferencesRepository()
     override val sessionManager: ServerSessionManager =
         FakeServerSessionManager(endpoint)
     override val directoryContentRepository:
@@ -99,6 +102,15 @@ private class FakeReaderPreferencesRepository(
     override suspend fun setDefaultMode(mode: ImageReaderMode) {
         savedModes += mode
         mutable.value = mode
+    }
+}
+
+private class FakePlayerPreferencesRepository : PlayerPreferencesRepository {
+    private val mutable = MutableStateFlow(false)
+    override val hasShownVideoGestures: Flow<Boolean> = mutable
+
+    override suspend fun markVideoGesturesShown() {
+        mutable.value = true
     }
 }
 
