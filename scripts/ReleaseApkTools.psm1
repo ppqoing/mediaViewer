@@ -1,6 +1,119 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Find-CompleteAndroidBuildTools {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$SdkRoot
+    )
+
+    $resolvedSdkRoot = [IO.Path]::GetFullPath($SdkRoot)
+    $versionedDirectories = @(
+        foreach ($directory in Get-ChildItem `
+            -LiteralPath (
+                Join-Path $resolvedSdkRoot 'build-tools'
+            ) `
+            -Directory) {
+            $version = $null
+            if (-not [version]::TryParse(
+                $directory.Name,
+                [ref]$version
+            )) {
+                continue
+            }
+            [PSCustomObject]@{
+                Directory = $directory
+                Version = $version
+            }
+        }
+    )
+    $candidate = $versionedDirectories |
+        Sort-Object Version -Descending |
+        Where-Object {
+            $directory = $_.Directory
+            @(
+                @(
+                    'aapt.exe',
+                    'zipalign.exe',
+                    'apksigner.bat'
+                ) | Where-Object {
+                    -not (Test-Path -LiteralPath (
+                        Join-Path $directory.FullName $_
+                    ) -PathType Leaf)
+                }
+            ).Count -eq 0
+        } |
+        Select-Object -First 1
+    if ($null -eq $candidate) {
+        throw 'Android SDK 中缺少完整稳定 Build Tools'
+    }
+    [IO.Path]::GetFullPath(
+        $candidate.Directory.FullName
+    )
+}
+
+function Assert-ApkBadgingMetadata {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Badging,
+
+        [Parameter(Mandatory)]
+        [string]$ExpectedApplicationId,
+
+        [Parameter(Mandatory)]
+        [int]$ExpectedVersionCode,
+
+        [Parameter(Mandatory)]
+        [string]$ExpectedVersionName,
+
+        [Parameter(Mandatory)]
+        [int]$ExpectedMinSdk,
+
+        [Parameter(Mandatory)]
+        [int]$ExpectedTargetSdk,
+
+        [Parameter(Mandatory)]
+        [string]$ExpectedAbi
+    )
+
+    $packageLine = $Badging |
+        Where-Object { $_ -like 'package:*' } |
+        Select-Object -First 1
+    if (
+        $packageLine -notmatch
+            "name='$([regex]::Escape($ExpectedApplicationId))'" -or
+        $packageLine -notmatch
+            "versionCode='$ExpectedVersionCode'" -or
+        $packageLine -notmatch
+            "versionName='$([regex]::Escape($ExpectedVersionName))'"
+    ) {
+        throw "APK package/version 元数据错误：$packageLine"
+    }
+    if ($Badging -notcontains "sdkVersion:'$ExpectedMinSdk'") {
+        throw "APK minSdk 不是 $ExpectedMinSdk"
+    }
+    if (
+        $Badging -notcontains
+            "targetSdkVersion:'$ExpectedTargetSdk'"
+    ) {
+        throw "APK targetSdk 不是 $ExpectedTargetSdk"
+    }
+    if ($Badging -notcontains "native-code: '$ExpectedAbi'") {
+        throw "APK ABI 不是严格的 $ExpectedAbi"
+    }
+
+    [PSCustomObject]@{
+        ApplicationId = $ExpectedApplicationId
+        VersionCode = $ExpectedVersionCode
+        VersionName = $ExpectedVersionName
+        MinSdk = $ExpectedMinSdk
+        TargetSdk = $ExpectedTargetSdk
+        Abi = $ExpectedAbi
+    }
+}
+
 function Get-ZipArchiveCompressionMethods {
     [CmdletBinding()]
     param(
@@ -298,6 +411,8 @@ function Get-ApkSignerCertificateSha256 {
 }
 
 Export-ModuleMember -Function @(
+    'Find-CompleteAndroidBuildTools',
+    'Assert-ApkBadgingMetadata',
     'Get-ApkArchiveInventory',
     'Assert-Arm64CompressedArchive',
     'Write-VerifiedSha256',

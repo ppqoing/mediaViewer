@@ -208,6 +208,87 @@ try {
         Get-ApkSignerCertificateSha256 `
             -ApkSignerOutput @('Verifies')
     } '没有证书 SHA-256'
+
+    $sdkRoot = Join-Path $testRoot 'sdk'
+    $buildToolsRoot = Join-Path $sdkRoot 'build-tools'
+    $stableBuildTools = Join-Path $buildToolsRoot '35.0.0'
+    $previewBuildTools = Join-Path $buildToolsRoot '36.0.0-rc1'
+    New-Item `
+        -ItemType Directory `
+        -Path $stableBuildTools, $previewBuildTools `
+        -Force | Out-Null
+    foreach ($tool in @(
+        'aapt.exe',
+        'zipalign.exe',
+        'apksigner.bat'
+    )) {
+        [IO.File]::WriteAllText(
+            (Join-Path $stableBuildTools $tool),
+            ''
+        )
+        [IO.File]::WriteAllText(
+            (Join-Path $previewBuildTools $tool),
+            ''
+        )
+    }
+    $selectedBuildTools =
+        Find-CompleteAndroidBuildTools `
+            -SdkRoot $sdkRoot
+    if (
+        $selectedBuildTools -ne
+            [IO.Path]::GetFullPath($stableBuildTools)
+    ) {
+        throw (
+            '未在 preview 目录存在时选中完整稳定 Build Tools：' +
+            $selectedBuildTools
+        )
+    }
+
+    $validBadging = @(
+        (
+            "package: name='com.local.mediaviewer' " +
+            "versionCode='2' versionName='1.0.1'"
+        ),
+        "sdkVersion:'29'",
+        "targetSdkVersion:'36'",
+        "native-code: 'arm64-v8a'"
+    )
+    $null = Assert-ApkBadgingMetadata `
+        -Badging $validBadging `
+        -ExpectedApplicationId 'com.local.mediaviewer' `
+        -ExpectedVersionCode 2 `
+        -ExpectedVersionName '1.0.1' `
+        -ExpectedMinSdk 29 `
+        -ExpectedTargetSdk 36 `
+        -ExpectedAbi 'arm64-v8a'
+    Assert-ThrowsLike {
+        Assert-ApkBadgingMetadata `
+            -Badging (
+                $validBadging -replace
+                    "sdkVersion:'29'",
+                    "sdkVersion:'28'"
+            ) `
+            -ExpectedApplicationId 'com.local.mediaviewer' `
+            -ExpectedVersionCode 2 `
+            -ExpectedVersionName '1.0.1' `
+            -ExpectedMinSdk 29 `
+            -ExpectedTargetSdk 36 `
+            -ExpectedAbi 'arm64-v8a'
+    } 'minSdk'
+    Assert-ThrowsLike {
+        Assert-ApkBadgingMetadata `
+            -Badging (
+                $validBadging -replace
+                    "targetSdkVersion:'36'",
+                    "targetSdkVersion:'35'"
+            ) `
+            -ExpectedApplicationId 'com.local.mediaviewer' `
+            -ExpectedVersionCode 2 `
+            -ExpectedVersionName '1.0.1' `
+            -ExpectedMinSdk 29 `
+            -ExpectedTargetSdk 36 `
+            -ExpectedAbi 'arm64-v8a'
+    } 'targetSdk'
 } finally {
     $resolvedTestRoot = [IO.Path]::GetFullPath($testRoot)
     $tempPrefix = (

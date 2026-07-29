@@ -21,6 +21,8 @@ $expectedApplicationId = 'com.local.mediaviewer'
 $expectedVersionName = '1.0.1'
 $expectedVersionCode = 2
 $expectedAbi = 'arm64-v8a'
+$expectedMinSdk = 29
+$expectedTargetSdk = 36
 $maximumBytes = 70MB
 $artifactName = (
     'mediaviewer-v1.0.1-arm64-v8a-release.apk'
@@ -57,38 +59,6 @@ function Invoke-SigningChecked {
     if ($LASTEXITCODE -ne 0) {
         throw "APK 签名命令失败，退出码 $LASTEXITCODE"
     }
-}
-
-function Find-BuildTools {
-    param(
-        [Parameter(Mandatory)]
-        [string]$ResolvedSdkRoot
-    )
-
-    $candidate = Get-ChildItem `
-        -LiteralPath (Join-Path $ResolvedSdkRoot 'build-tools') `
-        -Directory |
-        Sort-Object { [version]$_.Name } -Descending |
-        Where-Object {
-            $directory = $_
-            $missing = @(
-                @(
-                    'aapt.exe',
-                    'zipalign.exe',
-                    'apksigner.bat'
-                ) | Where-Object {
-                    -not (Test-Path -LiteralPath (
-                        Join-Path $directory.FullName $_
-                    ))
-                }
-            )
-            $missing.Count -eq 0
-        } |
-        Select-Object -First 1
-    if ($null -eq $candidate) {
-        throw 'Android SDK 中缺少完整 Build Tools'
-    }
-    $candidate.FullName
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath(
@@ -128,14 +98,19 @@ Remove-Item `
     -LiteralPath @($finalApk, $checksumPath) `
     -Force `
     -ErrorAction SilentlyContinue
+$module = Join-Path $PSScriptRoot 'ReleaseApkTools.psm1'
+if (-not (Test-Path -LiteralPath $module -PathType Leaf)) {
+    throw "缺少必需文件：$module"
+}
+Import-Module $module -Force
 $sdkRootFullPath = [IO.Path]::GetFullPath($SdkRoot)
 $keystoreFullPath = [IO.Path]::GetFullPath($KeystorePath)
 $gradle = Join-Path $repositoryRoot 'gradlew.bat'
-$buildTools = Find-BuildTools -ResolvedSdkRoot $sdkRootFullPath
+$buildTools = Find-CompleteAndroidBuildTools `
+    -SdkRoot $sdkRootFullPath
 $aapt = Join-Path $buildTools 'aapt.exe'
 $zipalign = Join-Path $buildTools 'zipalign.exe'
 $apksigner = Join-Path $buildTools 'apksigner.bat'
-$module = Join-Path $PSScriptRoot 'ReleaseApkTools.psm1'
 
 if (-not (Test-Path -LiteralPath $keystoreFullPath -PathType Leaf)) {
     throw '缺少必需签名文件'
@@ -193,7 +168,6 @@ try {
     }
 }
 
-Import-Module $module -Force
 $unsignedApk = Join-Path `
     $repositoryRoot `
     'app\build\outputs\apk\release\app-release-unsigned.apk'
@@ -281,22 +255,14 @@ $badging = & $aapt dump badging $signedStagingApk
 if ($LASTEXITCODE -ne 0) {
     throw 'aapt 无法读取已签名 APK'
 }
-$packageLine = $badging |
-    Where-Object { $_ -like 'package:*' } |
-    Select-Object -First 1
-if (
-    $packageLine -notmatch
-        "name='$([regex]::Escape($expectedApplicationId))'" -or
-    $packageLine -notmatch
-        "versionCode='$expectedVersionCode'" -or
-    $packageLine -notmatch
-        "versionName='$([regex]::Escape($expectedVersionName))'"
-) {
-    throw "已签名 APK 元数据错误：$packageLine"
-}
-if ($badging -notcontains "native-code: '$expectedAbi'") {
-    throw "已签名 APK ABI 错误：$($badging -join ' ')"
-}
+$null = Assert-ApkBadgingMetadata `
+    -Badging $badging `
+    -ExpectedApplicationId $expectedApplicationId `
+    -ExpectedVersionCode $expectedVersionCode `
+    -ExpectedVersionName $expectedVersionName `
+    -ExpectedMinSdk $expectedMinSdk `
+    -ExpectedTargetSdk $expectedTargetSdk `
+    -ExpectedAbi $expectedAbi
 
 $signatureOutput = @(
     & $apksigner verify `
