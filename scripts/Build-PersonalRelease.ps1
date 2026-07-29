@@ -57,14 +57,16 @@ function Find-BuildTools {
         Where-Object {
             $directory = $_
             $missing = @(
-                'aapt.exe',
-                'zipalign.exe',
-                'apksigner.bat'
-            ) | Where-Object {
-                -not (Test-Path -LiteralPath (
-                    Join-Path $directory.FullName $_
-                ))
-            }
+                @(
+                    'aapt.exe',
+                    'zipalign.exe',
+                    'apksigner.bat'
+                ) | Where-Object {
+                    -not (Test-Path -LiteralPath (
+                        Join-Path $directory.FullName $_
+                    ))
+                }
+            )
             $missing.Count -eq 0
         } |
         Select-Object -First 1
