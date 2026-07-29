@@ -49,6 +49,7 @@ fun VideoGestureLayer(
     val currentOnPreviewScrub by rememberUpdatedState(onPreviewScrub)
     val currentOnCommitScrub by rememberUpdatedState(onCommitScrub)
     val currentOnFeedback by rememberUpdatedState(onFeedback)
+    val currentPositionMs by rememberUpdatedState(positionMs)
     var feedback by remember { mutableStateOf<PlayerGestureFeedback?>(null) }
 
     Box(
@@ -69,101 +70,114 @@ fun VideoGestureLayer(
                         coroutineScope {
                             awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
+                            val gesturePositionMs = currentPositionMs
                             val startBrightness = brightnessController.fraction.value
                             val startVolume = volumeController.state.value
                             var axis = VideoGestureAxis.UNDECIDED
                             var changed: PointerInputChange? = down
-
-                            while (changed != null && changed.pressed) {
-                                val event = awaitPointerEvent()
-                                changed = event.changes.firstOrNull { it.id == down.id }
-                                if (changed == null) break
-                                val deltaX = changed.position.x - down.position.x
-                                val deltaY = changed.position.y - down.position.y
-                                if (axis == VideoGestureAxis.UNDECIDED) {
-                                    axis = VideoGestureClassifier.classify(
-                                        GestureClassificationInput(
-                                            startX = down.position.x,
-                                            width = size.width.toFloat(),
-                                            deltaX = deltaX,
-                                            deltaY = deltaY,
-                                            thresholdPx = viewConfiguration.touchSlop,
-                                        ),
-                                    )
-                                    if (axis == VideoGestureAxis.SEEK) currentOnBeginScrub()
-                                }
-                                when (axis) {
-                                    VideoGestureAxis.SEEK -> {
-                                        val target = previewTarget(positionMs, durationMs, deltaX, size.width.toFloat())
-                                        currentOnPreviewScrub(target)
-                                        emitFeedback(PlayerGestureFeedback.Seek(target, target - positionMs))
-                                        changed.consume()
+                            var completed = false
+                            try {
+                                while (changed != null && changed.pressed) {
+                                    val event = awaitPointerEvent()
+                                    changed = event.changes.firstOrNull { it.id == down.id }
+                                    if (changed == null) break
+                                    val deltaX = changed.position.x - down.position.x
+                                    val deltaY = changed.position.y - down.position.y
+                                    if (axis == VideoGestureAxis.UNDECIDED) {
+                                        axis = VideoGestureClassifier.classify(
+                                            GestureClassificationInput(
+                                                startX = down.position.x,
+                                                width = size.width.toFloat(),
+                                                deltaX = deltaX,
+                                                deltaY = deltaY,
+                                                thresholdPx = viewConfiguration.touchSlop,
+                                            ),
+                                        )
+                                        if (axis == VideoGestureAxis.SEEK) currentOnBeginScrub()
                                     }
-
-                                    VideoGestureAxis.BRIGHTNESS -> {
-                                        val fraction = (startBrightness - deltaY / size.height).coerceIn(0f, 1f)
-                                        brightnessController.setFraction(fraction)
-                                        emitFeedback(PlayerGestureFeedback.Brightness((fraction * 100).roundToInt()))
-                                        changed.consume()
-                                    }
-
-                                    VideoGestureAxis.VOLUME -> {
-                                        val fraction = (
-                                            startVolume.current.toFloat() / startVolume.maximum - deltaY / size.height
-                                        ).coerceIn(0f, 1f)
-                                        volumeController.setFraction(fraction)
-                                        val state = volumeController.state.value
-                                        emitFeedback(PlayerGestureFeedback.Volume(state.percent, state.muted))
-                                        changed.consume()
-                                    }
-
-                                    VideoGestureAxis.UNDECIDED -> Unit
-                                }
-                            }
-
-                            val endedWithUp = changed?.changedToUpIgnoreConsumed() == true
-                            when {
-                                axis == VideoGestureAxis.SEEK && endedWithUp -> currentOnCommitScrub()
-                                axis == VideoGestureAxis.SEEK -> {
-                                    currentOnPreviewScrub(positionMs)
-                                    emitFeedback(null)
-                                }
-
-                                axis != VideoGestureAxis.UNDECIDED && !endedWithUp -> emitFeedback(null)
-                                endedWithUp -> {
-                                    val previous = pendingTap
-                                    val elapsed = changed.uptimeMillis - (previous?.upTime ?: Long.MIN_VALUE)
-                                    if (previous != null && elapsed <= viewConfiguration.doubleTapTimeoutMillis) {
-                                        pendingTapJob?.cancel()
-                                        pendingTap = null
-                                        if (previous.startX < size.width / 2f) {
-                                            currentOnSeekBack()
-                                            emitFeedback(
-                                                PlayerGestureFeedback.Seek(
-                                                    (positionMs - DOUBLE_TAP_SEEK_MS).coerceAtLeast(0L),
-                                                    -DOUBLE_TAP_SEEK_MS,
-                                                ),
-                                            )
-                                        } else {
-                                            currentOnSeekForward()
-                                            emitFeedback(
-                                                PlayerGestureFeedback.Seek(
-                                                    (positionMs + DOUBLE_TAP_SEEK_MS).coerceAtMost(durationMs),
-                                                    DOUBLE_TAP_SEEK_MS,
-                                                ),
-                                            )
+                                    when (axis) {
+                                        VideoGestureAxis.SEEK -> {
+                                            val target = previewTarget(gesturePositionMs, durationMs, deltaX, size.width.toFloat())
+                                            currentOnPreviewScrub(target)
+                                            emitFeedback(PlayerGestureFeedback.Seek(target, target - gesturePositionMs))
+                                            changed.consume()
                                         }
-                                    } else {
-                                        pendingTapJob?.cancel()
-                                        pendingTap = PendingTap(down.position.x, changed.uptimeMillis)
-                                        pendingTapJob = launch {
-                                            delay(viewConfiguration.doubleTapTimeoutMillis)
-                                            if (pendingTap?.upTime == changed.uptimeMillis) {
-                                                pendingTap = null
-                                                currentOnSingleTap()
+
+                                        VideoGestureAxis.BRIGHTNESS -> {
+                                            val fraction = (startBrightness - deltaY / size.height).coerceIn(0f, 1f)
+                                            brightnessController.setFraction(fraction)
+                                            emitFeedback(PlayerGestureFeedback.Brightness((fraction * 100).roundToInt()))
+                                            changed.consume()
+                                        }
+
+                                        VideoGestureAxis.VOLUME -> {
+                                            val fraction = (
+                                                startVolume.current.toFloat() / startVolume.maximum - deltaY / size.height
+                                            ).coerceIn(0f, 1f)
+                                            volumeController.setFraction(fraction)
+                                            val state = volumeController.state.value
+                                            emitFeedback(PlayerGestureFeedback.Volume(state.percent, state.muted))
+                                            changed.consume()
+                                        }
+
+                                        VideoGestureAxis.UNDECIDED -> Unit
+                                    }
+                                }
+
+                                val endedWithUp = changed?.changedToUpIgnoreConsumed() == true
+                                when {
+                                    axis == VideoGestureAxis.SEEK -> when (seekGestureCompletion(endedWithUp)) {
+                                        SeekGestureCompletion.COMMIT -> currentOnCommitScrub()
+                                        SeekGestureCompletion.RESTORE_PREVIEW -> {
+                                            currentOnPreviewScrub(gesturePositionMs)
+                                            emitFeedback(null)
+                                        }
+                                    }
+
+                                    axis != VideoGestureAxis.UNDECIDED && !endedWithUp -> emitFeedback(null)
+                                    endedWithUp -> {
+                                        val previous = pendingTap
+                                        val elapsed = changed.uptimeMillis - (previous?.upTime ?: Long.MIN_VALUE)
+                                        if (previous != null && elapsed <= viewConfiguration.doubleTapTimeoutMillis) {
+                                            pendingTapJob?.cancel()
+                                            pendingTap = null
+                                            if (previous.startX < size.width / 2f) {
+                                                currentOnSeekBack()
+                                                emitFeedback(
+                                                    PlayerGestureFeedback.Seek(
+                                                        (gesturePositionMs - DOUBLE_TAP_SEEK_MS).coerceAtLeast(0L),
+                                                        -DOUBLE_TAP_SEEK_MS,
+                                                    ),
+                                                )
+                                            } else {
+                                                currentOnSeekForward()
+                                                emitFeedback(
+                                                    PlayerGestureFeedback.Seek(
+                                                        (gesturePositionMs + DOUBLE_TAP_SEEK_MS).coerceAtMost(durationMs),
+                                                        DOUBLE_TAP_SEEK_MS,
+                                                    ),
+                                                )
+                                            }
+                                        } else {
+                                            pendingTapJob?.cancel()
+                                            pendingTap = PendingTap(down.position.x, changed.uptimeMillis)
+                                            pendingTapJob = launch {
+                                                delay(viewConfiguration.doubleTapTimeoutMillis)
+                                                if (pendingTap?.upTime == changed.uptimeMillis) {
+                                                    pendingTap = null
+                                                    currentOnSingleTap()
+                                                }
                                             }
                                         }
                                     }
+                                }
+                                completed = true
+                            } finally {
+                                if (!completed && axis == VideoGestureAxis.SEEK) {
+                                    currentOnPreviewScrub(gesturePositionMs)
+                                    emitFeedback(null)
+                                } else if (!completed && axis != VideoGestureAxis.UNDECIDED) {
+                                    emitFeedback(null)
                                 }
                             }
                             }
@@ -183,6 +197,14 @@ private data class PendingTap(
     val startX: Float,
     val upTime: Long,
 )
+
+internal enum class SeekGestureCompletion {
+    COMMIT,
+    RESTORE_PREVIEW,
+}
+
+internal fun seekGestureCompletion(endedWithUp: Boolean): SeekGestureCompletion =
+    if (endedWithUp) SeekGestureCompletion.COMMIT else SeekGestureCompletion.RESTORE_PREVIEW
 
 private fun previewTarget(
     positionMs: Long,
