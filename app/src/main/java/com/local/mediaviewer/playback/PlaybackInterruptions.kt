@@ -82,6 +82,15 @@ class PlaybackInterruptions(
         onPauseRequested()
     }
 
+    fun onPlaybackEvent(event: EngineEvent) {
+        if (
+            event == EngineEvent.EndReached ||
+            event is EngineEvent.Error
+        ) {
+            close()
+        }
+    }
+
     @Synchronized
     override fun close() {
         if (!started) return

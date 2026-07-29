@@ -107,9 +107,11 @@ class AndroidVlcPlaybackEngine(
     }
 
     override fun pause() {
-        if (!closed.get() && mediaPlayer.isPlaying) {
+        if (closed.get()) return
+        if (mediaPlayer.isPlaying) {
             mediaPlayer.pause()
         }
+        interruptions.close()
     }
 
     override fun seekTo(positionMs: Long) {
@@ -147,6 +149,7 @@ class AndroidVlcPlaybackEngine(
 
             else -> return
         }
+        interruptions.onPlaybackEvent(mapped)
         mutableState.value = EngineEventReducer.reduce(
             state = mutableState.value,
             event = mapped,
