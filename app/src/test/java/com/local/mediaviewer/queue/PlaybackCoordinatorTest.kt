@@ -2,6 +2,7 @@ package com.local.mediaviewer.queue
 
 import android.view.ViewGroup
 import com.local.mediaviewer.core.AppResult
+import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.model.SessionEndpoint
 import com.local.mediaviewer.playback.PlaybackEngine
@@ -42,7 +43,7 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
-    fun `播放错误停在当前项且不自动跳到下一项`() = runTest {
+    fun `播放错误刷新后停在当前项且不自动跳到下一项`() = runTest {
         val engine = FakeEngine()
         val coordinator = coordinator(engine, scope = this)
 
@@ -51,9 +52,12 @@ class PlaybackCoordinatorTest {
         engine.emit(PlaybackState(status = PlaybackStatus.ERROR, errorMessage = "network"))
         advanceUntilIdle()
 
-        assertEquals(listOf(requestUrlFor("a")), engine.prepareCalls)
+        assertEquals(
+            listOf(requestUrlFor("a"), requestUrlFor("a")),
+            engine.prepareCalls,
+        )
         assertEquals("a", coordinator.sessionState.value.currentItem?.mediaKey)
-        assertEquals("network", coordinator.sessionState.value.errorMessage)
+        assertNull(coordinator.sessionState.value.errorMessage)
         coordinator.close()
     }
 
@@ -95,7 +99,12 @@ class PlaybackCoordinatorTest {
             PlaybackQueue(items = listOf(item("a")), currentMediaKey = "a"),
         )
         val positions = FakePositionStore(mapOf("a" to 30_000L))
-        val coordinator = coordinator(engine, repository, positions, this)
+        val coordinator = coordinator(
+            engine = engine,
+            repository = repository,
+            positions = positions,
+            scope = this,
+        )
 
         coordinator.start()
         advanceUntilIdle()
@@ -144,16 +153,190 @@ class PlaybackCoordinatorTest {
         coordinator.close()
     }
 
+    @Test
+    fun `媒体会话暂停立即保存当前项进度`() = runTest {
+        val engine = FakeEngine()
+        val positions = FakePositionStore()
+        val coordinator = coordinator(engine, positions = positions, scope = this)
+        coordinator.replaceQueue(listOf(item("a")), "a")
+        advanceUntilIdle()
+        engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.PLAYING,
+                positionMs = 12_000L,
+                durationMs = 60_000L,
+            ),
+        )
+        advanceUntilIdle()
+
+        coordinator.setPlayWhenReadyFromSession(false)
+
+        assertEquals(
+            PositionRecord("a", 12_000L, 60_000L, false),
+            positions.records.last(),
+        )
+        coordinator.close()
+    }
+
+    @Test
+    fun `切换当前项前只把旧引擎位置保存给旧媒体`() = runTest {
+        val engine = FakeEngine()
+        val positions = FakePositionStore()
+        val coordinator = coordinator(engine, positions = positions, scope = this)
+        coordinator.replaceQueue(listOf(item("a"), item("b")), "a")
+        advanceUntilIdle()
+        engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.PLAYING,
+                positionMs = 21_000L,
+                durationMs = 80_000L,
+            ),
+        )
+        advanceUntilIdle()
+
+        coordinator.select("b")
+        advanceUntilIdle()
+
+        assertTrue(
+            positions.records.contains(
+                PositionRecord("a", 21_000L, 80_000L, false),
+            ),
+        )
+        assertFalse(
+            positions.records.any {
+                it.mediaKey == "b" && it.positionMs == 21_000L
+            },
+        )
+        coordinator.close()
+    }
+
+    @Test
+    fun `自动播放结束在切换下一项前按结束状态保存旧媒体`() = runTest {
+        val engine = FakeEngine()
+        val positions = FakePositionStore()
+        val coordinator = coordinator(engine, positions = positions, scope = this)
+        coordinator.replaceQueue(listOf(item("a"), item("b")), "a")
+        advanceUntilIdle()
+
+        engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.ENDED,
+                positionMs = 90_000L,
+                durationMs = 90_000L,
+            ),
+        )
+        advanceUntilIdle()
+
+        assertTrue(
+            positions.records.contains(
+                PositionRecord("a", 90_000L, 90_000L, true),
+            ),
+        )
+        assertFalse(
+            positions.records.any {
+                it.mediaKey == "b" && it.positionMs == 90_000L
+            },
+        )
+        coordinator.close()
+    }
+
+    @Test
+    fun `后台播放错误刷新端点并在原项原位置恢复且不跳项`() = runTest {
+        val engine = FakeEngine()
+        val session = FakeSession(
+            refreshedEndpoint = SessionEndpoint(
+                logicalBaseUrl = "http://media.example:8080",
+                requestBaseUrl = "http://10.0.0.10:8080",
+                ipv4 = "10.0.0.10",
+            ),
+        )
+        val coordinator = coordinator(engine, session = session, scope = this)
+        coordinator.replaceQueue(listOf(item("a"), item("b")), "a")
+        advanceUntilIdle()
+
+        engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.ERROR,
+                positionMs = 34_000L,
+                durationMs = 100_000L,
+                errorMessage = "旧端点失效",
+            ),
+        )
+        advanceUntilIdle()
+        engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.OPENING,
+                durationMs = 100_000L,
+                isSeekable = true,
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, session.refreshCalls)
+        assertEquals("a", coordinator.sessionState.value.currentItem?.mediaKey)
+        assertEquals(2, coordinator.sessionState.value.queue.items.size)
+        assertEquals("http://10.0.0.10:8080/a.mp4", engine.prepareCalls.last())
+        assertEquals(34_000L, engine.seekCalls.last())
+        coordinator.close()
+    }
+
+    @Test
+    fun `同一错误风暴只刷新一次而成功播放后允许下一次刷新`() = runTest {
+        val engine = FakeEngine()
+        val session = FakeSession()
+        val coordinator = coordinator(engine, session = session, scope = this)
+        coordinator.replaceQueue(listOf(item("a"), item("b")), "a")
+        advanceUntilIdle()
+
+        engine.emit(PlaybackState(status = PlaybackStatus.ERROR, errorMessage = "1"))
+        advanceUntilIdle()
+        engine.emit(PlaybackState(status = PlaybackStatus.OPENING))
+        engine.emit(PlaybackState(status = PlaybackStatus.ERROR, errorMessage = "2"))
+        advanceUntilIdle()
+        assertEquals(1, session.refreshCalls)
+
+        engine.emit(PlaybackState(status = PlaybackStatus.PLAYING))
+        advanceUntilIdle()
+        engine.emit(PlaybackState(status = PlaybackStatus.ERROR, errorMessage = "3"))
+        advanceUntilIdle()
+
+        assertEquals(2, session.refreshCalls)
+        assertEquals("a", coordinator.sessionState.value.currentItem?.mediaKey)
+        coordinator.close()
+    }
+
+    @Test
+    fun `后台端点刷新失败显示中文错误且不自动跳项`() = runTest {
+        val engine = FakeEngine()
+        val session = FakeSession(
+            refreshResult = AppResult.Failure(
+                AppError.NetworkFailure("离线"),
+            ),
+        )
+        val coordinator = coordinator(engine, session = session, scope = this)
+        coordinator.replaceQueue(listOf(item("a"), item("b")), "a")
+        advanceUntilIdle()
+
+        engine.emit(PlaybackState(status = PlaybackStatus.ERROR, errorMessage = "failed"))
+        advanceUntilIdle()
+
+        assertEquals("网络连接失败：离线", coordinator.sessionState.value.errorMessage)
+        assertEquals("a", coordinator.sessionState.value.currentItem?.mediaKey)
+        assertEquals(1, engine.prepareCalls.size)
+        coordinator.close()
+    }
+
     private fun coordinator(
         engine: FakeEngine,
         repository: FakeQueueRepository = FakeQueueRepository(),
         positions: FakePositionStore = FakePositionStore(),
+        session: FakeSession = FakeSession(),
         scope: CoroutineScope,
     ) = PlaybackCoordinator(
         engine = engine,
         queueRepository = repository,
         positionStore = positions,
-        session = FakeSession(),
+        session = session,
         scope = scope,
     )
 
@@ -181,6 +364,10 @@ private class FakeEngine : PlaybackEngine {
 
     override fun prepare(url: String) {
         prepareCalls += url
+        mutableState.value = PlaybackState(
+            status = PlaybackStatus.OPENING,
+            playbackSpeed = mutableState.value.playbackSpeed,
+        )
     }
 
     override fun attachVideoOutput(host: ViewGroup) = Unit
@@ -218,23 +405,52 @@ private class FakeQueueRepository(
 private class FakePositionStore(
     private val positions: Map<String, Long> = emptyMap(),
 ) : PlaybackPositionStore {
+    val records = mutableListOf<PositionRecord>()
     override suspend fun resumePosition(mediaKey: String): Long? = positions[mediaKey]
-    override suspend fun record(mediaKey: String, positionMs: Long, durationMs: Long, updatedAtEpochMs: Long, ended: Boolean) = Unit
+    override suspend fun record(mediaKey: String, positionMs: Long, durationMs: Long, updatedAtEpochMs: Long, ended: Boolean) {
+        records += PositionRecord(mediaKey, positionMs, durationMs, ended)
+    }
     override suspend fun clear(mediaKey: String) = Unit
 }
 
-private class FakeSession : ServerSessionManager {
+private data class PositionRecord(
+    val mediaKey: String,
+    val positionMs: Long,
+    val durationMs: Long,
+    val ended: Boolean,
+)
+
+private class FakeSession(
+    private val refreshedEndpoint: SessionEndpoint = SessionEndpoint(
+        logicalBaseUrl = "http://media.example:8080",
+        requestBaseUrl = "http://10.0.0.9:8080",
+        ipv4 = "10.0.0.9",
+    ),
+    private val refreshResult: AppResult<SessionEndpoint>? = null,
+) : ServerSessionManager {
     private val endpoint = SessionEndpoint(
         logicalBaseUrl = "http://media.example:8080",
         requestBaseUrl = "http://10.0.0.9:8080",
         ipv4 = "10.0.0.9",
     )
-    override val state: StateFlow<ServerSessionState> = MutableStateFlow(
+    private val mutableState = MutableStateFlow<ServerSessionState>(
         ServerSessionState.Connected(endpoint, listOf(endpoint.ipv4)),
     )
+    override val state: StateFlow<ServerSessionState> = mutableState
+    var refreshCalls = 0
 
     override suspend fun connectSaved() = Unit
     override suspend fun testCandidate(input: String): AppResult<com.local.mediaviewer.network.ConnectionTestResult> = error("unused")
     override suspend fun saveCandidate(result: com.local.mediaviewer.network.ConnectionTestResult) = Unit
-    override suspend fun refreshAfterRequestFailure(): AppResult<SessionEndpoint> = error("unused")
+    override suspend fun refreshAfterRequestFailure(): AppResult<SessionEndpoint> {
+        refreshCalls += 1
+        val result = refreshResult ?: AppResult.Success(refreshedEndpoint)
+        if (result is AppResult.Success) {
+            mutableState.value = ServerSessionState.Connected(
+                result.value,
+                listOf(result.value.ipv4),
+            )
+        }
+        return result
+    }
 }

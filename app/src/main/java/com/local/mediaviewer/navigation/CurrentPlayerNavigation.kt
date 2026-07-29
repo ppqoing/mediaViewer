@@ -12,6 +12,11 @@ const val ACTION_OPEN_CURRENT_PLAYER =
 const val EXTRA_OPEN_CURRENT_PLAYER =
     "com.local.mediaviewer.extra.OPEN_CURRENT_PLAYER"
 
+fun isCurrentPlayerNotificationRequest(
+    action: String?,
+    requested: Boolean,
+): Boolean = action == ACTION_OPEN_CURRENT_PLAYER && requested
+
 class CurrentPlayerNavigationRequests {
     private val mutableRequestNonce = MutableStateFlow(0L)
     val requestNonce: StateFlow<Long> = mutableRequestNonce.asStateFlow()
@@ -43,8 +48,12 @@ sealed interface PlayerRouteContent {
 
 fun resolvePlayerRouteContent(
     session: PlaybackSessionState,
+    hasPresentedItem: Boolean,
 ): PlayerRouteContent = session.currentItem?.let(PlayerRouteContent::Ready)
-    ?: if (session.playback.status == PlaybackStatus.OPENING) {
+    ?: if (
+        !hasPresentedItem ||
+        session.playback.status == PlaybackStatus.OPENING
+    ) {
         PlayerRouteContent.Waiting
     } else {
         PlayerRouteContent.Empty

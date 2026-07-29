@@ -20,7 +20,11 @@ class ControllerConnectionMachineTest {
 
         machine.start()
         val firstGeneration = requested.single()
-        machine.onConnectionFailed(firstGeneration, "session unavailable")
+        machine.onConnectionFailed(
+            firstGeneration,
+            "session unavailable",
+            shouldReconnect = true,
+        )
         val secondGeneration = requested.last()
         machine.onConnected(secondGeneration, "second")
         machine.onConnected(firstGeneration, "stale-first")
@@ -30,6 +34,34 @@ class ControllerConnectionMachineTest {
         assertEquals(listOf("stale-first"), released)
         assertEquals(ControllerConnectionState.Connected, states.last())
         assertTrue(states.contains(ControllerConnectionState.Failed("session unavailable")))
+    }
+
+    @Test
+    fun `暂停意图下连接失败停留等待而不循环重建服务`() {
+        val requested = mutableListOf<Long>()
+        val states = mutableListOf<ControllerConnectionState>()
+        val machine = ControllerConnectionMachine<String>(
+            maxPendingCommands = 4,
+            onStateChanged = states::add,
+            requestConnection = requested::add,
+            release = {},
+        )
+        machine.start()
+
+        machine.onConnectionFailed(
+            generation = requested.single(),
+            message = "service stopped",
+            shouldReconnect = false,
+        )
+
+        assertEquals(1, requested.size)
+        assertEquals(
+            ControllerConnectionState.Failed("service stopped"),
+            states.last(),
+        )
+
+        machine.submit {}
+        assertEquals(2, requested.size)
     }
 
     @Test

@@ -67,6 +67,7 @@ class PlaybackCoordinator(
     private var loadedMediaKey: String? = null
     private var lastStatus = engine.state.value.status
     private var pauseCorrectionIssued = false
+    private var endpointRecoveryUsedForMediaKey: String? = null
     private val engineObserver: Job
 
     override val state: StateFlow<PlaybackState> = engine.state
@@ -81,10 +82,13 @@ class PlaybackCoordinator(
                     correctUnexpectedPlaying(playback)
                     applyPendingResume(playback)
                     when {
+                        playback.status == PlaybackStatus.PLAYING -> {
+                            endpointRecoveryUsedForMediaKey = null
+                        }
                         playback.status == PlaybackStatus.ENDED && lastStatus != PlaybackStatus.ENDED ->
                             advance(QueueAdvanceReason.ENDED)
                         playback.status == PlaybackStatus.ERROR && lastStatus != PlaybackStatus.ERROR ->
-                            setError(playback.errorMessage ?: "播放失败")
+                            recoverCurrentEndpointLocked(playback)
                     }
                     lastStatus = playback.status
                 }
@@ -273,6 +277,7 @@ class PlaybackCoordinator(
 
     override fun pause() = launchMutation {
         updatePlayWhenReady(false)
+        persistCurrentPositionLocked()
         engine.pause()
     }
 
@@ -282,6 +287,7 @@ class PlaybackCoordinator(
 
     override fun stop() = launchMutation {
         updatePlayWhenReady(false)
+        persistCurrentPositionLocked()
         engine.stop()
     }
 
@@ -295,7 +301,12 @@ class PlaybackCoordinator(
 
     suspend fun setPlayWhenReadyFromSession(playWhenReady: Boolean) = mutate {
         updatePlayWhenReady(playWhenReady)
-        if (playWhenReady) playCurrent() else engine.pause()
+        if (playWhenReady) {
+            playCurrent()
+        } else {
+            persistCurrentPositionLocked()
+            engine.pause()
+        }
     }
 
     suspend fun seek(
@@ -466,8 +477,43 @@ class PlaybackCoordinator(
         }
         loadedMediaKey = item.mediaKey
         engine.prepare(endpoint.requestUrlFor(item.logicalUrl))
+        updatePlayback(engine.state.value)
         engine.setPlaybackSpeed(queue.playbackSpeed)
         if (autoPlay) engine.play()
+    }
+
+    private suspend fun recoverCurrentEndpointLocked(
+        playback: PlaybackState,
+    ) {
+        val item = queue.currentItem ?: run {
+            setError(playback.errorMessage ?: "播放失败")
+            return
+        }
+        if (endpointRecoveryUsedForMediaKey == item.mediaKey) {
+            setError(playback.errorMessage ?: "播放失败")
+            return
+        }
+        endpointRecoveryUsedForMediaKey = item.mediaKey
+        pendingResumeMediaKey = item.mediaKey
+        pendingResumeMs = playback.positionMs.coerceAtLeast(0L)
+        resumeApplied = false
+        val refreshed = runCatching {
+            session.refreshAfterRequestFailure()
+        }.getOrElse { error ->
+            setError("端点刷新失败：${error.message ?: "未知错误"}")
+            return
+        }
+        when (refreshed) {
+            is AppResult.Success -> {
+                updateSession(error = null)
+                loadedMediaKey = null
+                loadCurrent(
+                    autoPlay = mutableSessionState.value.playWhenReady,
+                )
+            }
+
+            is AppResult.Failure -> setError(refreshed.error.userMessage)
+        }
     }
 
     private suspend fun connectedEndpointOrRefresh() =
@@ -491,11 +537,38 @@ class PlaybackCoordinator(
     }
 
     private suspend fun setQueue(next: PlaybackQueue, persist: Boolean) {
+        val currentMediaKey = queue.currentMediaKey
+        if (currentMediaKey != next.currentMediaKey) {
+            persistCurrentPositionLocked(
+                ended = mutableSessionState.value.playback.status ==
+                    PlaybackStatus.ENDED,
+            )
+            endpointRecoveryUsedForMediaKey = null
+        }
         queue = next
         updateSession()
         if (!persist) return
         runCatching { queueRepository.save(next) }
             .onFailure { setError(it.message ?: "播放队列保存失败") }
+    }
+
+    private suspend fun persistCurrentPositionLocked(
+        ended: Boolean = mutableSessionState.value.playback.status ==
+            PlaybackStatus.ENDED,
+    ) {
+        val mediaKey = queue.currentMediaKey ?: return
+        val playback = mutableSessionState.value.playback
+        runCatching {
+            positionStore.record(
+                mediaKey = mediaKey,
+                positionMs = playback.positionMs,
+                durationMs = playback.durationMs,
+                updatedAtEpochMs = System.currentTimeMillis(),
+                ended = ended,
+            )
+        }.onFailure {
+            setError(it.message ?: "播放状态保存失败")
+        }
     }
 
     private fun updatePlayback(playback: PlaybackState) {

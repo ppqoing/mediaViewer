@@ -267,7 +267,7 @@ class PlayerViewModelTest {
         }
 
     @Test
-    fun `队列错误恢复保持完整队列元数据和当前项`() =
+    fun `队列错误由后台协调器恢复而视图模型不重复刷新`() =
         runTest(dispatcher) {
             val first = queueItem("a", "A.mp4")
             val second = queueItem("b", "B.mp4")
@@ -276,17 +276,18 @@ class PlayerViewModelTest {
                 currentMediaKey = second.mediaKey,
             )
             val before = controller.sessionState.value.queue
+            val session = FakePlayerSession(
+                refreshed = SessionEndpoint(
+                    "http://media.example:8080",
+                    "http://192.0.2.2:8080",
+                    "192.0.2.2",
+                ),
+            )
             val viewModel = PlayerViewModel(
                 initialRequest = request().copy(mediaKey = first.mediaKey),
                 controller = controller,
                 positionStore = FakeStore(),
-                session = FakePlayerSession(
-                    refreshed = SessionEndpoint(
-                        "http://media.example:8080",
-                        "http://192.0.2.2:8080",
-                        "192.0.2.2",
-                    ),
-                ),
+                session = session,
                 autoStart = false,
             )
             runCurrent()
@@ -302,7 +303,8 @@ class PlayerViewModelTest {
             runCurrent()
 
             assertTrue(controller.preparedUrls.isEmpty())
-            assertEquals(1, controller.reloadCalls)
+            assertEquals(0, session.refreshCalls)
+            assertEquals(0, controller.reloadCalls)
             assertTrue(controller.selectCalls.isEmpty())
             assertEquals(before, controller.sessionState.value.queue)
             assertEquals(second, controller.sessionState.value.currentItem)

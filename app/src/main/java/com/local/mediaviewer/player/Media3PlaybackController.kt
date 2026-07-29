@@ -395,6 +395,8 @@ class Media3PlaybackController(
                     connectionMachine.onConnectionFailed(
                         generation = generation,
                         message = error.message ?: "无法连接后台播放器",
+                        shouldReconnect =
+                            mutableSessionState.value.playWhenReady,
                     )
                 }
             } finally {

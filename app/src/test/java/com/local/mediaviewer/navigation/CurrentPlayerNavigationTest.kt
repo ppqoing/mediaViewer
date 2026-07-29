@@ -37,6 +37,16 @@ class CurrentPlayerNavigationTest {
                 PlaybackSessionState(
                     playback = PlaybackState(status = PlaybackStatus.OPENING),
                 ),
+                hasPresentedItem = false,
+            ),
+        )
+        assertEquals(
+            PlayerRouteContent.Waiting,
+            resolvePlayerRouteContent(
+                PlaybackSessionState(
+                    playback = PlaybackState(status = PlaybackStatus.IDLE),
+                ),
+                hasPresentedItem = false,
             ),
         )
         assertEquals(
@@ -45,6 +55,7 @@ class CurrentPlayerNavigationTest {
                 PlaybackSessionState(
                     playback = PlaybackState(status = PlaybackStatus.IDLE),
                 ),
+                hasPresentedItem = true,
             ),
         )
         assertEquals(
@@ -57,6 +68,32 @@ class CurrentPlayerNavigationTest {
                     ),
                     currentItem = item("b"),
                 ),
+                hasPresentedItem = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `只有通知 action 与显式 extra 同时匹配才接受打开请求`() {
+        assertEquals(
+            true,
+            isCurrentPlayerNotificationRequest(
+                action = ACTION_OPEN_CURRENT_PLAYER,
+                requested = true,
+            ),
+        )
+        assertEquals(
+            false,
+            isCurrentPlayerNotificationRequest(
+                action = ACTION_OPEN_CURRENT_PLAYER,
+                requested = false,
+            ),
+        )
+        assertEquals(
+            false,
+            isCurrentPlayerNotificationRequest(
+                action = "other",
+                requested = true,
             ),
         )
     }

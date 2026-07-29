@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -221,8 +222,14 @@ fun MediaViewerApp(
             )
         }
         composable<PlayerRoute> {
+            var hasPresentedItem by rememberSaveable {
+                mutableStateOf(false)
+            }
             val item = when (
-                val content = resolvePlayerRouteContent(playbackSession)
+                val content = resolvePlayerRouteContent(
+                    session = playbackSession,
+                    hasPresentedItem = hasPresentedItem,
+                )
             ) {
                 PlayerRouteContent.Waiting -> return@composable
                 PlayerRouteContent.Empty -> {
@@ -231,7 +238,12 @@ fun MediaViewerApp(
                     }
                     return@composable
                 }
-                is PlayerRouteContent.Ready -> content.item
+                is PlayerRouteContent.Ready -> {
+                    LaunchedEffect(content.item.mediaKey) {
+                        hasPresentedItem = true
+                    }
+                    content.item
+                }
             }
             val player: PlayerViewModel = viewModel(
                 key = "player-session",

@@ -58,13 +58,14 @@ internal class ControllerConnectionMachine<T : Any>(
     fun onConnectionFailed(
         generation: Long,
         message: String,
+        shouldReconnect: Boolean,
     ) {
         if (closed || generation != this.generation) return
         connectionInProgress = false
         current?.let(release)
         current = null
         onStateChanged(ControllerConnectionState.Failed(message))
-        beginConnection()
+        if (shouldReconnect) beginConnection()
     }
 
     fun onDisconnected(

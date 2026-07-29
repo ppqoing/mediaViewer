@@ -56,7 +56,8 @@ class PlayerViewModel(
                 }
                 if (
                     state.status == PlaybackStatus.ERROR &&
-                    lastStatus != PlaybackStatus.ERROR
+                    lastStatus != PlaybackStatus.ERROR &&
+                    controller !is QueuePlaybackController
                 ) {
                     recoverEndpointOnce()
                 }

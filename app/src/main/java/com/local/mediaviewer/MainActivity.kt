@@ -5,9 +5,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.local.mediaviewer.app.MediaViewerApp
-import com.local.mediaviewer.navigation.ACTION_OPEN_CURRENT_PLAYER
 import com.local.mediaviewer.navigation.CurrentPlayerNavigationRequests
 import com.local.mediaviewer.navigation.EXTRA_OPEN_CURRENT_PLAYER
+import com.local.mediaviewer.navigation.isCurrentPlayerNotificationRequest
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
 
 class MainActivity : ComponentActivity() {
@@ -37,8 +37,13 @@ class MainActivity : ComponentActivity() {
 
     private fun handleNavigationIntent(intent: Intent?) {
         if (
-            intent?.action == ACTION_OPEN_CURRENT_PLAYER &&
-            intent.getBooleanExtra(EXTRA_OPEN_CURRENT_PLAYER, false)
+            isCurrentPlayerNotificationRequest(
+                action = intent?.action,
+                requested = intent?.getBooleanExtra(
+                    EXTRA_OPEN_CURRENT_PLAYER,
+                    false,
+                ) == true,
+            )
         ) {
             currentPlayerNavigationRequests.requestOpenCurrentPlayer()
         }
