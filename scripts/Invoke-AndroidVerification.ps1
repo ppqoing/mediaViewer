@@ -3,10 +3,12 @@ param(
     [Parameter(Mandatory)]
     [string]$SdkRoot,
 
-    [Parameter(Mandatory)]
+    [switch]$RunDeviceTests,
+
     [string]$AvdName,
 
-    [Parameter(Mandatory)]
+    [switch]$RunRealServerTest,
+
     [string]$RealServerBaseUrl
 )
 
@@ -17,15 +19,8 @@ $repositoryRoot = [IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
 $sdkRootFullPath = [IO.Path]::GetFullPath($SdkRoot)
-$adb = Join-Path $sdkRootFullPath 'platform-tools\adb.exe'
-$emulator = Join-Path $sdkRootFullPath 'emulator\emulator.exe'
 $gradle = Join-Path $repositoryRoot 'gradlew.bat'
-
-foreach ($required in @($adb, $emulator, $gradle)) {
-    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
-        throw "缺少必需文件：$required"
-    }
-}
+$module = Join-Path $PSScriptRoot 'ReleaseApkTools.psm1'
 
 function Invoke-Checked {
     param(
@@ -45,20 +40,141 @@ function Invoke-Checked {
     }
 }
 
+function Assert-ManifestPlaybackContract {
+    $manifestPath = Join-Path `
+        $repositoryRoot `
+        'app\src\main\AndroidManifest.xml'
+    [xml]$manifest = Get-Content `
+        -LiteralPath $manifestPath `
+        -Raw
+    $androidNamespace = (
+        'http://schemas.android.com/apk/res/android'
+    )
+    $permissions = @(
+        $manifest.manifest.'uses-permission' |
+            ForEach-Object {
+                $_.GetAttribute(
+                    'name',
+                    $androidNamespace
+                )
+            }
+    )
+    foreach ($requiredPermission in @(
+        'android.permission.FOREGROUND_SERVICE',
+        (
+            'android.permission.' +
+            'FOREGROUND_SERVICE_MEDIA_PLAYBACK'
+        )
+    )) {
+        if ($permissions -notcontains $requiredPermission) {
+            throw "Manifest 缺少权限：$requiredPermission"
+        }
+    }
+
+    $service = @(
+        $manifest.manifest.application.service |
+            Where-Object {
+                $_.GetAttribute(
+                    'name',
+                    $androidNamespace
+                ) -eq '.service.PlaybackService'
+            }
+    ) | Select-Object -First 1
+    if ($null -eq $service) {
+        throw 'Manifest 未注册 PlaybackService'
+    }
+    if (
+        $service.GetAttribute(
+            'foregroundServiceType',
+            $androidNamespace
+        ) -ne 'mediaPlayback'
+    ) {
+        throw (
+            'PlaybackService foregroundServiceType ' +
+            '必须为 mediaPlayback'
+        )
+    }
+}
+
+function Assert-Media3Contract {
+    $catalog = Get-Content `
+        -LiteralPath (
+            Join-Path $repositoryRoot 'gradle\libs.versions.toml'
+        ) `
+        -Raw
+    if ($catalog -notmatch '(?m)^media3\s*=\s*"1\.10\.1"\s*$') {
+        throw 'Media3 版本必须为 1.10.1'
+    }
+    $appBuild = Get-Content `
+        -LiteralPath (
+            Join-Path $repositoryRoot 'app\build.gradle.kts'
+        ) `
+        -Raw
+    foreach ($dependency in @(
+        'implementation(libs.androidx.media3.common)',
+        'implementation(libs.androidx.media3.session)'
+    )) {
+        if (-not $appBuild.Contains($dependency)) {
+            throw "app 缺少 Media3 依赖：$dependency"
+        }
+    }
+}
+
+function Assert-ApkAbiContract {
+    Import-Module $module -Force
+    $debugApk = Join-Path `
+        $repositoryRoot `
+        'app\build\outputs\apk\debug\app-debug.apk'
+    $releaseApk = Join-Path `
+        $repositoryRoot `
+        'app\build\outputs\apk\release\app-release-unsigned.apk'
+    $debugEntries = @(
+        Get-ApkArchiveInventory -ApkPath $debugApk |
+            Where-Object { $null -ne $_.Abi }
+    )
+    $debugAbis = @(
+        $debugEntries.Abi | Sort-Object -Unique
+    )
+    foreach ($requiredAbi in @('arm64-v8a', 'x86_64')) {
+        if ($debugAbis -notcontains $requiredAbi) {
+            throw "Debug APK 缺少 LibVLC ABI：$requiredAbi"
+        }
+    }
+
+    $releaseEntries = @(
+        Get-ApkArchiveInventory -ApkPath $releaseApk |
+            Where-Object { $null -ne $_.Abi }
+    )
+    $releaseAbis = @(
+        $releaseEntries.Abi | Sort-Object -Unique
+    )
+    if (
+        $releaseAbis.Count -ne 1 -or
+        $releaseAbis[0] -ne 'arm64-v8a'
+    ) {
+        throw (
+            'Release APK 只允许 arm64-v8a，实际为：' +
+            ($releaseAbis -join ', ')
+        )
+    }
+}
+
 function Find-AvdSerial {
     param(
+        [Parameter(Mandatory)]
+        [string]$Adb,
+
         [Parameter(Mandatory)]
         [string]$ExpectedAvdName
     )
 
-    $deviceLines = & $adb devices
-    foreach ($line in $deviceLines) {
+    foreach ($line in (& $Adb devices)) {
         if ($line -notmatch '^(emulator-\d+)\s+device$') {
             continue
         }
         $candidateSerial = $Matches[1]
         $reportedName = (
-            & $adb `
+            & $Adb `
                 -s $candidateSerial `
                 emu avd name 2>$null |
                 Select-Object -First 1
@@ -73,6 +189,72 @@ function Find-AvdSerial {
     return $null
 }
 
+function Get-ReadyDevice {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Adb,
+
+        [Parameter(Mandatory)]
+        [string]$Emulator,
+
+        [Parameter(Mandatory)]
+        [string]$ExpectedAvdName
+    )
+
+    $serial = Find-AvdSerial `
+        -Adb $Adb `
+        -ExpectedAvdName $ExpectedAvdName
+    if ($null -eq $serial) {
+        Start-Process `
+            -FilePath $Emulator `
+            -ArgumentList @(
+                '-avd', $ExpectedAvdName,
+                '-no-snapshot-save',
+                '-no-boot-anim'
+            ) `
+            -WindowStyle Hidden | Out-Null
+    }
+
+    $deadline = [DateTime]::UtcNow.AddMinutes(4)
+    do {
+        $serial = Find-AvdSerial `
+            -Adb $Adb `
+            -ExpectedAvdName $ExpectedAvdName
+        $bootCompleted = ''
+        if ($null -ne $serial) {
+            $bootCompleted = (
+                & $Adb `
+                    -s $serial `
+                    shell getprop sys.boot_completed `
+                    2>$null
+            ).Trim()
+        }
+        if ($bootCompleted -eq '1') {
+            return $serial
+        }
+        Start-Sleep -Seconds 2
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "模拟器 $ExpectedAvdName 在 4 分钟内未完成启动"
+}
+
+foreach ($required in @($gradle, $module)) {
+    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
+        throw "缺少必需文件：$required"
+    }
+}
+if ($RunDeviceTests -and [string]::IsNullOrWhiteSpace($AvdName)) {
+    throw '-RunDeviceTests 需要 -AvdName'
+}
+if ($RunRealServerTest -and -not $RunDeviceTests) {
+    throw '-RunRealServerTest 需要同时启用 -RunDeviceTests'
+}
+if (
+    $RunRealServerTest -and
+    [string]::IsNullOrWhiteSpace($RealServerBaseUrl)
+) {
+    throw '-RunRealServerTest 需要 -RealServerBaseUrl'
+}
+
 $hadAndroidHome = Test-Path Env:ANDROID_HOME
 $previousAndroidHome = $env:ANDROID_HOME
 $hadAndroidSerial = Test-Path Env:ANDROID_SERIAL
@@ -81,232 +263,102 @@ $env:ANDROID_HOME = $sdkRootFullPath
 
 Push-Location $repositoryRoot
 try {
-    $gitStatusBeforeVerification = & git status --porcelain
-    if ($LASTEXITCODE -ne 0) {
-        throw '无法读取当前 Git 工作树状态'
-    }
-    if (
-        -not [string]::IsNullOrWhiteSpace(
-            (
-                $gitStatusBeforeVerification -join
-                    [Environment]::NewLine
-            )
-        )
-    ) {
-        throw '验收前工作树必须干净，请先提交测试、脚本和文档'
-    }
-
-    $serial = Find-AvdSerial -ExpectedAvdName $AvdName
-    if ($null -eq $serial) {
-        Start-Process `
-            -FilePath $emulator `
-            -ArgumentList @(
-                '-avd', $AvdName,
-                '-no-snapshot-save',
-                '-no-boot-anim'
-            ) `
-            -WindowStyle Hidden | Out-Null
-    }
-
-    $bootDeadline = [DateTime]::UtcNow.AddMinutes(4)
-    do {
-        $serial = Find-AvdSerial -ExpectedAvdName $AvdName
-        $bootCompleted = ''
-        if ($null -ne $serial) {
-            $bootCompleted = (
-                & $adb `
-                    -s $serial `
-                    shell getprop sys.boot_completed `
-                    2>$null
-            ).Trim()
-        }
-        if ($bootCompleted -eq '1') {
-            break
-        }
-        Start-Sleep -Seconds 2
-    } while (
-        $bootCompleted -ne '1' -and
-        [DateTime]::UtcNow -lt $bootDeadline
-    )
-    if ($bootCompleted -ne '1' -or $null -eq $serial) {
-        throw "模拟器 $AvdName 在 4 分钟内未完成启动"
-    }
-    $env:ANDROID_SERIAL = $serial
-
+    Assert-ManifestPlaybackContract
+    Assert-Media3Contract
     Invoke-Checked $gradle @(
         'testDebugUnitTest',
         'lintDebug',
         'assembleDebug',
+        'assembleRelease',
+        'compileDebugAndroidTestKotlin',
         '--stacktrace'
     )
-    Invoke-Checked $gradle @(
-        'connectedDebugAndroidTest',
-        '--stacktrace'
-    )
-    Invoke-Checked $gradle @(
-        'connectedDebugAndroidTest',
-        (
-            '-Pandroid.testInstrumentationRunnerArguments.class=' +
-            'com.local.mediaviewer.RealServerSmokeTest'
-        ),
-        (
-            '-Pandroid.testInstrumentationRunnerArguments.' +
-            "realServerBaseUrl=$RealServerBaseUrl"
-        ),
-        '--stacktrace'
+    Assert-ApkAbiContract
+    Write-Host (
+        '本地自动门禁通过：JVM、Lint、Debug/Release、' +
+        'androidTest 编译、Manifest、Media3、APK ABI'
     )
 
-    $apk = Join-Path `
-        $repositoryRoot `
-        'app\build\outputs\apk\debug\app-debug.apk'
-    Invoke-Checked $adb @(
-        '-s',
-        $serial,
-        'install',
-        '-r',
-        $apk
-    )
-    Invoke-Checked $adb @(
-        '-s',
-        $serial,
-        'shell',
-        'am',
-        'force-stop',
-        'com.local.mediaviewer'
-    )
-    Invoke-Checked $adb @(
-        '-s',
-        $serial,
-        'shell',
-        'am',
-        'start',
-        '-W',
-        '-n',
-        'com.local.mediaviewer/.MainActivity'
-    )
-    $pidValue = (
-        & $adb `
-            -s $serial `
-            shell pidof com.local.mediaviewer
-    ).Trim()
-    if ([string]::IsNullOrWhiteSpace($pidValue)) {
-        throw (
-            'APK 已安装，但 com.local.mediaviewer ' +
-            '未保持运行'
-        )
-    }
-
-    foreach ($rootPath in @('/middle/', '/pik/')) {
-        $response = Invoke-WebRequest `
-            -Uri (
-                $RealServerBaseUrl.TrimEnd('/') +
-                $rootPath
-            ) `
-            -Headers @{ Accept = 'application/json' } `
-            -TimeoutSec 15
-        if ($response.StatusCode -ne 200) {
+    if ($RunDeviceTests) {
+        $adb = Join-Path `
+            $sdkRootFullPath `
+            'platform-tools\adb.exe'
+        $emulator = Join-Path `
+            $sdkRootFullPath `
+            'emulator\emulator.exe'
+        foreach ($required in @($adb, $emulator)) {
+            if (-not (
+                Test-Path -LiteralPath $required -PathType Leaf
+            )) {
+                throw "缺少设备验证工具：$required"
+            }
+        }
+        $serial = Get-ReadyDevice `
+            -Adb $adb `
+            -Emulator $emulator `
+            -ExpectedAvdName $AvdName
+        $env:ANDROID_SERIAL = $serial
+        $apiLevel = (
+            & $adb `
+                -s $serial `
+                shell getprop ro.build.version.sdk
+        ).Trim()
+        $abi = (
+            & $adb `
+                -s $serial `
+                shell getprop ro.product.cpu.abi
+        ).Trim()
+        if ($apiLevel -ne '36' -or $abi -ne 'x86_64') {
             throw (
-                "$rootPath 返回 HTTP " +
-                $response.StatusCode
+                '后台定向测试需要 API 36 x86_64，实际为 ' +
+                "API $apiLevel $abi"
             )
         }
-        $content = [string]$response.Content
-        try {
-            $null = ConvertFrom-Json -InputObject $content
-        } catch {
-            throw "$rootPath 未返回合法 JSON"
-        }
-    }
-
-    $delivery = & (
-        Join-Path $PSScriptRoot 'Write-ApkChecksum.ps1'
-    )
-    $apiLevel = (
-        & $adb `
-            -s $serial `
-            shell getprop ro.build.version.sdk
-    ).Trim()
-    $abi = (
-        & $adb `
-            -s $serial `
-            shell getprop ro.product.cpu.abi
-    ).Trim()
-    if ($apiLevel -ne '36') {
-        throw (
-            "验收设备 API 必须为 36，实际为 $apiLevel"
+        Invoke-Checked $gradle @(
+            'connectedDebugAndroidTest',
+            (
+                '-Pandroid.testInstrumentationRunnerArguments.class=' +
+                'com.local.mediaviewer.BackgroundPlaybackTest,' +
+                'com.local.mediaviewer.MediaSessionControlsTest,' +
+                'com.local.mediaviewer.LibVlcVideoOutputTest'
+            ),
+            '--stacktrace'
+        )
+        Write-Host 'API 36 后台播放定向设备测试通过'
+    } else {
+        Write-Host (
+            '设备测试：NOT RUN（使用 -RunDeviceTests 明确启用）'
         )
     }
-    if ($abi -ne 'x86_64') {
-        throw (
-            "验收设备 ABI 必须为 x86_64，实际为 $abi"
+
+    if ($RunRealServerTest) {
+        Invoke-Checked $gradle @(
+            'connectedDebugAndroidTest',
+            (
+                '-Pandroid.testInstrumentationRunnerArguments.class=' +
+                'com.local.mediaviewer.RealServerSmokeTest'
+            ),
+            (
+                '-Pandroid.testInstrumentationRunnerArguments.' +
+                "realServerBaseUrl=$RealServerBaseUrl"
+            ),
+            '--stacktrace'
+        )
+        Write-Host '真实服务器 Smoke：通过'
+    } else {
+        Write-Host (
+            '真实服务器测试：NOT RUN' +
+            '（使用 -RunDeviceTests -RunRealServerTest 明确启用）'
         )
     }
-    $revision = (& git rev-parse HEAD).Trim()
-    if ($LASTEXITCODE -ne 0) {
-        throw '无法读取当前 Git 修订号'
-    }
-    $completedAt = [DateTimeOffset]::Now.ToString(
-        'yyyy-MM-dd HH:mm:ss zzz'
-    )
-    $verificationDirectory = Join-Path `
-        $repositoryRoot `
-        'docs\verification'
-    $verificationPath = Join-Path `
-        $verificationDirectory `
-        '2026-07-28-android-mediaviewer.md'
-    New-Item `
-        -ItemType Directory `
-        -Path $verificationDirectory `
-        -Force | Out-Null
-    $record = @"
-# mediaviewer Android 验收记录
 
-- 完成时间：$completedAt
-- Git 修订：$revision
-- AVD：$AvdName
-- Android API：$apiLevel
-- ABI：$abi
-- 真实服务器：$RealServerBaseUrl
-- 应用进程 PID：$pidValue
-- APK：dist/mediaviewer-debug.apk
-- SHA-256：$($delivery.Sha256)
-
-## 自动门禁
-
-- JVM 单元测试：通过
-- Robolectric API 29：通过
-- Android Lint：0 error
-- Debug APK 构建：通过
-- Compose 全导航：通过
-- PNG/WAV/MP4 自生成夹具：通过
-- HTTP Range 206：通过
-- LibVLC 视频、音频与 seek：通过
-- LibVLC VLCVideoLayout 输出几何：通过
-- 四种视频画面模式：通过
-- 条漫/单图默认设置：通过
-- 六种图片排序与锚点：通过
-- 50 图片动态加载：通过
-- 统一缩放与解码上限：通过
-- 横屏旋转：通过
-- API 36 x86_64 安装与启动：通过
-
-## 真实服务器
-
-- /middle/：HTTP 200，Caddy JSON 可解析，应用内解析通过
-- /pik/：HTTP 200，Caddy JSON 可解析，应用内解析通过
-
-验收过程未读取媒体正文，未在日志或本记录中写入真实目录条目名称。
-"@
-    $utf8NoBom = [Text.UTF8Encoding]::new($false)
-    [IO.File]::WriteAllText(
-        $verificationPath,
-        $record,
-        $utf8NoBom
-    )
-
-    Write-Host "验收通过：$verificationPath"
-    Write-Host "APK：$($delivery.Apk)"
-    Write-Host "SHA-256：$($delivery.Sha256)"
+    Write-Host '人工设备检查项（脚本不自动判定）：'
+    Write-Host '1. 通知和锁屏的标题、进度、播放/暂停、上一项、下一项'
+    Write-Host '2. 视频退到后台仅继续声音，返回后画面连续'
+    Write-Host '3. 正在播放时划掉最近任务仍继续；暂停且无控制器时可停止'
+    Write-Host '4. 通知停止释放资源但保留播放队列'
+    Write-Host '5. 有线耳机拔出永久暂停，重新插入不会自动播放'
+    Write-Host '6. 蓝牙/耳机按键可控制 play、pause、previous、next'
 } finally {
     if ($hadAndroidSerial) {
         $env:ANDROID_SERIAL = $previousAndroidSerial

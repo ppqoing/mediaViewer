@@ -255,6 +255,9 @@ private fun PlaybackStatus.toMedia3State(): Int = when (this) {
     -> Player.STATE_IDLE
 }
 
+@androidx.annotation.OptIn(
+    markerClass = [UnstableApi::class],
+)
 private fun PlaybackState.toMedia3Error(): PlaybackException? =
     if (status == PlaybackStatus.ERROR) {
         PlaybackException(

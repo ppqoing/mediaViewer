@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
@@ -37,6 +38,9 @@ import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+@androidx.annotation.OptIn(
+    markerClass = [UnstableApi::class],
+)
 class Media3PlaybackController(
     context: Context,
     private val scope: CoroutineScope,

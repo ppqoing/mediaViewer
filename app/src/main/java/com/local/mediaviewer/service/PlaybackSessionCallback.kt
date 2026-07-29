@@ -5,6 +5,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -85,7 +86,7 @@ class PlaybackSessionCallback(
             }
 
             else -> Futures.immediateFuture(
-                SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED),
+                SessionResult(SessionError.ERROR_NOT_SUPPORTED),
             )
         }
     }

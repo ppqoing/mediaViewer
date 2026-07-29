@@ -18,7 +18,7 @@ import org.videolan.libvlc.util.VLCVideoLayout
 @RunWith(AndroidJUnit4::class)
 class LibVlcVideoOutputTest {
     @Test
-    fun videoLayoutFillsHostAndAcceptsEveryScaleMode() {
+    fun videoLayoutFillsHostAcceptsScaleModesAndReattaches() {
         val context =
             ApplicationProvider.getApplicationContext<Context>()
         val engine = AndroidVlcPlaybackEngine(context)
@@ -52,8 +52,25 @@ class LibVlcVideoOutputTest {
                         engine::setVideoScaleMode,
                     )
 
+                    val stateBeforeReattach = engine.state.value
                     engine.detachVideoOutput()
                     assertEquals(0, host.childCount)
+
+                    val replacement = FrameLayout(activity)
+                    activity.setContentView(
+                        replacement,
+                        ViewGroup.LayoutParams(800, 450),
+                    )
+                    engine.attachVideoOutput(replacement)
+
+                    assertEquals(1, replacement.childCount)
+                    assertTrue(
+                        replacement.getChildAt(0) is VLCVideoLayout,
+                    )
+                    assertEquals(stateBeforeReattach, engine.state.value)
+
+                    engine.detachVideoOutput()
+                    assertEquals(0, replacement.childCount)
                 }
             }
         } finally {
