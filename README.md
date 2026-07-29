@@ -39,6 +39,31 @@ $env:ANDROID_HOME = 'C:\Users\Administrator\AppData\Local\Android\Sdk'
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug
 ```
 
+## 个人 Release
+
+个人 Release 只支持 `arm64-v8a` Android 设备。它不包含 armv7、x86 或
+x86_64，因此不能安装到本项目使用的 x86_64 模拟器。
+
+Release APK 压缩存储 LibVLC Native 库和 DEX，可以显著减少传输文件大小。
+Android 安装时需要解压这些内容，所以安装时间可能更长，安装后的磁盘占用
+不会按 APK 体积同比下降。
+
+在 PowerShell 中生成、签名和验收：
+
+```powershell
+.\scripts\Build-PersonalRelease.ps1 `
+  -SdkRoot 'C:\Users\Administrator\AppData\Local\Android\Sdk'
+```
+
+默认使用当前 Windows 用户的
+`%USERPROFILE%\.android\debug.keystore`。自定义签名文件时，通过
+`MEDIAVIEWER_KEYSTORE_PASSWORD` 环境变量提供密码，不要把密码写进仓库。
+
+交付物：
+
+- `dist/mediaviewer-v1.0.1-arm64-v8a-release.apk`
+- `dist/mediaviewer-v1.0.1-arm64-v8a-release.apk.sha256`
+
 ## 模拟器验收
 
 ```powershell
@@ -58,6 +83,16 @@ $env:ANDROID_HOME = 'C:\Users\Administrator\AppData\Local\Android\Sdk'
 & 'C:\Users\Administrator\AppData\Local\Android\Sdk\platform-tools\adb.exe' `
   install -r .\dist\mediaviewer-debug.apk
 ```
+
+安装 arm64 Release：
+
+```powershell
+& 'C:\Users\Administrator\AppData\Local\Android\Sdk\platform-tools\adb.exe' `
+  install -r .\dist\mediaviewer-v1.0.1-arm64-v8a-release.apk
+```
+
+`INSTALL_FAILED_NO_MATCHING_ABIS` 表示设备不是 arm64。证书不匹配时，必须先
+卸载旧应用再安装；此操作会清除应用数据。
 
 也可以把 APK 复制到 Android 设备后手工安装。系统询问时允许从当前文件
 管理器安装未知应用。
