@@ -206,6 +206,39 @@ class VlcSessionPlayerTest {
     }
 
     @Test
+    fun `late playing after buffering pause is corrected once until paused`() = runTest {
+        val fixture = fixture(this)
+        fixture.coordinator.replaceQueue(listOf(item("a")), "a")
+        settle()
+        fixture.engine.emit(PlaybackState(status = PlaybackStatus.BUFFERING))
+        settle()
+        fixture.engine.clearCalls()
+
+        fixture.player.pause()
+        settle()
+        assertEquals(1, fixture.engine.pauseCalls)
+        assertFalse(fixture.player.playWhenReady)
+
+        fixture.engine.emit(PlaybackState(status = PlaybackStatus.PLAYING, positionMs = 1L))
+        settle()
+        assertEquals(2, fixture.engine.pauseCalls)
+
+        fixture.engine.emit(PlaybackState(status = PlaybackStatus.PLAYING, positionMs = 2L))
+        settle()
+        assertEquals(2, fixture.engine.pauseCalls)
+
+        fixture.engine.emit(PlaybackState(status = PlaybackStatus.PAUSED, positionMs = 2L))
+        settle()
+        fixture.player.play()
+        settle()
+        fixture.engine.emit(PlaybackState(status = PlaybackStatus.PLAYING, positionMs = 3L))
+        settle()
+        assertEquals(2, fixture.engine.pauseCalls)
+        assertTrue(fixture.player.playWhenReady)
+        fixture.close()
+    }
+
+    @Test
     fun `Media3 next continues playback when play intent is true`() = runTest {
         val fixture = fixture(this)
         fixture.coordinator.replaceQueue(listOf(item("a"), item("b")), "a")

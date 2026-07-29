@@ -185,6 +185,41 @@ class QueueNavigatorTest {
         assertEquals(-1, empty.currentIndex)
     }
 
+    @Test
+    fun `随机批量删除当前项选择随机序列下一项`() {
+        val removed = QueueNavigator.removeRange(
+            shuffleCurrentRemovalQueue(),
+            fromIndex = 1,
+            toIndex = 2,
+        )
+
+        assertEquals("b", removed.currentMediaKey)
+        assertEquals(listOf("a", "b", "d"), removed.shuffleOrder)
+        assertEquals(1, removed.shuffleCursor)
+    }
+
+    @Test
+    fun `随机空替换当前项选择随机序列下一项`() {
+        val replaced = QueueNavigator.replaceRange(
+            shuffleCurrentRemovalQueue(),
+            fromIndex = 1,
+            toIndex = 2,
+            items = emptyList(),
+        )
+
+        assertEquals("b", replaced.currentMediaKey)
+        assertEquals(listOf("a", "b", "d"), replaced.shuffleOrder)
+        assertEquals(1, replaced.shuffleCursor)
+    }
+
+    private fun shuffleCurrentRemovalQueue() = PlaybackQueue(
+        items = listOf(item("a"), item("c"), item("d"), item("b")),
+        currentMediaKey = "c",
+        mode = PlaybackMode.SHUFFLE,
+        shuffleOrder = listOf("a", "c", "b", "d"),
+        shuffleCursor = 1,
+    )
+
     private fun queueOf(
         vararg keys: String,
         current: String,

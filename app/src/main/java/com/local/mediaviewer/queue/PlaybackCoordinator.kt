@@ -50,6 +50,7 @@ class PlaybackCoordinator(
     private var resumeApplied = false
     private var loadedMediaKey: String? = null
     private var lastStatus = engine.state.value.status
+    private var pauseCorrectionIssued = false
     private val engineObserver: Job
 
     override val state: StateFlow<PlaybackState> = engine.state
@@ -61,6 +62,7 @@ class PlaybackCoordinator(
             engine.state.collect { playback ->
                 mutex.withLock {
                     updatePlayback(playback)
+                    correctUnexpectedPlaying(playback)
                     applyPendingResume(playback)
                     when {
                         playback.status == PlaybackStatus.ENDED && lastStatus != PlaybackStatus.ENDED ->
@@ -419,7 +421,25 @@ class PlaybackCoordinator(
     }
 
     private fun updatePlayWhenReady(playWhenReady: Boolean) {
+        pauseCorrectionIssued = if (playWhenReady) {
+            false
+        } else {
+            mutableSessionState.value.playback.status == PlaybackStatus.PLAYING
+        }
         updateSession(playWhenReady = playWhenReady)
+    }
+
+    private fun correctUnexpectedPlaying(playback: PlaybackState) {
+        if (playback.status == PlaybackStatus.PAUSED) {
+            pauseCorrectionIssued = false
+        } else if (
+            playback.status == PlaybackStatus.PLAYING &&
+            !mutableSessionState.value.playWhenReady &&
+            !pauseCorrectionIssued
+        ) {
+            pauseCorrectionIssued = true
+            engine.pause()
+        }
     }
 
     private fun updateSession(

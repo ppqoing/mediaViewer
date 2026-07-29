@@ -106,7 +106,11 @@ object QueueNavigator {
         val removedCurrent = queue.currentMediaKey in removedKeys
         val retained = queue.items.filterNot { it.mediaKey in removedKeys }
         val nextCurrent = if (removedCurrent) {
-            retained.getOrNull(from)?.mediaKey ?: retained.lastOrNull()?.mediaKey
+            if (queue.mode == PlaybackMode.SHUFFLE) {
+                queue.shuffleSuccessorAfterRemoving(removedKeys)
+            } else {
+                retained.getOrNull(from)?.mediaKey ?: retained.lastOrNull()?.mediaKey
+            }
         } else {
             queue.currentMediaKey
         }
@@ -130,8 +134,11 @@ object QueueNavigator {
         }
         val nextCurrent = if (replacedCurrent) {
             replacement.firstOrNull()?.mediaKey
-                ?: updated.getOrNull(from)?.mediaKey
-                ?: updated.lastOrNull()?.mediaKey
+                ?: if (queue.mode == PlaybackMode.SHUFFLE) {
+                    queue.shuffleSuccessorAfterRemoving(replacedKeys)
+                } else {
+                    updated.getOrNull(from)?.mediaKey ?: updated.lastOrNull()?.mediaKey
+                }
         } else {
             queue.currentMediaKey
         }
@@ -283,6 +290,18 @@ object QueueNavigator {
 
     private fun PlaybackQueue.resolvedShuffleCursor(): Int =
         shuffleOrder.indexOf(currentMediaKey).takeIf { it >= 0 } ?: shuffleCursor
+
+    private fun PlaybackQueue.shuffleSuccessorAfterRemoving(
+        removedKeys: Set<String>,
+    ): String? {
+        val retainedKeys = items.mapTo(mutableSetOf()) { it.mediaKey } - removedKeys
+        return shuffleOrder
+            .drop(shuffleCursor + 1)
+            .firstOrNull { it in retainedKeys }
+            ?: shuffleOrder
+                .take(shuffleCursor)
+                .lastOrNull { it in retainedKeys }
+    }
 
     private fun PlaybackQueue.shuffleItemAt(index: Int): String? = shuffleOrder.getOrNull(index)
 }
