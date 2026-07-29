@@ -35,3 +35,13 @@
 - /pik/：HTTP 200，Caddy JSON 可解析，应用内解析通过
 
 验收过程未读取媒体正文，未在日志或本记录中写入真实目录条目名称。
+
+## 聚焦冷启动复核
+
+- 复核设备：`emulator-5554`（API 36 x86_64）。
+- 先安装已构建的 Debug APK，再执行 `adb -s emulator-5554 shell am force-stop
+  com.local.mediaviewer`。
+- 随后执行 `adb -s emulator-5554 shell am start -W -n
+  com.local.mediaviewer/.MainActivity`，退出码为 0；输出为 `Status: ok`、
+  `LaunchState: COLD`、`Activity: com.local.mediaviewer/.MainActivity`、
+  `TotalTime: 7078` 和 `WaitTime: 7083`。
