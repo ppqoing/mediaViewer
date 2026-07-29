@@ -69,6 +69,54 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `恢复提示显示后由视图模型清除`() = runTest(dispatcher) {
+        val controller = FakePlaybackController()
+        val viewModel = PlayerViewModel(
+            request(),
+            controller,
+            FakeStore(resume = 30_000L),
+            FakePlayerSession(),
+        )
+        runCurrent()
+        controller.emit(
+            PlaybackState(
+                status = PlaybackStatus.PLAYING,
+                durationMs = 100_000L,
+                isSeekable = true,
+            ),
+        )
+        runCurrent()
+
+        viewModel.onResumeHintShown()
+
+        assertEquals(null, viewModel.uiState.value.resumedFromMs)
+        viewModel.leave {}
+        runCurrent()
+    }
+
+    @Test
+    fun `重试使用当前请求重新准备并播放`() = runTest(dispatcher) {
+        val controller = FakePlaybackController()
+        val viewModel = PlayerViewModel(
+            request(),
+            controller,
+            FakeStore(),
+            FakePlayerSession(),
+        )
+        runCurrent()
+        val preparesBefore = controller.preparedUrls.size
+        val playsBefore = controller.playCalls
+
+        viewModel.retry()
+
+        assertEquals(preparesBefore + 1, controller.preparedUrls.size)
+        assertEquals(request().requestUrl, controller.preparedUrls.last())
+        assertEquals(playsBefore + 1, controller.playCalls)
+        viewModel.leave {}
+        runCurrent()
+    }
+
+    @Test
     fun `每五秒暂停和结束使用当前快照写入`() = runTest(dispatcher) {
         val controller = FakePlaybackController()
         val store = FakeStore()

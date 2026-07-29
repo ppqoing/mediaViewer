@@ -92,6 +92,28 @@ class PlayerViewModel(
         controller.play()
     }
 
+    fun previous() = Unit
+
+    fun next() = Unit
+
+    fun retry() {
+        endpointRetryUsed = false
+        mutableUiState.value = mutableUiState.value.copy(
+            status = PlaybackStatus.OPENING,
+            errorMessage = null,
+        )
+        controller.prepare(currentRequest.requestUrl)
+        controller.play()
+    }
+
+    fun onResumeHintShown() {
+        if (mutableUiState.value.resumedFromMs != null) {
+            mutableUiState.value = mutableUiState.value.copy(
+                resumedFromMs = null,
+            )
+        }
+    }
+
     fun beginScrub() = updateInteraction(
         PlayerInteractionReducer::beginScrub,
     )

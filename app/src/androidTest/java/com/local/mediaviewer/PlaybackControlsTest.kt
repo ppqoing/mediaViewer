@@ -29,7 +29,15 @@ class PlaybackControlsTest {
                     ),
                     onPlay = {},
                     onPause = {},
-                    onSeek = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
                 )
             }
         }
@@ -59,7 +67,15 @@ class PlaybackControlsTest {
                     ),
                     onPlay = {},
                     onPause = {},
-                    onSeek = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
                 )
             }
         }

@@ -3,6 +3,7 @@ package com.local.mediaviewer
 import android.view.ViewGroup
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -43,7 +44,16 @@ class PlayerScreenTest {
                     ),
                     onPlay = {},
                     onPause = {},
-                    onSeek = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    onRetry = {},
                     onBack = {},
                 )
             }
@@ -53,8 +63,18 @@ class PlayerScreenTest {
         rule.onNodeWithText("00:30 / 02:00").assertIsDisplayed()
         rule.onNodeWithText("已从 00:30 继续播放").assertIsDisplayed()
         rule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        rule.onNodeWithContentDescription("快退 10 秒")
+            .assertIsDisplayed()
+        rule.onNodeWithContentDescription("快进 10 秒")
+            .assertIsDisplayed()
+        rule.onNodeWithContentDescription("播放速度，当前 1.0 倍")
+            .assertIsDisplayed()
+        rule.onNodeWithContentDescription("上一项").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("下一项").assertIsNotEnabled()
         rule.onNodeWithTag("vlc_surface").assertDoesNotExist()
-        rule.onNodeWithTag("video_scale_menu")
+        rule.onNodeWithContentDescription("画面比例")
+            .assertDoesNotExist()
+        rule.onNodeWithContentDescription("全屏")
             .assertDoesNotExist()
     }
 
@@ -78,7 +98,16 @@ class PlayerScreenTest {
                         fullscreenController,
                     onPlay = {},
                     onPause = {},
-                    onSeek = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    onRetry = {},
                     onVideoScaleModeChanged = {
                         selectedMode = it
                     },
@@ -89,6 +118,10 @@ class PlayerScreenTest {
 
         rule.onNodeWithTag("video_scale_menu")
             .performClick()
+        rule.onNodeWithContentDescription("画面比例")
+            .assertIsDisplayed()
+        rule.onNodeWithContentDescription("全屏")
+            .assertIsDisplayed()
         rule.onNodeWithText("等比适应")
             .assertIsDisplayed()
         rule.onNodeWithText("裁剪铺满")
@@ -105,6 +138,39 @@ class PlayerScreenTest {
         rule.onNodeWithTag("video_scale_menu")
             .assertIsDisplayed()
         rule.onNodeWithTag("seek").assertDoesNotExist()
+    }
+
+    @Test
+    fun errorStateShowsMessageRetryAndBack() {
+        rule.setContent {
+            MaterialTheme {
+                AudioPlayerScreen(
+                    state = PlayerUiState(
+                        name = "音乐.flac",
+                        kind = MediaKind.AUDIO,
+                        status = PlaybackStatus.ERROR,
+                        errorMessage = "无法播放该媒体",
+                    ),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    onRetry = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("无法播放该媒体").assertIsDisplayed()
+        rule.onNodeWithText("重试").assertIsDisplayed()
+        rule.onNodeWithText("返回").assertIsDisplayed()
     }
 }
 

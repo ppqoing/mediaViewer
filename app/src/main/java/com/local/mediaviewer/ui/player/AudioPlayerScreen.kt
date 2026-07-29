@@ -9,17 +9,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerUiState
+import com.local.mediaviewer.playback.PlaybackStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,10 +32,23 @@ fun AudioPlayerScreen(
     state: PlayerUiState,
     onPlay: () -> Unit,
     onPause: () -> Unit,
-    onSeek: (Long) -> Unit,
+    onReplay: () -> Unit,
+    onSeekBack: () -> Unit,
+    onSeekForward: () -> Unit,
+    onBeginScrub: () -> Unit,
+    onPreviewScrub: (Long) -> Unit,
+    onCommitScrub: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onSpeedChanged: (Float) -> Unit,
+    onRetry: () -> Unit,
+    onResumeHintShown: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
+    LaunchedEffect(state.resumedFromMs) {
+        if (state.resumedFromMs != null) onResumeHintShown()
+    }
 
     Scaffold(
         topBar = {
@@ -60,12 +78,31 @@ fun AudioPlayerScreen(
                 contentDescription = "音频",
                 modifier = Modifier.size(96.dp),
             )
+            if (state.status == PlaybackStatus.OPENING) {
+                CircularProgressIndicator()
+            }
             PlayerControls(
                 state = state,
                 onPlay = onPlay,
                 onPause = onPause,
-                onSeek = onSeek,
+                onReplay = onReplay,
+                onSeekBack = onSeekBack,
+                onSeekForward = onSeekForward,
+                onBeginScrub = onBeginScrub,
+                onPreviewScrub = onPreviewScrub,
+                onCommitScrub = onCommitScrub,
+                onPrevious = onPrevious,
+                onNext = onNext,
+                onSpeedChanged = onSpeedChanged,
             )
+            if (state.status == PlaybackStatus.BUFFERING) {
+                CircularProgressIndicator(modifier = Modifier.size(28.dp))
+            }
+            if (state.status == PlaybackStatus.ERROR) {
+                Text(state.errorMessage.orEmpty())
+                Button(onClick = onRetry) { Text("重试") }
+                TextButton(onClick = onBack) { Text("返回") }
+            }
         }
     }
 }
