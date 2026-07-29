@@ -191,6 +191,14 @@ class PlaybackCoordinator(
         loadCurrent(autoPlay = true)
     }
 
+    override fun reloadCurrent() = launchMutation {
+        reloadCurrentLocked()
+    }
+
+    suspend fun reloadCurrentFromSession() = mutate {
+        reloadCurrentLocked()
+    }
+
     override fun skipPrevious() = launchMutation {
         QueueNavigator.previous(queue)?.let {
             updatePlayWhenReady(true)
@@ -390,6 +398,12 @@ class PlaybackCoordinator(
         } else {
             engine.play()
         }
+    }
+
+    private suspend fun reloadCurrentLocked() {
+        if (queue.currentItem == null) return
+        updatePlayWhenReady(true)
+        loadCurrent(autoPlay = true)
     }
 
     private suspend fun updatePlaybackSpeed(speed: Float) {

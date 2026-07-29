@@ -9,6 +9,10 @@ import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
+import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.queue.PlaybackQueue
+import com.local.mediaviewer.queue.PlaybackSessionState
+import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import kotlinx.coroutines.Dispatchers
@@ -263,6 +267,87 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun `队列错误恢复保持完整队列元数据和当前项`() =
+        runTest(dispatcher) {
+            val first = queueItem("a", "A.mp4")
+            val second = queueItem("b", "B.mp4")
+            val controller = FakeQueuePlaybackController(
+                items = listOf(first, second),
+                currentMediaKey = second.mediaKey,
+            )
+            val before = controller.sessionState.value.queue
+            val viewModel = PlayerViewModel(
+                initialRequest = request().copy(mediaKey = first.mediaKey),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(
+                    refreshed = SessionEndpoint(
+                        "http://media.example:8080",
+                        "http://192.0.2.2:8080",
+                        "192.0.2.2",
+                    ),
+                ),
+                autoStart = false,
+            )
+            runCurrent()
+
+            controller.emitPlayback(
+                PlaybackState(
+                    status = PlaybackStatus.ERROR,
+                    positionMs = 22_000L,
+                    durationMs = 90_000L,
+                    errorMessage = "端点失效",
+                ),
+            )
+            runCurrent()
+
+            assertTrue(controller.preparedUrls.isEmpty())
+            assertEquals(1, controller.reloadCalls)
+            assertTrue(controller.selectCalls.isEmpty())
+            assertEquals(before, controller.sessionState.value.queue)
+            assertEquals(second, controller.sessionState.value.currentItem)
+            viewModel.leave {}
+            runCurrent()
+        }
+
+    @Test
+    fun `队列切到下一项后离开只保存当前项进度`() =
+        runTest(dispatcher) {
+            val first = queueItem("a", "A.mp4")
+            val second = queueItem("b", "B.mp4")
+            val controller = FakeQueuePlaybackController(
+                items = listOf(first, second),
+                currentMediaKey = first.mediaKey,
+            )
+            val store = FakeStore()
+            val viewModel = PlayerViewModel(
+                initialRequest = request().copy(mediaKey = first.mediaKey),
+                controller = controller,
+                positionStore = store,
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            runCurrent()
+            controller.selectCurrent(
+                mediaKey = second.mediaKey,
+                playback = PlaybackState(
+                    status = PlaybackStatus.PLAYING,
+                    positionMs = 33_000L,
+                    durationMs = 100_000L,
+                    isSeekable = true,
+                ),
+            )
+            runCurrent()
+
+            viewModel.leave {}
+            runCurrent()
+
+            assertEquals(listOf(second.mediaKey), store.records.map { it.mediaKey })
+            assertEquals(33_000L, store.records.single().positionMs)
+            assertEquals(0, controller.closeCalls)
+        }
+
+    @Test
     fun `离开保存快照但不释放应用级控制器且重复离开只完成一次`() =
         runTest(dispatcher) {
             val controller = FakePlaybackController()
@@ -458,6 +543,16 @@ private fun request() = PlayerRequest(
     kind = MediaKind.VIDEO,
 )
 
+private fun queueItem(
+    mediaKey: String,
+    name: String,
+) = QueueMediaItem(
+    mediaKey = mediaKey,
+    name = name,
+    logicalUrl = "http://media.example:8080/middle/$name",
+    kind = MediaKind.VIDEO,
+)
+
 private class FakePlaybackController : PlaybackController {
     private val mutable = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = mutable
@@ -509,6 +604,7 @@ private class FakePlaybackController : PlaybackController {
 }
 
 private data class SavedRecord(
+    val mediaKey: String,
     val positionMs: Long,
     val durationMs: Long,
     val ended: Boolean,
@@ -528,10 +624,94 @@ private class FakeStore(
         updatedAtEpochMs: Long,
         ended: Boolean,
     ) {
-        records += SavedRecord(positionMs, durationMs, ended)
+        records += SavedRecord(mediaKey, positionMs, durationMs, ended)
     }
 
     override suspend fun clear(mediaKey: String) = Unit
+}
+
+private class FakeQueuePlaybackController(
+    items: List<QueueMediaItem>,
+    currentMediaKey: String,
+) : QueuePlaybackController {
+    private val playback = MutableStateFlow(PlaybackState())
+    private val mutableSession = MutableStateFlow(
+        PlaybackSessionState(
+            queue = PlaybackQueue(
+                items = items,
+                currentMediaKey = currentMediaKey,
+            ),
+            currentItem = items.first { it.mediaKey == currentMediaKey },
+        ),
+    )
+    override val state: StateFlow<PlaybackState> = playback
+    override val sessionState: StateFlow<PlaybackSessionState> = mutableSession
+    val preparedUrls = mutableListOf<String>()
+    val selectCalls = mutableListOf<String>()
+    var reloadCalls = 0
+    var closeCalls = 0
+
+    override fun prepare(url: String) {
+        preparedUrls += url
+        val replacement = queueItem(url, url)
+        mutableSession.value = mutableSession.value.copy(
+            queue = PlaybackQueue(
+                items = listOf(replacement),
+                currentMediaKey = replacement.mediaKey,
+            ),
+            currentItem = replacement,
+        )
+    }
+
+    override fun play() = Unit
+    override fun pause() = Unit
+    override fun stop() = Unit
+    override fun seekTo(positionMs: Long) = Unit
+    override fun setPlaybackSpeed(speed: Float) = Unit
+    override fun attachVideoOutput(host: ViewGroup) = Unit
+    override fun detachVideoOutput() = Unit
+    override fun setVideoScaleMode(mode: VideoScaleMode) = Unit
+    override fun replaceQueue(items: List<QueueMediaItem>, startMediaKey: String) = Unit
+    override fun playNext(item: QueueMediaItem) = Unit
+    override fun append(item: QueueMediaItem) = Unit
+
+    override fun select(mediaKey: String) {
+        selectCalls += mediaKey
+    }
+
+    override fun reloadCurrent() {
+        reloadCalls += 1
+    }
+
+    override fun skipPrevious() = Unit
+    override fun skipNext() = Unit
+    override fun move(mediaKey: String, toIndex: Int) = Unit
+    override fun remove(mediaKey: String) = Unit
+    override fun clearExceptCurrent() = Unit
+    override fun clearAll() = Unit
+    override fun setPlaybackMode(mode: PlaybackMode) = Unit
+
+    override fun close() {
+        closeCalls += 1
+    }
+
+    fun emitPlayback(value: PlaybackState) {
+        playback.value = value
+        mutableSession.value = mutableSession.value.copy(playback = value)
+    }
+
+    fun selectCurrent(
+        mediaKey: String,
+        playback: PlaybackState,
+    ) {
+        val queue = mutableSession.value.queue.copy(currentMediaKey = mediaKey)
+        this.playback.value = playback
+        mutableSession.value = mutableSession.value.copy(
+            playback = playback,
+            queue = queue,
+            currentItem = queue.currentItem,
+        )
+    }
 }
 
 private class FakePlayerSession(

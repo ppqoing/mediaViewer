@@ -4,25 +4,30 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Bundle
 import android.os.IBinder
 import android.view.ViewGroup
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.ListenableFuture
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.queue.PlaybackSessionState
 import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.service.ACTION_LOCAL_VIDEO_OUTPUT
+import com.local.mediaviewer.service.ACTION_RELOAD_CURRENT
 import com.local.mediaviewer.service.LocalVideoOutputBinder
 import com.local.mediaviewer.service.MediaItemMapper
 import com.local.mediaviewer.service.PlaybackService
 import com.local.mediaviewer.service.toMedia3Item
-import java.util.ArrayDeque
+import java.util.IdentityHashMap
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,16 +62,20 @@ class Media3PlaybackController(
     override val videoOutputState: StateFlow<VideoOutputConnectionState> =
         mutableVideoOutputState.asStateFlow()
 
-    private val pendingCommands = ArrayDeque<(MediaController) -> Unit>()
-    private val controllerFuture = MediaController.Builder(
-        appContext,
-        SessionToken(
-            appContext,
-            ComponentName(appContext, PlaybackService::class.java),
-        ),
-    ).buildAsync()
-    private var mediaController: MediaController? = null
+    private val controllerHandles =
+        IdentityHashMap<MediaController, MediaControllerHandle>()
+    private val connectionJobs = mutableMapOf<Long, Job>()
+    private val connectionAttempts =
+        mutableMapOf<Long, MediaControllerAttempt>()
+    private val connectionMachine =
+        ControllerConnectionMachine<MediaControllerHandle>(
+            maxPendingCommands = MAX_PENDING_COMMANDS,
+            onStateChanged = ::onConnectionStateChanged,
+            requestConnection = ::requestMediaController,
+            release = ::releaseControllerHandle,
+        )
     private var positionObserver: Job? = null
+    private var positionObserverOwner: MediaControllerHandle? = null
     private var closed = false
     private var pendingVideoHost: ViewGroup? = null
     private var pendingScaleMode = VideoScaleMode.BEST_FIT
@@ -79,7 +88,21 @@ class Media3PlaybackController(
             player: Player,
             events: Player.Events,
         ) {
-            publish(player)
+            val controller = player as? MediaController ?: return
+            val handle = controllerHandles[controller] ?: return
+            if (connectionMachine.isCurrent(handle)) {
+                publish(player)
+            }
+        }
+    }
+
+    private val sessionListener = object : MediaController.Listener {
+        override fun onDisconnected(controller: MediaController) {
+            scope.launch {
+                controllerHandles[controller]?.let(
+                    connectionMachine::onDisconnected,
+                )
+            }
         }
     }
 
@@ -120,39 +143,7 @@ class Media3PlaybackController(
     }
 
     init {
-        scope.launch {
-            try {
-                val connected = controllerFuture.await()
-                if (closed) {
-                    connected.release()
-                    return@launch
-                }
-                mediaController = connected
-                connected.addListener(playerListener)
-                mutableConnectionState.value = ControllerConnectionState.Connected
-                publish(connected)
-                positionObserver = scope.launch {
-                    while (
-                        isActive &&
-                        !closed &&
-                        mediaController === connected
-                    ) {
-                        delay(500L)
-                        publish(connected)
-                    }
-                }
-                while (pendingCommands.isNotEmpty()) {
-                    pendingCommands.removeFirst()(connected)
-                }
-            } catch (error: Throwable) {
-                if (!closed) {
-                    mutableConnectionState.value = ControllerConnectionState.Failed(
-                        error.message ?: "无法连接后台播放器",
-                    )
-                    publish(null)
-                }
-            }
-        }
+        connectionMachine.start()
     }
 
     override fun prepare(url: String) = withController { controller ->
@@ -221,6 +212,13 @@ class Media3PlaybackController(
             controller.seekToDefaultPosition(index)
             controller.play()
         }
+    }
+
+    override fun reloadCurrent() = withController { controller ->
+        controller.sendCustomCommand(
+            SessionCommand(ACTION_RELOAD_CURRENT, Bundle.EMPTY),
+            Bundle.EMPTY,
+        )
     }
 
     override fun skipPrevious() = withController(Player::seekToPreviousMediaItem)
@@ -315,21 +313,108 @@ class Media3PlaybackController(
         if (closed) return
         closed = true
         detachVideoOutput()
-        pendingCommands.clear()
-        positionObserver?.cancel()
-        positionObserver = null
-        mediaController?.removeListener(playerListener)
-        mediaController = null
-        MediaController.releaseFuture(controllerFuture)
+        connectionMachine.close()
+        connectionJobs.values.toList().forEach(Job::cancel)
+        connectionJobs.clear()
+        connectionAttempts.values.toList().forEach(::releaseAttempt)
+        connectionAttempts.clear()
     }
 
     private fun withController(command: (MediaController) -> Unit) {
-        if (closed) return
-        val controller = mediaController
-        if (controller == null) {
-            pendingCommands.addLast(command)
-        } else {
-            command(controller)
+        connectionMachine.submit { handle ->
+            command(handle.controller)
+        }
+    }
+
+    private fun onConnectionStateChanged(state: ControllerConnectionState) {
+        mutableConnectionState.value = state
+        val connected = connectionMachine.currentOrNull()?.controller
+        publish(connected)
+    }
+
+    private fun requestMediaController(generation: Long) {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            var attempt: MediaControllerAttempt? = null
+            var handle: MediaControllerHandle? = null
+            try {
+                if (generation > 1L) delay(RECONNECT_DELAY_MS)
+                if (!connectionMachine.isCurrentGeneration(generation)) return@launch
+                attempt = MediaControllerAttempt(
+                    MediaController.Builder(
+                        appContext,
+                        SessionToken(
+                            appContext,
+                            ComponentName(appContext, PlaybackService::class.java),
+                        ),
+                    )
+                        .setListener(sessionListener)
+                        .buildAsync(),
+                )
+                connectionAttempts[generation] = attempt
+                val connected = attempt.future.await()
+                connectionAttempts.remove(generation)
+                handle = MediaControllerHandle(
+                    controller = connected,
+                    attempt = attempt,
+                )
+                controllerHandles[connected] = handle
+                connected.addListener(playerListener)
+                connectionMachine.onConnected(generation, handle)
+                if (connectionMachine.isCurrent(handle)) {
+                    startPositionObserver(handle)
+                    publish(connected)
+                }
+            } catch (error: Throwable) {
+                connectionAttempts.remove(generation)
+                handle?.let(::releaseControllerHandle)
+                    ?: attempt?.let(::releaseAttempt)
+                if (
+                    !closed &&
+                    connectionMachine.isCurrentGeneration(generation)
+                ) {
+                    connectionMachine.onConnectionFailed(
+                        generation = generation,
+                        message = error.message ?: "无法连接后台播放器",
+                    )
+                }
+            } finally {
+                connectionJobs.remove(generation)
+            }
+        }
+        connectionJobs[generation] = job
+        job.start()
+    }
+
+    private fun startPositionObserver(handle: MediaControllerHandle) {
+        positionObserver?.cancel()
+        positionObserverOwner = handle
+        positionObserver = scope.launch {
+            while (
+                isActive &&
+                !closed &&
+                connectionMachine.isCurrent(handle)
+            ) {
+                delay(500L)
+                publish(handle.controller)
+            }
+        }
+    }
+
+    private fun releaseControllerHandle(handle: MediaControllerHandle) {
+        controllerHandles.remove(handle.controller)
+        handle.controller.removeListener(playerListener)
+        if (positionObserverOwner === handle) {
+            positionObserver?.cancel()
+            positionObserver = null
+            positionObserverOwner = null
+        }
+        releaseAttempt(handle.attempt)
+    }
+
+    private fun releaseAttempt(attempt: MediaControllerAttempt) {
+        if (!attempt.released) {
+            attempt.released = true
+            MediaController.releaseFuture(attempt.future)
         }
     }
 
@@ -403,4 +488,19 @@ class Media3PlaybackController(
         shuffleModeEnabled = shuffleModeEnabled,
         playbackSpeed = playbackParameters.speed,
     )
+
+    private data class MediaControllerHandle(
+        val controller: MediaController,
+        val attempt: MediaControllerAttempt,
+    )
+
+    private data class MediaControllerAttempt(
+        val future: ListenableFuture<MediaController>,
+        var released: Boolean = false,
+    )
+
+    private companion object {
+        const val MAX_PENDING_COMMANDS = 32
+        const val RECONNECT_DELAY_MS = 500L
+    }
 }

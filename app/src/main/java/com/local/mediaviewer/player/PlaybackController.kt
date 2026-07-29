@@ -74,6 +74,8 @@ interface QueuePlaybackController : PlaybackController {
 
     fun select(mediaKey: String)
 
+    fun reloadCurrent()
+
     fun skipPrevious()
 
     fun skipNext()

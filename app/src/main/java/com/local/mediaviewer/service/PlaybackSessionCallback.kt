@@ -29,6 +29,10 @@ class PlaybackSessionCallback(
         ACTION_STOP_AND_RELEASE,
         Bundle.EMPTY,
     )
+    private val reloadCurrentCommand = SessionCommand(
+        ACTION_RELOAD_CURRENT,
+        Bundle.EMPTY,
+    )
 
     override fun onConnect(
         mediaSession: MediaSession,
@@ -39,6 +43,7 @@ class PlaybackSessionCallback(
                 MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
                     .buildUpon()
                     .add(stopAndReleaseCommand)
+                    .add(reloadCurrentCommand)
                     .build(),
             )
             .build()
@@ -68,14 +73,20 @@ class PlaybackSessionCallback(
         customCommand: SessionCommand,
         args: Bundle,
     ): ListenableFuture<SessionResult> {
-        if (customCommand.customAction != ACTION_STOP_AND_RELEASE) {
-            return Futures.immediateFuture(
+        return when (customCommand.customAction) {
+            ACTION_STOP_AND_RELEASE -> scope.future {
+                onStopAndRelease()
+                SessionResult(SessionResult.RESULT_SUCCESS)
+            }
+
+            ACTION_RELOAD_CURRENT -> scope.future {
+                coordinator.reloadCurrentFromSession()
+                SessionResult(SessionResult.RESULT_SUCCESS)
+            }
+
+            else -> Futures.immediateFuture(
                 SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED),
             )
-        }
-        return scope.future {
-            onStopAndRelease()
-            SessionResult(SessionResult.RESULT_SUCCESS)
         }
     }
 

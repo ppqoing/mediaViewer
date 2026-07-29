@@ -210,8 +210,15 @@ class PlayerViewModel(
                 mutableUiState.value = mutableUiState.value.copy(
                     errorMessage = null,
                 )
-                controller.prepare(currentRequest.requestUrl)
-                controller.play()
+                val queueController = controller as? QueuePlaybackController
+                val currentMediaKey =
+                    queueController?.sessionState?.value?.currentItem?.mediaKey
+                if (queueController != null && currentMediaKey != null) {
+                    queueController.reloadCurrent()
+                } else {
+                    controller.prepare(currentRequest.requestUrl)
+                    controller.play()
+                }
             }
 
             is AppResult.Failure -> {
@@ -225,8 +232,14 @@ class PlayerViewModel(
 
     private suspend fun saveSnapshot(ended: Boolean) {
         val state = controller.state.value
+        val currentMediaKey = (controller as? QueuePlaybackController)
+            ?.sessionState
+            ?.value
+            ?.currentItem
+            ?.mediaKey
+            ?: currentRequest.mediaKey
         positionStore.record(
-            mediaKey = currentRequest.mediaKey,
+            mediaKey = currentMediaKey,
             positionMs = state.positionMs,
             durationMs = state.durationMs,
             updatedAtEpochMs = clock(),

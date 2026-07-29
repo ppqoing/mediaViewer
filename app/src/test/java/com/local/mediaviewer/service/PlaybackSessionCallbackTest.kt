@@ -197,6 +197,51 @@ class PlaybackSessionCallbackTest {
         coordinator.close()
     }
 
+    @Test
+    fun `reload current command reopens current item without replacing queue`() = runTest {
+        val engine = ServiceTestEngine()
+        val repository = ServiceTestQueueRepository(
+            PlaybackQueue(
+                items = listOf(serviceTestItem("a"), serviceTestItem("b")),
+                currentMediaKey = "b",
+            ),
+        )
+        val coordinator = serviceTestCoordinator(
+            scope = this,
+            engine = engine,
+            repository = repository,
+        )
+        coordinator.restore()
+        advanceUntilIdle()
+        val callback = PlaybackSessionCallback(coordinator, this)
+        val sessionFixture = mediaSession(coordinator, this)
+        val command = SessionCommand(ACTION_RELOAD_CURRENT, Bundle.EMPTY)
+        val preparesBefore = engine.prepareCalls
+
+        assertTrue(
+            callback.onConnect(
+                sessionFixture.session,
+                controllerInfo(),
+            ).availableSessionCommands.contains(command),
+        )
+        val future = callback.onCustomCommand(
+            sessionFixture.session,
+            controllerInfo(),
+            command,
+            Bundle.EMPTY,
+        )
+        advanceUntilIdle()
+
+        assertEquals(SessionResult.RESULT_SUCCESS, future.get().resultCode)
+        assertEquals(preparesBefore + 1, engine.prepareCalls)
+        assertEquals(listOf("a", "b"), repository.queue.value.items.map { it.mediaKey })
+        assertEquals("b", repository.queue.value.currentMediaKey)
+
+        sessionFixture.session.release()
+        sessionFixture.player.release()
+        coordinator.close()
+    }
+
     private fun mediaSession(
         coordinator: com.local.mediaviewer.queue.PlaybackCoordinator,
         scope: CoroutineScope,

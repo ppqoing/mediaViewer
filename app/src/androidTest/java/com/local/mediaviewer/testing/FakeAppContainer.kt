@@ -549,6 +549,8 @@ class FakeQueuePlaybackController : QueuePlaybackController {
         }
     }
 
+    override fun reloadCurrent() = Unit
+
     override fun skipPrevious() = Unit
 
     override fun skipNext() = Unit

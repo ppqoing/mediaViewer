@@ -90,3 +90,6 @@ const val ACTION_LOCAL_VIDEO_OUTPUT =
 
 const val ACTION_STOP_AND_RELEASE =
     "com.local.mediaviewer.action.STOP_AND_RELEASE"
+
+const val ACTION_RELOAD_CURRENT =
+    "com.local.mediaviewer.action.RELOAD_CURRENT"
