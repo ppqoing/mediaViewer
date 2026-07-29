@@ -22,6 +22,7 @@ import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.RoomPlaybackPositionStore
 import com.local.mediaviewer.player.PlaybackController
+import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.queue.PlaybackCoordinator
 import com.local.mediaviewer.queue.PlaybackQueueRepository
 import com.local.mediaviewer.queue.RoomPlaybackQueueRepository
@@ -44,6 +45,7 @@ interface AppContainer {
     val sessionManager: ServerSessionManager
     val directoryContentRepository: DirectoryContentRepository
     val browserRepository: BrowserRepository
+    val queuePlaybackController: QueuePlaybackController
     val playbackControllerFactory: () -> PlaybackController
     val playbackPositionStore: PlaybackPositionStore
     val imageLoader: ImageLoader
@@ -113,6 +115,22 @@ class DefaultAppContainer(context: Context) : AppContainer {
 
     private val playbackEngineLock = Any()
     private var activePlaybackEngine: PlaybackEngine? = null
+    override val queuePlaybackController: QueuePlaybackController by lazy {
+        synchronized(playbackEngineLock) {
+            activePlaybackEngine?.close()
+            AndroidVlcPlaybackEngine(appContext).also { engine ->
+                activePlaybackEngine = engine
+            }.let { engine ->
+                PlaybackCoordinator(
+                    engine = engine,
+                    queueRepository = playbackQueueRepository,
+                    positionStore = playbackPositionStore,
+                    session = sessionManager,
+                    scope = playbackScope,
+                ).start()
+            }
+        }
+    }
     override val playbackControllerFactory: () -> PlaybackController = {
         synchronized(playbackEngineLock) {
             activePlaybackEngine?.close()

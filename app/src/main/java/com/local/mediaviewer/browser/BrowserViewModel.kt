@@ -7,6 +7,7 @@ import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.model.RootShare
+import com.local.mediaviewer.queue.QueueMediaItem
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +44,11 @@ class BrowserViewModel(
     val mediaLaunches: SharedFlow<MediaLaunchRequest> =
         mutableMediaLaunches.asSharedFlow()
 
+    private val mutablePlaybackRequests =
+        MutableSharedFlow<BrowserPlaybackRequest>()
+    val playbackRequests: SharedFlow<BrowserPlaybackRequest> =
+        mutablePlaybackRequests.asSharedFlow()
+
     init {
         load(pendingLoad, replaceFromIndex = 0)
     }
@@ -51,18 +57,26 @@ class BrowserViewModel(
         val current = pages.lastOrNull() ?: return
         if (entry.kind != MediaKind.DIRECTORY) {
             viewModelScope.launch {
-                mutableMediaLaunches.emit(
-                    MediaLaunchRequest(
-                        name = entry.name,
-                        logicalUrl = entry.logicalUrl,
-                        requestUrl = entry.requestUrl,
-                        mediaKey = entry.logicalUrl,
-                        kind = entry.kind,
-                        rootId = root.id,
-                        directoryLogicalUrl =
-                            current.logicalDirectoryUrl,
-                    ),
-                )
+                if (entry.kind == MediaKind.IMAGE) {
+                    mutableMediaLaunches.emit(
+                        MediaLaunchRequest(
+                            name = entry.name,
+                            logicalUrl = entry.logicalUrl,
+                            requestUrl = entry.requestUrl,
+                            mediaKey = entry.logicalUrl,
+                            kind = entry.kind,
+                            rootId = root.id,
+                            directoryLogicalUrl =
+                                current.logicalDirectoryUrl,
+                        ),
+                    )
+                } else {
+                    emitPlaybackRequest(
+                        BrowserPlaybackAction.PLAY_DIRECTORY,
+                        entry,
+                        current,
+                    )
+                }
             }
             return
         }
@@ -78,6 +92,17 @@ class BrowserViewModel(
         }
         pendingLoad = loader
         load(loader, replaceFromIndex = pages.size)
+    }
+
+    fun requestPlayback(
+        action: BrowserPlaybackAction,
+        entry: DirectoryEntry,
+    ) {
+        val current = pages.lastOrNull() ?: return
+        if (!entry.isPlayable) return
+        viewModelScope.launch {
+            emitPlaybackRequest(action, entry, current)
+        }
     }
 
     fun openBreadcrumb(index: Int) {
@@ -142,4 +167,32 @@ class BrowserViewModel(
             BrowserUiState.Content(page)
         }
     }
+
+    private suspend fun emitPlaybackRequest(
+        action: BrowserPlaybackAction,
+        entry: DirectoryEntry,
+        page: BrowserPage,
+    ) {
+        mutablePlaybackRequests.emit(
+            BrowserPlaybackRequest(
+                action = action,
+                selected = entry.toQueueItem(),
+                directoryItems = page.entries
+                    .filter(DirectoryEntry::isPlayable)
+                    .map(DirectoryEntry::toQueueItem),
+            ),
+        )
+    }
 }
+
+private val DirectoryEntry.isPlayable: Boolean
+    get() = kind == MediaKind.VIDEO ||
+        kind == MediaKind.AUDIO ||
+        kind == MediaKind.UNKNOWN
+
+private fun DirectoryEntry.toQueueItem() = QueueMediaItem(
+    mediaKey = logicalUrl,
+    name = name,
+    logicalUrl = logicalUrl,
+    kind = kind,
+)

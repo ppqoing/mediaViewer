@@ -24,6 +24,11 @@ import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.player.PlaybackController
+import com.local.mediaviewer.player.QueuePlaybackController
+import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.queue.PlaybackQueue
+import com.local.mediaviewer.queue.PlaybackSessionState
+import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.settings.ServerSettingsRepository
@@ -73,6 +78,8 @@ class FakeAppContainer(
     override val playbackControllerFactory: () -> PlaybackController = {
         FakePlaybackController()
     }
+    override val queuePlaybackController: QueuePlaybackController =
+        FakeQueuePlaybackController()
     override val playbackPositionStore: PlaybackPositionStore =
         InMemoryPlaybackPositionStore()
     override val imageLoader: ImageLoader =
@@ -459,6 +466,95 @@ private class FakePlaybackController : PlaybackController {
     }
 
     override fun close() = Unit
+}
+
+private class FakeQueuePlaybackController : QueuePlaybackController {
+    private val playback = FakePlaybackController()
+    private val mutableSession = MutableStateFlow(PlaybackSessionState())
+
+    override val state: StateFlow<PlaybackState> = playback.state
+    override val sessionState: StateFlow<PlaybackSessionState> = mutableSession
+
+    override fun prepare(url: String) = playback.prepare(url)
+
+    override fun play() = playback.play()
+
+    override fun pause() = playback.pause()
+
+    override fun stop() = playback.stop()
+
+    override fun seekTo(positionMs: Long) = playback.seekTo(positionMs)
+
+    override fun setPlaybackSpeed(speed: Float) = playback.setPlaybackSpeed(speed)
+
+    override fun attachVideoOutput(host: ViewGroup) = playback.attachVideoOutput(host)
+
+    override fun detachVideoOutput() = playback.detachVideoOutput()
+
+    override fun setVideoScaleMode(mode: VideoScaleMode) =
+        playback.setVideoScaleMode(mode)
+
+    override fun replaceQueue(items: List<QueueMediaItem>, startMediaKey: String) {
+        updateQueue(items, startMediaKey)
+        playback.play()
+    }
+
+    override fun playNext(item: QueueMediaItem) {
+        val queue = mutableSession.value.queue
+        val existing = queue.items.filterNot { it.mediaKey == item.mediaKey }
+        val insertAt = (queue.currentIndex + 1).coerceIn(0, existing.size)
+        updateQueue(
+            existing.toMutableList().apply { add(insertAt, item) },
+            queue.currentMediaKey,
+        )
+    }
+
+    override fun append(item: QueueMediaItem) {
+        val queue = mutableSession.value.queue
+        updateQueue(
+            queue.items.filterNot { it.mediaKey == item.mediaKey } + item,
+            queue.currentMediaKey,
+        )
+    }
+
+    override fun select(mediaKey: String) {
+        val queue = mutableSession.value.queue
+        if (queue.items.any { it.mediaKey == mediaKey }) {
+            updateQueue(queue.items, mediaKey)
+        }
+    }
+
+    override fun skipPrevious() = Unit
+
+    override fun skipNext() = Unit
+
+    override fun move(mediaKey: String, toIndex: Int) = Unit
+
+    override fun remove(mediaKey: String) = Unit
+
+    override fun clearExceptCurrent() = Unit
+
+    override fun clearAll() = updateQueue(emptyList(), null)
+
+    override fun setPlaybackMode(mode: PlaybackMode) {
+        mutableSession.value = mutableSession.value.copy(
+            queue = mutableSession.value.queue.copy(mode = mode),
+        )
+    }
+
+    override fun close() = Unit
+
+    private fun updateQueue(
+        items: List<QueueMediaItem>,
+        currentMediaKey: String?,
+    ) {
+        val current = currentMediaKey ?: items.firstOrNull()?.mediaKey
+        val queue = PlaybackQueue(items = items, currentMediaKey = current)
+        mutableSession.value = mutableSession.value.copy(
+            queue = queue,
+            currentItem = queue.currentItem,
+        )
+    }
 }
 
 private const val FAKE_LOGICAL_BASE_URL =

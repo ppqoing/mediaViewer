@@ -23,6 +23,8 @@ class PlayerViewModel(
     private val positionStore: PlaybackPositionStore,
     private val session: ServerSessionManager,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val autoStart: Boolean = true,
+    private val closeControllerOnCleared: Boolean = true,
 ) : ViewModel() {
     private var currentRequest = initialRequest
     private var pendingResumeMs: Long? = null
@@ -40,12 +42,14 @@ class PlayerViewModel(
     val uiState: StateFlow<PlayerUiState> = mutableUiState.asStateFlow()
 
     init {
-        viewModelScope.launch {
-            pendingResumeMs = positionStore.resumePosition(
-                initialRequest.mediaKey,
-            )
-            controller.prepare(currentRequest.requestUrl)
-            controller.play()
+        if (autoStart) {
+            viewModelScope.launch {
+                pendingResumeMs = positionStore.resumePosition(
+                    initialRequest.mediaKey,
+                )
+                controller.prepare(currentRequest.requestUrl)
+                controller.play()
+            }
         }
         viewModelScope.launch {
             controller.state.collect { state ->
@@ -122,6 +126,10 @@ class PlayerViewModel(
     fun next() = (controller as? QueuePlaybackController)?.skipNext()
 
     fun retry() {
+        if (controller is QueuePlaybackController) {
+            controller.play()
+            return
+        }
         endpointRetryUsed = false
         mutableUiState.value = mutableUiState.value.copy(
             status = PlaybackStatus.OPENING,
@@ -188,7 +196,7 @@ class PlayerViewModel(
             try {
                 saveSnapshot(ended = false)
             } finally {
-                controller.close()
+                closeControllerIfOwned()
                 onSaved()
             }
         }
@@ -253,7 +261,11 @@ class PlayerViewModel(
     }
 
     override fun onCleared() {
-        controller.close()
+        closeControllerIfOwned()
+    }
+
+    private fun closeControllerIfOwned() {
+        if (closeControllerOnCleared) controller.close()
     }
 
     private fun seekBy(deltaMs: Long) {

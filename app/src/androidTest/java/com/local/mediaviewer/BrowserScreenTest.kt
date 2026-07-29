@@ -2,9 +2,12 @@ package com.local.mediaviewer
 
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -68,6 +71,31 @@ class BrowserScreenTest {
     }
 
     @Test
+    fun playableFilesExposeManualPlaybackActions() {
+        val video = browserEntry("movie.mp4", MediaKind.VIDEO)
+        val image = browserEntry("page.png", MediaKind.IMAGE)
+        val directory = browserEntry("nested", MediaKind.DIRECTORY)
+        rule.setContent {
+            BrowserScreen(
+                state = BrowserUiState.Content(
+                    browserPage(entries = listOf(video, image, directory)),
+                ),
+                onEntryClick = {},
+                onBreadcrumbClick = {},
+                onRetry = {},
+                onBack = {},
+            )
+        }
+
+        rule.onNodeWithContentDescription("更多播放操作").performClick()
+        rule.onAllNodesWithContentDescription("更多播放操作")
+            .assertCountEquals(1)
+        rule.onNodeWithText("立即播放").assertIsDisplayed()
+        rule.onNodeWithText("下一项播放").assertIsDisplayed()
+        rule.onNodeWithText("添加到队列").assertIsDisplayed()
+    }
+
+    @Test
     fun emptyDirectoryHasExplicitState() {
         rule.setContent {
             BrowserScreen(
@@ -101,16 +129,10 @@ class BrowserScreenTest {
     }
 
     @Test
-    fun typedPlayerRoutePreservesEncodedUrlsExactly() {
+    fun typedPlayerRoutePreservesOnlyStableMediaKey() {
         val original = PlayerRoute(
-            name = "動画 (1) 😀.mkv",
-            logicalUrl =
-                "http://media.example:8080/middle/%E5%8B%95%E7%94%BB%20(1)%20%F0%9F%98%80.mkv",
-            requestUrl =
-                "http://203.0.113.7:8080/middle/%E5%8B%95%E7%94%BB%20(1)%20%F0%9F%98%80.mkv",
             mediaKey =
                 "http://media.example:8080/middle/%E5%8B%95%E7%94%BB%20(1)%20%F0%9F%98%80.mkv",
-            kind = MediaKind.VIDEO,
         )
         var decoded: PlayerRoute? = null
         rule.setContent {
@@ -182,4 +204,16 @@ private fun browserPage(entries: List<DirectoryEntry>) = BrowserPage(
         Breadcrumb("MiddleDir", "http://media.example/middle/"),
     ),
     entries = entries,
+)
+
+private fun browserEntry(name: String, kind: MediaKind) = DirectoryEntry(
+    name = name,
+    size = 1,
+    modifiedAt = Instant.EPOCH,
+    mode = 420,
+    isDirectory = kind == MediaKind.DIRECTORY,
+    isSymlink = false,
+    logicalUrl = "http://media.example/middle/$name",
+    requestUrl = "http://192.0.2.1/middle/$name",
+    kind = kind,
 )

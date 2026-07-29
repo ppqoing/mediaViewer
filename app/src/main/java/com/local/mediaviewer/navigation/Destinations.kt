@@ -1,6 +1,5 @@
 package com.local.mediaviewer.navigation
 
-import com.local.mediaviewer.model.MediaKind
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -13,13 +12,7 @@ data object SettingsRoute
 data class BrowserRoute(val rootId: String)
 
 @Serializable
-data class PlayerRoute(
-    val name: String,
-    val logicalUrl: String,
-    val requestUrl: String,
-    val mediaKey: String,
-    val kind: MediaKind,
-)
+data class PlayerRoute(val mediaKey: String)
 
 @Serializable
 data class ImageReaderRoute(

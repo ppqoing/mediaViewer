@@ -8,6 +8,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.material3.SnackbarHostState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,6 +20,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.local.mediaviewer.browser.BrowserViewModel
+import com.local.mediaviewer.browser.BrowserPlaybackAction
 import com.local.mediaviewer.home.HomeViewModel
 import com.local.mediaviewer.image.ImageReaderViewModel
 import com.local.mediaviewer.model.MediaKind
@@ -112,29 +114,46 @@ fun MediaViewerApp(container: AppContainer) {
                 },
             )
             val state by browser.uiState.collectAsStateWithLifecycle()
+            val snackbarHostState = remember { SnackbarHostState() }
             LaunchedEffect(browser) {
                 browser.mediaLaunches.collect { media ->
-                    if (media.kind == MediaKind.IMAGE) {
-                        navController.navigate(
-                            ImageReaderRoute(
-                                rootId = media.rootId,
-                                directoryLogicalUrl =
-                                    media.directoryLogicalUrl,
-                                selectedLogicalUrl =
-                                    media.logicalUrl,
-                                selectedName = media.name,
-                            ),
-                        )
-                    } else {
-                        navController.navigate(
-                            PlayerRoute(
-                                name = media.name,
-                                logicalUrl = media.logicalUrl,
-                                requestUrl = media.requestUrl,
-                                mediaKey = media.mediaKey,
-                                kind = media.kind,
-                            ),
-                        )
+                    navController.navigate(
+                        ImageReaderRoute(
+                            rootId = media.rootId,
+                            directoryLogicalUrl =
+                                media.directoryLogicalUrl,
+                            selectedLogicalUrl = media.logicalUrl,
+                            selectedName = media.name,
+                        ),
+                    )
+                }
+            }
+            LaunchedEffect(browser, snackbarHostState) {
+                browser.playbackRequests.collect { request ->
+                    when (request.action) {
+                        BrowserPlaybackAction.PLAY_DIRECTORY -> {
+                            container.queuePlaybackController.replaceQueue(
+                                request.directoryItems,
+                                request.selected.mediaKey,
+                            )
+                            navController.navigate(
+                                PlayerRoute(request.selected.mediaKey),
+                            )
+                        }
+
+                        BrowserPlaybackAction.PLAY_NEXT -> {
+                            container.queuePlaybackController.playNext(
+                                request.selected,
+                            )
+                            snackbarHostState.showSnackbar("已加入下一项播放")
+                        }
+
+                        BrowserPlaybackAction.ADD_TO_QUEUE -> {
+                            container.queuePlaybackController.append(
+                                request.selected,
+                            )
+                            snackbarHostState.showSnackbar("已添加到队列")
+                        }
                     }
                 }
             }
@@ -147,6 +166,8 @@ fun MediaViewerApp(container: AppContainer) {
                 state = state,
                 onEntryClick = browser::open,
                 onBreadcrumbClick = browser::openBreadcrumb,
+                onPlaybackAction = browser::requestPlayback,
+                snackbarHostState = snackbarHostState,
                 onRetry = browser::retry,
                 onBack = {
                     if (!browser.goBack()) {
@@ -157,23 +178,30 @@ fun MediaViewerApp(container: AppContainer) {
         }
         composable<PlayerRoute> { entry ->
             val route = entry.toRoute<PlayerRoute>()
+            val playbackSession by container.queuePlaybackController
+                .sessionState
+                .collectAsStateWithLifecycle()
+            val item = playbackSession.queue.items.firstOrNull {
+                it.mediaKey == route.mediaKey
+            } ?: return@composable
             val player: PlayerViewModel = viewModel(
                 key = "player:${route.mediaKey}",
                 factory = viewModelFactory {
                     initializer {
                         PlayerViewModel(
                             initialRequest = PlayerRequest(
-                                name = route.name,
-                                logicalUrl = route.logicalUrl,
-                                requestUrl = route.requestUrl,
+                                name = item.name,
+                                logicalUrl = item.logicalUrl,
+                                requestUrl = item.logicalUrl,
                                 mediaKey = route.mediaKey,
-                                kind = route.kind,
+                                kind = item.kind,
                             ),
-                            controller =
-                                container.playbackControllerFactory(),
+                            controller = container.queuePlaybackController,
                             positionStore =
                                 container.playbackPositionStore,
                             session = container.sessionManager,
+                            autoStart = false,
+                            closeControllerOnCleared = false,
                         )
                     }
                 },
@@ -207,7 +235,7 @@ fun MediaViewerApp(container: AppContainer) {
                 }
             }
 
-            if (route.kind == MediaKind.AUDIO) {
+            if (item.kind == MediaKind.AUDIO) {
                 AudioPlayerScreen(
                     state = state,
                     onPlay = player::play,

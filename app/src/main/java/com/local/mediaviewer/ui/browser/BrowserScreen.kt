@@ -20,22 +20,32 @@ import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.browser.BrowserPage
+import com.local.mediaviewer.browser.BrowserPlaybackAction
 import com.local.mediaviewer.browser.BrowserUiState
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
@@ -47,10 +57,15 @@ fun BrowserScreen(
     state: BrowserUiState,
     onEntryClick: (DirectoryEntry) -> Unit,
     onBreadcrumbClick: (Int) -> Unit,
+    onPlaybackAction: (BrowserPlaybackAction, DirectoryEntry) -> Unit = { _, _ -> },
+    snackbarHostState: SnackbarHostState? = null,
     onRetry: () -> Unit,
     onBack: () -> Unit,
 ) {
     Scaffold(
+        snackbarHost = {
+            snackbarHostState?.let { SnackbarHost(it) }
+        },
         topBar = {
             TopAppBar(
                 title = { Text(currentTitle(state)) },
@@ -91,6 +106,7 @@ fun BrowserScreen(
                         page = state.page,
                         onEntryClick = onEntryClick,
                         onBreadcrumbClick = onBreadcrumbClick,
+                        onPlaybackAction = onPlaybackAction,
                     )
                     Text(
                         text = "此目录为空",
@@ -103,6 +119,7 @@ fun BrowserScreen(
                         page = state.page,
                         onEntryClick = onEntryClick,
                         onBreadcrumbClick = onBreadcrumbClick,
+                        onPlaybackAction = onPlaybackAction,
                     )
                 }
             }
@@ -115,6 +132,7 @@ private fun BrowserPageContent(
     page: BrowserPage,
     onEntryClick: (DirectoryEntry) -> Unit,
     onBreadcrumbClick: (Int) -> Unit,
+    onPlaybackAction: (BrowserPlaybackAction, DirectoryEntry) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
         LazyRow(
@@ -159,7 +177,45 @@ private fun BrowserPageContent(
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
+                    if (entry.kind.isPlayable) {
+                        PlaybackActionsMenu(
+                            entry = entry,
+                            onPlaybackAction = onPlaybackAction,
+                        )
+                    }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaybackActionsMenu(
+    entry: DirectoryEntry,
+    onPlaybackAction: (BrowserPlaybackAction, DirectoryEntry) -> Unit,
+) {
+    var expanded by remember(entry.logicalUrl) { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { expanded = true },
+        ) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = "更多播放操作",
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            BrowserPlaybackAction.entries.forEach { action ->
+                DropdownMenuItem(
+                    text = { Text(action.label) },
+                    onClick = {
+                        expanded = false
+                        onPlaybackAction(action, entry)
+                    },
+                )
             }
         }
     }
@@ -189,4 +245,16 @@ private fun contentDescription(kind: MediaKind): String =
         MediaKind.AUDIO -> "音频"
         MediaKind.IMAGE -> "图片"
         MediaKind.UNKNOWN -> "文件"
+    }
+
+private val MediaKind.isPlayable: Boolean
+    get() = this == MediaKind.VIDEO ||
+        this == MediaKind.AUDIO ||
+        this == MediaKind.UNKNOWN
+
+private val BrowserPlaybackAction.label: String
+    get() = when (this) {
+        BrowserPlaybackAction.PLAY_DIRECTORY -> "立即播放"
+        BrowserPlaybackAction.PLAY_NEXT -> "下一项播放"
+        BrowserPlaybackAction.ADD_TO_QUEUE -> "添加到队列"
     }

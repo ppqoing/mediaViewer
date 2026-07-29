@@ -35,21 +35,38 @@ class BrowserViewModelTest {
     fun resetMain() = Dispatchers.resetMain()
 
     @Test
-    fun `根目录进入子目录发出稳定媒体键并返回上级`() = runTest(dispatcher) {
+    fun `点击可播放文件按目录顺序发出目录播放请求`() = runTest(dispatcher) {
         val rootUrl = "http://media.example:8080/middle/"
         val subUrl = "${rootUrl}sub/"
+        val directory = entry(
+            name = "nested",
+            logicalUrl = "${subUrl}nested/",
+            requestUrl = "",
+            kind = MediaKind.DIRECTORY,
+        )
+        val image = entry(
+            name = "page.png",
+            logicalUrl = "${subUrl}page.png",
+            requestUrl = "http://192.0.2.1:8080/middle/sub/page.png",
+            kind = MediaKind.IMAGE,
+        )
         val video = entry(
             name = "movie.mp4",
             logicalUrl = "${subUrl}movie.mp4",
             requestUrl = "http://192.0.2.1:8080/middle/sub/movie.mp4",
             kind = MediaKind.VIDEO,
         )
-        val image = entry(
-            name = "page.png",
-            logicalUrl = "${subUrl}page.png",
-            requestUrl =
-                "http://192.0.2.1:8080/middle/sub/page.png",
-            kind = MediaKind.IMAGE,
+        val audio = entry(
+            name = "song.mp3",
+            logicalUrl = "${subUrl}song.mp3",
+            requestUrl = "http://192.0.2.1:8080/middle/sub/song.mp3",
+            kind = MediaKind.AUDIO,
+        )
+        val unknown = entry(
+            name = "stream.bin",
+            logicalUrl = "${subUrl}stream.bin",
+            requestUrl = "http://192.0.2.1:8080/middle/sub/stream.bin",
+            kind = MediaKind.UNKNOWN,
         )
         val rootPage = page(
             rootUrl,
@@ -57,7 +74,7 @@ class BrowserViewModelTest {
         )
         val subPage = page(
             subUrl,
-            listOf(video, image),
+            listOf(directory, image, video, audio, unknown),
             listOf(
                 Breadcrumb("MiddleDir", rootUrl),
                 Breadcrumb("sub", subUrl),
@@ -74,14 +91,16 @@ class BrowserViewModelTest {
 
         viewModel.open(currentPage(viewModel).entries.single())
         advanceUntilIdle()
-        val mediaDeferred = async { viewModel.mediaLaunches.first() }
+        val requestDeferred = async { viewModel.playbackRequests.first() }
         runCurrent()
         viewModel.open(video)
-        val launch = mediaDeferred.await()
-        assertEquals(video.logicalUrl, launch.mediaKey)
-        assertEquals(video.requestUrl, launch.requestUrl)
-        assertEquals(RootShare.MIDDLE.id, launch.rootId)
-        assertEquals(subUrl, launch.directoryLogicalUrl)
+        val request = requestDeferred.await()
+        assertEquals(BrowserPlaybackAction.PLAY_DIRECTORY, request.action)
+        assertEquals(video.logicalUrl, request.selected.mediaKey)
+        assertEquals(
+            listOf(video.logicalUrl, audio.logicalUrl, unknown.logicalUrl),
+            request.directoryItems.map { it.mediaKey },
+        )
 
         val imageDeferred =
             async { viewModel.mediaLaunches.first() }
