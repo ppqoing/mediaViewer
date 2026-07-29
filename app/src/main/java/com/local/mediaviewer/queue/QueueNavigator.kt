@@ -24,6 +24,22 @@ object QueueNavigator {
         }
     }
 
+    fun select(queue: PlaybackQueue, mediaKey: String): PlaybackQueue {
+        if (queue.items.none { it.mediaKey == mediaKey }) return queue
+        if (queue.mode != PlaybackMode.SHUFFLE) {
+            return queue.copy(currentMediaKey = mediaKey)
+        }
+
+        val keys = queue.items.map { it.mediaKey }
+        val retained = queue.shuffleOrder.filter { it in keys }
+        val order = retained + keys.filterNot { it in retained }
+        return queue.copy(
+            currentMediaKey = mediaKey,
+            shuffleOrder = order,
+            shuffleCursor = order.indexOf(mediaKey),
+        )
+    }
+
     fun addNext(queue: PlaybackQueue, item: QueueMediaItem): PlaybackQueue {
         if (!item.isPlayable()) return queue
 

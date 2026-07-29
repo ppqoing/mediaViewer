@@ -126,6 +126,29 @@ class QueueNavigatorTest {
     }
 
     @Test
+    fun `随机队列选择下一项同步游标并把新增项插入未播放区`() {
+        val shuffled = QueueNavigator.setMode(
+            queueOf("a", "b", "c", current = "a"),
+            PlaybackMode.SHUFFLE,
+            Random(7),
+        )
+        val selected = QueueNavigator.select(
+            shuffled,
+            QueueNavigator.next(shuffled, QueueAdvanceReason.USER)!!,
+        )
+        val appended = QueueNavigator.append(selected, item("d"))
+        val rebuilt = appended.copy()
+
+        assertEquals(selected.currentMediaKey, selected.shuffleOrder[selected.shuffleCursor])
+        assertEquals("d", appended.shuffleOrder[appended.shuffleCursor + 1])
+        assertEquals(
+            QueueNavigator.next(appended, QueueAdvanceReason.ENDED),
+            QueueNavigator.next(rebuilt, QueueAdvanceReason.ENDED),
+        )
+        assertEquals(shuffled, QueueNavigator.select(shuffled, "missing"))
+    }
+
+    @Test
     fun `随机队列增删保留未删除项顺序并把新项置于待播区`() {
         val shuffled = QueueNavigator.setMode(
             queueOf("a", "b", "c", current = "a"),
