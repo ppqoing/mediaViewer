@@ -43,6 +43,7 @@ class AndroidVlcPlaybackEngine(
         }
         mutableState.value = PlaybackState(
             status = PlaybackStatus.OPENING,
+            playbackSpeed = mutableState.value.playbackSpeed,
         )
         val media = Media(libVlc, Uri.parse(url))
         media.setHWDecoderEnabled(true, false)
@@ -99,6 +100,15 @@ class AndroidVlcPlaybackEngine(
         }
     }
 
+    override fun setPlaybackSpeed(speed: Float) {
+        if (closed.get()) return
+        val validated = PlaybackSpeeds.requireSupported(speed)
+        mediaPlayer.rate = validated
+        mutableState.value = mutableState.value.copy(
+            playbackSpeed = validated,
+        )
+    }
+
     override fun play() {
         if (closed.get()) return
         if (interruptions.start()) {
@@ -112,6 +122,15 @@ class AndroidVlcPlaybackEngine(
             mediaPlayer.pause()
         }
         interruptions.close()
+    }
+
+    override fun stop() {
+        if (closed.get()) return
+        mediaPlayer.stop()
+        interruptions.close()
+        mutableState.value = PlaybackState(
+            playbackSpeed = mutableState.value.playbackSpeed,
+        )
     }
 
     override fun seekTo(positionMs: Long) {

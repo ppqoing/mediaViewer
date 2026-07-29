@@ -336,6 +336,8 @@ private class FakeEngine : PlaybackEngine {
         scaleModes += mode
     }
 
+    override fun setPlaybackSpeed(speed: Float) = Unit
+
     override fun play() {
         playCalls += 1
     }
@@ -343,6 +345,8 @@ private class FakeEngine : PlaybackEngine {
     override fun pause() {
         pauseCalls += 1
     }
+
+    override fun stop() = Unit
 
     override fun seekTo(positionMs: Long) {
         seeks += positionMs

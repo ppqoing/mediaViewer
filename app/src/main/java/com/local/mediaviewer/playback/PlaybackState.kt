@@ -17,4 +17,5 @@ data class PlaybackState(
     val bufferedPercent: Float = 0f,
     val isSeekable: Boolean = false,
     val errorMessage: String? = null,
+    val playbackSpeed: Float = 1f,
 )

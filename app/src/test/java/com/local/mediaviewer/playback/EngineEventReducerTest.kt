@@ -78,4 +78,21 @@ class EngineEventReducerTest {
             ).status,
         )
     }
+
+    @Test
+    fun `增量事件保留当前播放倍速`() {
+        val initial = PlaybackState(
+            status = PlaybackStatus.PLAYING,
+            playbackSpeed = 1.5f,
+        )
+
+        val updated = listOf(
+            EngineEvent.TimeChanged(5_000L),
+            EngineEvent.Buffering(40f),
+            EngineEvent.Paused,
+            EngineEvent.Error("网络中断"),
+        ).fold(initial, EngineEventReducer::reduce)
+
+        assertEquals(1.5f, updated.playbackSpeed)
+    }
 }
