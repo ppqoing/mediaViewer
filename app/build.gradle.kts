@@ -13,9 +13,20 @@ android {
         applicationId = "com.local.mediaviewer"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            isShrinkResources = false
+            ndk {
+                abiFilters.clear()
+                abiFilters += setOf("arm64-v8a")
+            }
+        }
     }
 
     buildFeatures {
@@ -34,6 +45,8 @@ android {
     }
 
     packaging {
+        jniLibs.useLegacyPackaging = true
+        dex.useLegacyPackaging = true
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         resources.excludes += "DebugProbesKt.bin"
     }
