@@ -81,6 +81,8 @@ class VlcSessionPlayer(
                 ),
             )
             .setPlaybackParameters(PlaybackParameters(session.queue.playbackSpeed))
+            .setSeekBackIncrementMs(SEEK_INCREMENT_MS)
+            .setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
             .setRepeatMode(session.queue.mode.toMedia3RepeatMode())
             .setShuffleModeEnabled(session.queue.mode == PlaybackMode.SHUFFLE)
             .build()
@@ -233,6 +235,10 @@ class VlcSessionPlayer(
             )
         }
         return commands.build()
+    }
+
+    private companion object {
+        const val SEEK_INCREMENT_MS = 10_000L
     }
 }
 

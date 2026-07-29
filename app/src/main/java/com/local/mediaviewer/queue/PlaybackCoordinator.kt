@@ -30,6 +30,12 @@ data class PlaybackSessionState(
     val errorMessage: String? = null,
 )
 
+data class PlaybackResumptionSnapshot(
+    val items: List<QueueMediaItem> = emptyList(),
+    val startIndex: Int = 0,
+    val startPositionMs: Long = 0L,
+)
+
 class PlaybackCoordinator(
     private val engine: PlaybackEngine,
     private val queueRepository: PlaybackQueueRepository,
@@ -96,6 +102,42 @@ class PlaybackCoordinator(
             error = null,
         )
         if (autoPlay) loadCurrent(autoPlay = true)
+    }
+
+    suspend fun playbackResumptionSnapshot(): PlaybackResumptionSnapshot =
+        mutex.withLock {
+            val restored = queueRepository.restore()
+            val startIndex = restored.currentIndex
+            if (restored.items.isEmpty() || startIndex !in restored.items.indices) {
+                return@withLock PlaybackResumptionSnapshot()
+            }
+            PlaybackResumptionSnapshot(
+                items = restored.items,
+                startIndex = startIndex,
+                startPositionMs = positionStore.resumePosition(
+                    restored.items[startIndex].mediaKey,
+                )?.coerceAtLeast(0L) ?: 0L,
+            )
+        }
+
+    suspend fun saveCurrentSnapshot() = mutate {
+        runCatching {
+            queueRepository.save(queue)
+            val current = queue.currentItem ?: return@runCatching
+            val playback = mutableSessionState.value.playback
+            positionStore.record(
+                mediaKey = current.mediaKey,
+                positionMs = playback.positionMs,
+                durationMs = playback.durationMs,
+                updatedAtEpochMs = System.currentTimeMillis(),
+            )
+        }.onFailure {
+            setError(it.message ?: "播放状态保存失败")
+        }
+    }
+
+    fun publishError(message: String) = launchMutation {
+        setError(message)
     }
 
     override fun replaceQueue(items: List<QueueMediaItem>, startMediaKey: String) = launchMutation {

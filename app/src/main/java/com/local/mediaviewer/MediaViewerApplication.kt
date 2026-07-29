@@ -6,7 +6,7 @@ import com.local.mediaviewer.app.DefaultAppContainer
 
 class MediaViewerApplication : Application() {
     lateinit var container: AppContainer
-        private set
+        internal set
 
     override fun onCreate() {
         super.onCreate()

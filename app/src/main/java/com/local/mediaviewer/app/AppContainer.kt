@@ -19,6 +19,7 @@ import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
 import com.local.mediaviewer.playback.MediaViewerDatabase
 import com.local.mediaviewer.playback.MediaViewerDatabaseFactory
 import com.local.mediaviewer.playback.PlaybackEngine
+import com.local.mediaviewer.playback.PlaybackEngineFactory
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.RoomPlaybackPositionStore
 import com.local.mediaviewer.player.PlaybackController
@@ -49,9 +50,15 @@ interface AppContainer {
     val playbackControllerFactory: () -> PlaybackController
     val playbackPositionStore: PlaybackPositionStore
     val imageLoader: ImageLoader
+
+    fun createPlaybackCoordinator(scope: CoroutineScope): PlaybackCoordinator
 }
 
-class DefaultAppContainer(context: Context) : AppContainer {
+class DefaultAppContainer(
+    context: Context,
+    private val playbackEngineFactory: PlaybackEngineFactory =
+        PlaybackEngineFactory { AndroidVlcPlaybackEngine(context.applicationContext) },
+) : AppContainer {
     private val appContext = context.applicationContext
     override val settingsRepository: ServerSettingsRepository =
         DataStoreServerSettingsRepository(context.serverSettingsDataStore)
@@ -116,25 +123,18 @@ class DefaultAppContainer(context: Context) : AppContainer {
     private val playbackEngineLock = Any()
     private var activePlaybackEngine: PlaybackEngine? = null
     override val queuePlaybackController: QueuePlaybackController by lazy {
-        synchronized(playbackEngineLock) {
-            activePlaybackEngine?.close()
-            AndroidVlcPlaybackEngine(appContext).also { engine ->
-                activePlaybackEngine = engine
-            }.let { engine ->
-                PlaybackCoordinator(
-                    engine = engine,
-                    queueRepository = playbackQueueRepository,
-                    positionStore = playbackPositionStore,
-                    session = sessionManager,
-                    scope = playbackScope,
-                ).start()
-            }
-        }
+        createPlaybackCoordinator(playbackScope)
     }
     override val playbackControllerFactory: () -> PlaybackController = {
+        createPlaybackCoordinator(playbackScope)
+    }
+
+    override fun createPlaybackCoordinator(
+        scope: CoroutineScope,
+    ): PlaybackCoordinator =
         synchronized(playbackEngineLock) {
             activePlaybackEngine?.close()
-            AndroidVlcPlaybackEngine(appContext).also { engine ->
+            playbackEngineFactory.create().also { engine ->
                 activePlaybackEngine = engine
             }.let { engine ->
                 PlaybackCoordinator(
@@ -142,9 +142,8 @@ class DefaultAppContainer(context: Context) : AppContainer {
                     queueRepository = playbackQueueRepository,
                     positionStore = playbackPositionStore,
                     session = sessionManager,
-                    scope = playbackScope,
+                    scope = scope,
                 ).start()
             }
         }
-    }
 }

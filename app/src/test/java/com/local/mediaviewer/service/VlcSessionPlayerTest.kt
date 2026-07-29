@@ -116,6 +116,8 @@ class VlcSessionPlayerTest {
         assertTrue(fixture.player.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM))
         assertTrue(fixture.player.isCommandAvailable(Player.COMMAND_CHANGE_MEDIA_ITEMS))
         assertTrue(fixture.player.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH))
+        assertEquals(10_000L, fixture.player.seekBackIncrement)
+        assertEquals(10_000L, fixture.player.seekForwardIncrement)
 
         fixture.close()
     }

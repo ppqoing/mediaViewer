@@ -20,13 +20,16 @@ import com.local.mediaviewer.model.ServerConfig
 import com.local.mediaviewer.model.SessionEndpoint
 import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.playback.PlaybackPositionStore
+import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.player.PlaybackController
 import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.queue.PlaybackCoordinator
 import com.local.mediaviewer.queue.PlaybackQueue
+import com.local.mediaviewer.queue.PlaybackQueueRepository
 import com.local.mediaviewer.queue.PlaybackSessionState
 import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.session.ServerSessionManager
@@ -35,6 +38,7 @@ import com.local.mediaviewer.settings.ServerSettingsRepository
 import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -84,6 +88,25 @@ class FakeAppContainer(
         InMemoryPlaybackPositionStore()
     override val imageLoader: ImageLoader =
         MediaImageLoaderFactory.create(context)
+    var playbackEngineCreationCount: Int = 0
+        private set
+    var playbackEngineCloseCount: Int = 0
+        private set
+
+    override fun createPlaybackCoordinator(
+        scope: CoroutineScope,
+    ): PlaybackCoordinator {
+        playbackEngineCreationCount += 1
+        return PlaybackCoordinator(
+            engine = FakeServicePlaybackEngine {
+                playbackEngineCloseCount += 1
+            },
+            queueRepository = InMemoryPlaybackQueueRepository(),
+            positionStore = playbackPositionStore,
+            session = sessionManager,
+            scope = scope,
+        ).start()
+    }
 
     val savedReaderModes: List<ImageReaderMode>
         get() = readerPreferences.savedModes.toList()
@@ -586,5 +609,59 @@ private class InMemoryPlaybackPositionStore :
 
     override suspend fun clear(mediaKey: String) {
         positions.remove(mediaKey)
+    }
+}
+
+private class InMemoryPlaybackQueueRepository : PlaybackQueueRepository {
+    private val mutable = MutableStateFlow(PlaybackQueue())
+    override val queue: StateFlow<PlaybackQueue> = mutable
+
+    override suspend fun restore(): PlaybackQueue = mutable.value
+
+    override suspend fun save(queue: PlaybackQueue) {
+        mutable.value = queue
+    }
+}
+
+private class FakeServicePlaybackEngine(
+    private val onClose: () -> Unit,
+) : PlaybackEngine {
+    private val mutable = MutableStateFlow(PlaybackState())
+    override val state: StateFlow<PlaybackState> = mutable
+    private var closed = false
+
+    override fun prepare(url: String) {
+        check(!closed)
+        mutable.value = mutable.value.copy(status = PlaybackStatus.PAUSED)
+    }
+
+    override fun attachVideoOutput(host: ViewGroup) = Unit
+
+    override fun detachVideoOutput() = Unit
+
+    override fun setVideoScaleMode(mode: VideoScaleMode) = Unit
+
+    override fun setPlaybackSpeed(speed: Float) = Unit
+
+    override fun play() {
+        mutable.value = mutable.value.copy(status = PlaybackStatus.PLAYING)
+    }
+
+    override fun pause() {
+        mutable.value = mutable.value.copy(status = PlaybackStatus.PAUSED)
+    }
+
+    override fun stop() {
+        mutable.value = mutable.value.copy(status = PlaybackStatus.IDLE)
+    }
+
+    override fun seekTo(positionMs: Long) {
+        mutable.value = mutable.value.copy(positionMs = positionMs)
+    }
+
+    override fun close() {
+        if (closed) return
+        closed = true
+        onClose()
     }
 }
