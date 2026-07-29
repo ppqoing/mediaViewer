@@ -73,6 +73,11 @@ class PlaybackCoordinator(
         }
     }
 
+    fun start(): PlaybackCoordinator {
+        restore(autoPlay = false)
+        return this
+    }
+
     fun restore(autoPlay: Boolean = false) = launchMutation {
         queue = queueRepository.restore()
         val current = queue.currentItem
@@ -91,7 +96,9 @@ class PlaybackCoordinator(
 
     override fun replaceQueue(items: List<QueueMediaItem>, startMediaKey: String) = launchMutation {
         setQueue(
-            QueueNavigator.replace(items, startMediaKey, queue.mode, random),
+            QueueNavigator.replace(items, startMediaKey, queue.mode, random).copy(
+                playbackSpeed = queue.playbackSpeed,
+            ),
             persist = true,
         )
         loadCurrent(autoPlay = true)

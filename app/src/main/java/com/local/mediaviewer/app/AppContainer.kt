@@ -125,7 +125,7 @@ class DefaultAppContainer(context: Context) : AppContainer {
                     positionStore = playbackPositionStore,
                     session = sessionManager,
                     scope = playbackScope,
-                )
+                ).start()
             }
         }
     }

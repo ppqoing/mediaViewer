@@ -58,7 +58,7 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
-    fun `冷恢复不触发引擎直到用户播放并只恢复一次位置`() = runTest {
+    fun `启动路径冷恢复不触发引擎直到用户播放并只恢复一次位置`() = runTest {
         val engine = FakeEngine()
         val repository = FakeQueueRepository(
             PlaybackQueue(items = listOf(item("a")), currentMediaKey = "a"),
@@ -66,7 +66,7 @@ class PlaybackCoordinatorTest {
         val positions = FakePositionStore(mapOf("a" to 30_000L))
         val coordinator = coordinator(engine, repository, positions, this)
 
-        coordinator.restore(autoPlay = false)
+        coordinator.start()
         advanceUntilIdle()
 
         assertTrue(engine.prepareCalls.isEmpty())
@@ -84,6 +84,19 @@ class PlaybackCoordinatorTest {
         assertEquals(listOf(requestUrlFor("a")), engine.prepareCalls)
         assertEquals(listOf(30_000L), engine.seekCalls)
         assertEquals(1, engine.playCalls)
+        coordinator.close()
+    }
+
+    @Test
+    fun `替换队列保留已选择的播放倍速`() = runTest {
+        val engine = FakeEngine()
+        val coordinator = coordinator(engine, scope = this)
+
+        coordinator.setPlaybackSpeed(1.5f)
+        coordinator.replaceQueue(listOf(item("a")), "a")
+        advanceUntilIdle()
+
+        assertEquals(1.5f, coordinator.sessionState.value.queue.playbackSpeed)
         coordinator.close()
     }
 
