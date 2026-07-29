@@ -16,7 +16,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -117,7 +116,7 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `每五秒暂停和结束使用当前快照写入`() = runTest(dispatcher) {
+    fun `暂停和结束使用当前快照写入`() = runTest(dispatcher) {
         val controller = FakePlaybackController()
         val store = FakeStore()
         val viewModel = PlayerViewModel(
@@ -136,12 +135,9 @@ class PlayerViewModelTest {
                 isSeekable = true,
             ),
         )
-        advanceTimeBy(5_001)
-        assertTrue(store.records.any { it.positionMs == 20_000L })
-
         viewModel.pause()
         runCurrent()
-        assertTrue(store.records.size >= 2)
+        assertTrue(store.records.any { it.positionMs == 20_000L })
 
         controller.emit(
             PlaybackState(
@@ -267,7 +263,7 @@ class PlayerViewModelTest {
         }
 
     @Test
-    fun `后台和离开保存快照且重复离开只完成一次`() =
+    fun `离开保存快照但不释放应用级控制器且重复离开只完成一次`() =
         runTest(dispatcher) {
             val controller = FakePlaybackController()
             val store = FakeStore()
@@ -289,19 +285,14 @@ class PlayerViewModelTest {
             )
             runCurrent()
 
-            viewModel.onBackgrounded()
-            runCurrent()
-            assertEquals(1, controller.pauseCalls)
-            assertEquals(40_000L, store.records.last().positionMs)
-
             var leaveCallbacks = 0
             viewModel.leave { leaveCallbacks += 1 }
             viewModel.leave { leaveCallbacks += 1 }
             runCurrent()
 
-            assertEquals(1, controller.closeCalls)
+            assertEquals(0, controller.closeCalls)
             assertEquals(1, leaveCallbacks)
-            assertTrue(store.records.size >= 2)
+            assertEquals(40_000L, store.records.last().positionMs)
         }
 
     @Test

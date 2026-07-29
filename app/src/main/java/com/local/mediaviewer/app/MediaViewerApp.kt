@@ -55,7 +55,7 @@ import com.local.mediaviewer.ui.settings.SettingsScreen
 @Composable
 fun MediaViewerApp(container: AppContainer) {
     val navController = rememberNavController()
-    val playbackSession by container.queuePlaybackController.sessionState
+    val playbackSession by container.playbackController.sessionState
         .collectAsStateWithLifecycle()
     val currentEntry by navController.currentBackStackEntryAsState()
     var queueSheetVisible by remember { mutableStateOf(false) }
@@ -151,7 +151,7 @@ fun MediaViewerApp(container: AppContainer) {
                 browser.playbackRequests.collect { request ->
                     when (request.action) {
                         BrowserPlaybackAction.PLAY_DIRECTORY -> {
-                            container.queuePlaybackController.replaceQueue(
+                            container.playbackController.replaceQueue(
                                 request.directoryItems,
                                 request.selected.mediaKey,
                             )
@@ -161,14 +161,14 @@ fun MediaViewerApp(container: AppContainer) {
                         }
 
                         BrowserPlaybackAction.PLAY_NEXT -> {
-                            container.queuePlaybackController.playNext(
+                            container.playbackController.playNext(
                                 request.selected,
                             )
                             snackbarHostState.showSnackbar("已加入下一项播放")
                         }
 
                         BrowserPlaybackAction.ADD_TO_QUEUE -> {
-                            container.queuePlaybackController.append(
+                            container.playbackController.append(
                                 request.selected,
                             )
                             snackbarHostState.showSnackbar("已添加到队列")
@@ -212,12 +212,11 @@ fun MediaViewerApp(container: AppContainer) {
                                 mediaKey = route.mediaKey,
                                 kind = item.kind,
                             ),
-                            controller = container.queuePlaybackController,
+                            controller = container.playbackController,
                             positionStore =
                                 container.playbackPositionStore,
                             session = container.sessionManager,
                             autoStart = false,
-                            closeControllerOnCleared = false,
                         )
                     }
                 },
@@ -238,9 +237,6 @@ fun MediaViewerApp(container: AppContainer) {
                 onDispose {
                     fullscreenController.close()
                 }
-            }
-            LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-                player.onBackgrounded()
             }
             LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
                 volumeController.refresh()
@@ -266,7 +262,7 @@ fun MediaViewerApp(container: AppContainer) {
                     onNext = player::next,
                     onSpeedChanged = player::setPlaybackSpeed,
                     playbackMode = playbackSession.queue.mode,
-                    onPlaybackModeChanged = container.queuePlaybackController::setPlaybackMode,
+                    onPlaybackModeChanged = container.playbackController::setPlaybackMode,
                     onOpenQueue = { queueSheetVisible = true },
                     onRetry = player::retry,
                     volumeController = volumeController,
@@ -299,7 +295,7 @@ fun MediaViewerApp(container: AppContainer) {
                     onNext = player::next,
                     onSpeedChanged = player::setPlaybackSpeed,
                     playbackMode = playbackSession.queue.mode,
-                    onPlaybackModeChanged = container.queuePlaybackController::setPlaybackMode,
+                    onPlaybackModeChanged = container.playbackController::setPlaybackMode,
                     onOpenQueue = { queueSheetVisible = true },
                     onRetry = player::retry,
                     onResumeHintShown = player::onResumeHintShown,
@@ -366,10 +362,10 @@ fun MediaViewerApp(container: AppContainer) {
                 onToggle = {
                     if (playbackSession.playback.status ==
                         com.local.mediaviewer.playback.PlaybackStatus.PLAYING
-                    ) container.queuePlaybackController.pause()
-                    else container.queuePlaybackController.play()
+                    ) container.playbackController.pause()
+                    else container.playbackController.play()
                 },
-                onNext = container.queuePlaybackController::skipNext,
+                onNext = container.playbackController::skipNext,
                 onOpenQueue = { queueSheetVisible = true },
                 onOpenPlayer = {
                     playbackSession.currentItem?.let { item ->
@@ -385,13 +381,13 @@ fun MediaViewerApp(container: AppContainer) {
             PlaybackQueueSheet(
                 queue = playbackSession.queue,
                 onSelect = {
-                    container.queuePlaybackController.select(it)
+                    container.playbackController.select(it)
                     queueSheetVisible = false
                 },
-                onMove = container.queuePlaybackController::move,
-                onRemove = container.queuePlaybackController::remove,
-                onClearExceptCurrent = container.queuePlaybackController::clearExceptCurrent,
-                onStopAndClear = container.queuePlaybackController::clearAll,
+                onMove = container.playbackController::move,
+                onRemove = container.playbackController::remove,
+                onClearExceptCurrent = container.playbackController::clearExceptCurrent,
+                onStopAndClear = container.playbackController::clearAll,
                 onDismiss = { queueSheetVisible = false },
             )
         }

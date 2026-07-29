@@ -7,9 +7,34 @@ import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.queue.PlaybackSessionState
 import com.local.mediaviewer.queue.QueueMediaItem
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+
+sealed interface ControllerConnectionState {
+    data object Connecting : ControllerConnectionState
+
+    data object Connected : ControllerConnectionState
+
+    data class Failed(
+        val message: String,
+    ) : ControllerConnectionState
+}
+
+sealed interface VideoOutputConnectionState {
+    data object Detached : VideoOutputConnectionState
+
+    data object Connecting : VideoOutputConnectionState
+
+    data object Attached : VideoOutputConnectionState
+
+    data class Failed(
+        val message: String,
+    ) : VideoOutputConnectionState
+}
 
 interface PlaybackController : AutoCloseable {
     val state: StateFlow<PlaybackState>
+    val videoOutputState: StateFlow<VideoOutputConnectionState>
+        get() = detachedVideoOutputState
 
     fun prepare(url: String)
 
@@ -27,10 +52,16 @@ interface PlaybackController : AutoCloseable {
 
     fun detachVideoOutput()
 
+    fun retryVideoOutput() = Unit
+
     fun setVideoScaleMode(mode: VideoScaleMode)
 
     override fun close()
 }
+
+private val detachedVideoOutputState = MutableStateFlow<VideoOutputConnectionState>(
+    VideoOutputConnectionState.Detached,
+)
 
 interface QueuePlaybackController : PlaybackController {
     val sessionState: StateFlow<PlaybackSessionState>

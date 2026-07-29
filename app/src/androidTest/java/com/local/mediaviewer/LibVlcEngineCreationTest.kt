@@ -7,6 +7,7 @@ import com.local.mediaviewer.app.DefaultAppContainer
 import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
 import com.local.mediaviewer.playback.PlaybackStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,17 +35,14 @@ class LibVlcEngineCreationTest {
     }
 
     @Test
-    fun appFactoryClosesPreviousEngineBeforeCreatingNext() {
+    fun appContainerKeepsOneApplicationPlaybackController() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val container = DefaultAppContainer(context)
-        val first = container.playbackControllerFactory()
+        val first = container.playbackController
 
-        val second = container.playbackControllerFactory()
+        val second = container.playbackController
 
-        assertThrows(IllegalStateException::class.java) {
-            first.prepare("http://127.0.0.1:8080/middle/old.mp4")
-        }
-        assertEquals(PlaybackStatus.IDLE, second.state.value.status)
-        second.close()
+        assertSame(first, second)
+        first.close()
     }
 }

@@ -79,11 +79,9 @@ class FakeAppContainer(
             endpoint = endpoint,
             template = directoryContent,
         )
-    override val playbackControllerFactory: () -> PlaybackController = {
-        FakePlaybackController()
-    }
-    override val queuePlaybackController: QueuePlaybackController =
-        FakeQueuePlaybackController()
+    val fakePlaybackController = FakeQueuePlaybackController()
+    override val playbackController: QueuePlaybackController =
+        fakePlaybackController
     override val playbackPositionStore: PlaybackPositionStore =
         InMemoryPlaybackPositionStore()
     override val imageLoader: ImageLoader =
@@ -489,9 +487,13 @@ private class FakePlaybackController : PlaybackController {
     }
 
     override fun close() = Unit
+
+    fun emit(state: PlaybackState) {
+        mutable.value = state
+    }
 }
 
-private class FakeQueuePlaybackController : QueuePlaybackController {
+class FakeQueuePlaybackController : QueuePlaybackController {
     private val playback = FakePlaybackController()
     private val mutableSession = MutableStateFlow(PlaybackSessionState())
 
@@ -566,6 +568,11 @@ private class FakeQueuePlaybackController : QueuePlaybackController {
     }
 
     override fun close() = Unit
+
+    fun emitSessionState(state: PlaybackSessionState) {
+        mutableSession.value = state
+        playback.emit(state.playback)
+    }
 
     private fun updateQueue(
         items: List<QueueMediaItem>,

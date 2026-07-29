@@ -91,7 +91,7 @@ class MediaViewerNavigationTest {
 
     @Test
     fun homeShowsMiniPlayerForCurrentQueueItem() {
-        container.queuePlaybackController.replaceQueue(
+        container.playbackController.replaceQueue(
             listOf(
                 QueueMediaItem(
                     mediaKey = "queue-song",

@@ -19,8 +19,11 @@ import com.local.mediaviewer.queue.PlaybackPersistenceSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -114,6 +117,23 @@ internal class PlaybackFocusGate(
     }
 }
 
+internal class PlaybackSnapshotTicker(
+    scope: CoroutineScope,
+    intervalMs: Long = 5_000L,
+    save: suspend () -> Unit,
+) : AutoCloseable {
+    private val job: Job = scope.launch {
+        while (isActive) {
+            delay(intervalMs)
+            save()
+        }
+    }
+
+    override fun close() {
+        job.cancel()
+    }
+}
+
 @UnstableApi
 class PlaybackService : MediaSessionService() {
     private val serviceScope = CoroutineScope(
@@ -127,6 +147,7 @@ class PlaybackService : MediaSessionService() {
     private lateinit var focusGate: PlaybackFocusGate
     private lateinit var localVideoBinder: LocalVideoOutputBinder
     private lateinit var localVideoBindingChannel: LocalVideoOutputBindingChannel
+    private lateinit var snapshotTicker: PlaybackSnapshotTicker
     private lateinit var releaseSequence:
         PlaybackReleaseSequence<PlaybackPersistenceSnapshot>
 
@@ -178,6 +199,10 @@ class PlaybackService : MediaSessionService() {
             .build()
         localVideoBinder = LocalVideoOutputBinder(coordinator)
         localVideoBindingChannel = LocalVideoOutputBindingChannel(localVideoBinder)
+        snapshotTicker = PlaybackSnapshotTicker(
+            scope = serviceScope,
+            save = coordinator::saveCurrentSnapshot,
+        )
         releaseSequence = PlaybackReleaseSequence(
             saveCurrentSnapshot = coordinator::saveCurrentSnapshot,
             captureCurrentSnapshot = coordinator::captureCurrentSnapshot,
@@ -187,6 +212,7 @@ class PlaybackService : MediaSessionService() {
                 }
             },
             releaseResources = {
+                snapshotTicker.close()
                 localVideoBindingChannel.invalidate()
                 session.release()
                 player.release()

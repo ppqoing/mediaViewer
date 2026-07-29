@@ -28,6 +28,8 @@ data class PlaybackSessionState(
     val queue: PlaybackQueue = PlaybackQueue(),
     val currentItem: QueueMediaItem? = null,
     val errorMessage: String? = null,
+    val canSkipPrevious: Boolean = false,
+    val canSkipNext: Boolean = false,
 )
 
 data class PlaybackResumptionSnapshot(
@@ -522,6 +524,11 @@ class PlaybackCoordinator(
             queue = queue,
             currentItem = queue.currentItem,
             errorMessage = error,
+            canSkipPrevious = QueueNavigator.previous(queue) != null,
+            canSkipNext = QueueNavigator.next(
+                queue,
+                QueueAdvanceReason.USER,
+            ) != null,
         )
     }
 

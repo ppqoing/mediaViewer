@@ -22,7 +22,7 @@ import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackEngineFactory
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.RoomPlaybackPositionStore
-import com.local.mediaviewer.player.PlaybackController
+import com.local.mediaviewer.player.Media3PlaybackController
 import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.queue.PlaybackCoordinator
 import com.local.mediaviewer.queue.PlaybackQueueRepository
@@ -46,8 +46,7 @@ interface AppContainer {
     val sessionManager: ServerSessionManager
     val directoryContentRepository: DirectoryContentRepository
     val browserRepository: BrowserRepository
-    val queuePlaybackController: QueuePlaybackController
-    val playbackControllerFactory: () -> PlaybackController
+    val playbackController: QueuePlaybackController
     val playbackPositionStore: PlaybackPositionStore
     val imageLoader: ImageLoader
 
@@ -122,11 +121,11 @@ class DefaultAppContainer(
 
     private val playbackEngineLock = Any()
     private var activePlaybackEngine: PlaybackEngine? = null
-    override val queuePlaybackController: QueuePlaybackController by lazy {
-        createPlaybackCoordinator(playbackScope)
-    }
-    override val playbackControllerFactory: () -> PlaybackController = {
-        createPlaybackCoordinator(playbackScope)
+    override val playbackController: QueuePlaybackController by lazy {
+        Media3PlaybackController(
+            context = appContext,
+            scope = playbackScope,
+        )
     }
 
     override fun createPlaybackCoordinator(

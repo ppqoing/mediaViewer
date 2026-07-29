@@ -6,15 +6,10 @@ import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
-import com.local.mediaviewer.queue.QueueAdvanceReason
-import com.local.mediaviewer.queue.QueueNavigator
 import com.local.mediaviewer.session.ServerSessionManager
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class PlayerViewModel(
@@ -24,7 +19,6 @@ class PlayerViewModel(
     private val session: ServerSessionManager,
     private val clock: () -> Long = System::currentTimeMillis,
     private val autoStart: Boolean = true,
-    private val closeControllerOnCleared: Boolean = true,
 ) : ViewModel() {
     private var currentRequest = initialRequest
     private var pendingResumeMs: Long? = null
@@ -32,7 +26,6 @@ class PlayerViewModel(
     private var endpointRetryUsed = false
     private var lastStatus = PlaybackStatus.IDLE
     private var leaving = false
-    private val periodicSaveJob: Job
     private val mutableUiState = MutableStateFlow(
         PlayerUiState(
             name = initialRequest.name,
@@ -80,23 +73,13 @@ class PlayerViewModel(
                             currentMediaKey = queue.currentMediaKey,
                             queueSize = queue.items.size,
                             playbackMode = queue.mode,
-                            canSkipPrevious =
-                                QueueNavigator.previous(queue) != null,
-                            canSkipNext = QueueNavigator.next(
-                                queue,
-                                QueueAdvanceReason.USER,
-                            ) != null,
+                            canSkipPrevious = sessionState.canSkipPrevious,
+                            canSkipNext = sessionState.canSkipNext,
                             errorMessage = sessionState.errorMessage
                                 ?: sessionState.playback.errorMessage,
                             playbackSpeed = queue.playbackSpeed,
                         )
                 }
-            }
-        }
-        periodicSaveJob = viewModelScope.launch {
-            while (isActive) {
-                delay(SAVE_INTERVAL_MS)
-                saveSnapshot(ended = false)
             }
         }
     }
@@ -181,22 +164,13 @@ class PlayerViewModel(
         )
     }
 
-    fun onBackgrounded() {
-        controller.pause()
-        viewModelScope.launch {
-            saveSnapshot(ended = false)
-        }
-    }
-
     fun leave(onSaved: () -> Unit) {
         if (leaving) return
         leaving = true
-        periodicSaveJob.cancel()
         viewModelScope.launch {
             try {
                 saveSnapshot(ended = false)
             } finally {
-                closeControllerIfOwned()
                 onSaved()
             }
         }
@@ -260,14 +234,6 @@ class PlayerViewModel(
         )
     }
 
-    override fun onCleared() {
-        closeControllerIfOwned()
-    }
-
-    private fun closeControllerIfOwned() {
-        if (closeControllerOnCleared) controller.close()
-    }
-
     private fun seekBy(deltaMs: Long) {
         val state = mutableUiState.value
         if (!state.isSeekable || state.durationMs <= 0L) return
@@ -287,7 +253,6 @@ class PlayerViewModel(
     }
 
     private companion object {
-        const val SAVE_INTERVAL_MS = 5_000L
         const val SEEK_INCREMENT_MS = 10_000L
     }
 }
