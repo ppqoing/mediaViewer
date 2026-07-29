@@ -1,13 +1,13 @@
 # mediaviewer arm64 压缩 Release 验收记录
 
-- 完成时间：2026-07-29 12:06:42 +08:00
-- Git 修订：9b38b34a38a37162f81666a4d16f464537351b6f
+- 完成时间：2026-07-29 14:40:06 +08:00
+- Git 修订：4e30ab19a8b0ced3ecd20bf4a82a7094d7400dec
 - 包名：com.local.mediaviewer
 - 版本：1.0.1 (2)
 - ABI：arm64-v8a
 - APK：dist/mediaviewer-v1.0.1-arm64-v8a-release.apk
 - APK 大小：39.8 MiB
-- SHA-256：065f72309095e000607eb5dc1b47db83568d9e1bde5eac82aadf5d6a3215afcf
+- SHA-256：f0a7349ff585dcc8e66067c8c483ba1979b419d45486f75e82ee2e13ccb4cea9
 - 签名证书 SHA-256：b432a64032601b66f275d0c4b3308d95cbb40b58be9269c1494783e82fa5415d
 - 此前证书对比：通过
 
