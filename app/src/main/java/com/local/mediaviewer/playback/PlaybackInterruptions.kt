@@ -35,6 +35,7 @@ class PlaybackInterruptions(
                 .build(),
         )
         .setOnAudioFocusChangeListener(::onAudioFocusChange)
+        .setWillPauseWhenDucked(true)
         .build()
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {

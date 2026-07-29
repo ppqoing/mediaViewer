@@ -41,6 +41,7 @@ class PlaybackInterruptionsTest {
                 .lastAudioFocusRequest
                 .audioFocusRequest,
         )
+        assertTrue(firstRequest.willPauseWhenDucked())
         interruptions.abandonFocus()
         assertSame(
             firstRequest,
