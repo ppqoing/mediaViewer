@@ -186,6 +186,28 @@ try {
     if ($recorded -ne $checksum.Sha256) {
         throw 'SHA-256 文件与返回值不一致'
     }
+
+    $certificateOutput = @(
+        'Verifies',
+        (
+            'Signer #1 certificate SHA-256 digest: ' +
+            'b432a64032601b66f275d0c4b3308d95' +
+            'cbb40b58be9269c1494783e82fa5415d'
+        )
+    )
+    $digest = Get-ApkSignerCertificateSha256 `
+        -ApkSignerOutput $certificateOutput
+    if (
+        $digest -ne
+            'b432a64032601b66f275d0c4b3308d95' +
+            'cbb40b58be9269c1494783e82fa5415d'
+    ) {
+        throw "证书摘要解析错误：$digest"
+    }
+    Assert-ThrowsLike {
+        Get-ApkSignerCertificateSha256 `
+            -ApkSignerOutput @('Verifies')
+    } '没有证书 SHA-256'
 } finally {
     $resolvedTestRoot = [IO.Path]::GetFullPath($testRoot)
     $tempPrefix = (

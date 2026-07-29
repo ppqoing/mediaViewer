@@ -273,8 +273,33 @@ function Write-VerifiedSha256 {
     }
 }
 
+function Get-ApkSignerCertificateSha256 {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$ApkSignerOutput
+    )
+
+    $line = $ApkSignerOutput |
+        Where-Object {
+            $_ -match (
+                '^Signer #1 certificate SHA-256 digest: ' +
+                '([0-9a-fA-F]{64})$'
+            )
+        } |
+        Select-Object -First 1
+    if ($null -eq $line) {
+        throw 'apksigner 输出中没有证书 SHA-256'
+    }
+    if ($line -notmatch '([0-9a-fA-F]{64})$') {
+        throw '无法解析证书 SHA-256'
+    }
+    $Matches[1].ToLowerInvariant()
+}
+
 Export-ModuleMember -Function @(
     'Get-ApkArchiveInventory',
     'Assert-Arm64CompressedArchive',
-    'Write-VerifiedSha256'
+    'Write-VerifiedSha256',
+    'Get-ApkSignerCertificateSha256'
 )
