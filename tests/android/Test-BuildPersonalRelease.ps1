@@ -52,6 +52,20 @@ if ($missingKeystoreOutput.Contains($missingKeystore)) {
     $failures += '缺失 keystore 错误泄露完整路径'
 }
 
+$distDirectory = Join-Path $repositoryRoot 'dist'
+$officialApk = Join-Path `
+    $distDirectory `
+    'mediaviewer-v1.0.1-arm64-v8a-release.apk'
+$officialChecksum = "$officialApk.sha256"
+New-Item `
+    -ItemType Directory `
+    -Path $distDirectory `
+    -Force | Out-Null
+[IO.File]::WriteAllText($officialApk, 'sentinel-old-apk')
+[IO.File]::WriteAllText(
+    $officialChecksum,
+    'sentinel-old-checksum'
+)
 $signingOutput = Invoke-ExpectedBuildFailure -Arguments @(
     '-KeystorePath',
     $defaultDebugKeystore,
@@ -63,6 +77,12 @@ if ($signingOutput.Contains($defaultDebugKeystore)) {
 }
 if ($signingOutput.Contains('--ks')) {
     $failures += '签名失败错误泄露签名参数'
+}
+if (Test-Path -LiteralPath $officialApk) {
+    $failures += '签名失败后仍保留旧的官方 APK'
+}
+if (Test-Path -LiteralPath $officialChecksum) {
+    $failures += '签名失败后仍保留旧的官方校验文件'
 }
 
 if ($failures.Count -gt 0) {
