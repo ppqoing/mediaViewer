@@ -17,6 +17,7 @@ sealed interface PlayerGestureFeedback {
 
 data class VideoInteractionState(
     val controlsVisible: Boolean = true,
+    val autoHideEpoch: Long = 0L,
     val controlsLocked: Boolean = false,
     val menuExpanded: Boolean = false,
     val scrubbing: Boolean = false,

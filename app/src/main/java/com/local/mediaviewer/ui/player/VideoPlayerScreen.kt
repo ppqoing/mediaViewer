@@ -76,14 +76,13 @@ fun VideoPlayerScreen(
     var gestureHintDismissed by remember { mutableStateOf(false) }
 
     fun revealControls() {
-        if (!interaction.controlsLocked) {
-            interaction = interaction.copy(controlsVisible = true)
-        }
+        interaction = VideoInteractionReducer.revealControls(interaction)
     }
 
     LaunchedEffect(
         state.status,
         interaction.controlsVisible,
+        interaction.autoHideEpoch,
         interaction.menuExpanded,
         interaction.scrubbing,
         interaction.feedback,
@@ -170,10 +169,8 @@ fun VideoPlayerScreen(
                             onSeekForward()
                         },
                         onBeginScrub = {
-                            interaction = interaction.copy(
-                                controlsVisible = true,
-                                scrubbing = true,
-                            )
+                            revealControls()
+                            interaction = interaction.copy(scrubbing = true)
                             onBeginScrub()
                         },
                         onPreviewScrub = onPreviewScrub,
@@ -182,10 +179,8 @@ fun VideoPlayerScreen(
                             onCommitScrub()
                         },
                         onFeedback = { feedback ->
-                            interaction = interaction.copy(
-                                controlsVisible = true,
-                                feedback = feedback,
-                            )
+                            revealControls()
+                            interaction = interaction.copy(feedback = feedback)
                         },
                     )
                     if (interaction.controlsVisible || interaction.controlsLocked) {
@@ -200,10 +195,8 @@ fun VideoPlayerScreen(
                             onSeekBack = { revealControls(); onSeekBack() },
                             onSeekForward = { revealControls(); onSeekForward() },
                             onBeginScrub = {
-                                interaction = interaction.copy(
-                                    controlsVisible = true,
-                                    scrubbing = true,
-                                )
+                                revealControls()
+                                interaction = interaction.copy(scrubbing = true)
                                 onBeginScrub()
                             },
                             onPreviewScrub = onPreviewScrub,
@@ -219,10 +212,8 @@ fun VideoPlayerScreen(
                                 onVideoScaleModeChanged(it)
                             },
                             onMenuExpandedChanged = { expanded ->
-                                interaction = interaction.copy(
-                                    controlsVisible = true,
-                                    menuExpanded = expanded,
-                                )
+                                revealControls()
+                                interaction = interaction.copy(menuExpanded = expanded)
                             },
                             onBack = fullscreenController::exit,
                         )

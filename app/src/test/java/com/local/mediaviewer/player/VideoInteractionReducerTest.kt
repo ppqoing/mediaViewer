@@ -36,6 +36,16 @@ class VideoInteractionReducerTest {
     }
 
     @Test
+    fun `重复显示控制层会产生新的自动隐藏计时标识`() {
+        val visible = VideoInteractionState(controlsVisible = true)
+
+        val revealed = VideoInteractionReducer.revealControls(visible)
+
+        assertTrue(revealed.controlsVisible)
+        assertTrue(revealed.autoHideEpoch > visible.autoHideEpoch)
+    }
+
+    @Test
     fun `锁定后点击不能切换控制层且解锁恢复可见`() {
         val locked = VideoInteractionReducer.lock(
             VideoInteractionState(

@@ -20,6 +20,16 @@ object VideoInteractionReducer {
             state.copy(controlsVisible = !state.controlsVisible)
         }
 
+    fun revealControls(state: VideoInteractionState): VideoInteractionState =
+        if (state.controlsLocked) {
+            state
+        } else {
+            state.copy(
+                controlsVisible = true,
+                autoHideEpoch = state.autoHideEpoch + 1,
+            )
+        }
+
     fun lock(state: VideoInteractionState): VideoInteractionState =
         state.copy(
             controlsLocked = true,
