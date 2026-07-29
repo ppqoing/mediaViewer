@@ -1,14 +1,14 @@
 # mediaviewer Android 验收记录
 
-- 完成时间：2026-07-29 00:57:03 +08:00
-- Git 修订：c00de60249aa94f9ab736a175670b873c4bcdab3
+- 完成时间：2026-07-29 12:04:47 +08:00
+- Git 修订：f327a3f64a0a63388c73bf4093bf5def2bb572cd
 - AVD：Pixel_3a_API_36_extension_level_17_x86_64
 - Android API：36
 - ABI：x86_64
 - 真实服务器：http://192.168.1.17:8080
-- 应用进程 PID：11244
+- 应用进程 PID：23259
 - APK：dist/mediaviewer-debug.apk
-- SHA-256：abd47bd7434a8f9499338244ad9f68a5335a7494986f8f54e7b27f0c197438f2
+- SHA-256：6007d741be638df7f14c04095d3df6204bf70d81389ca899662e90d6015c74a5
 
 ## 自动门禁
 
