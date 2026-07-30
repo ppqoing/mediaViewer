@@ -1,10 +1,7 @@
 package com.local.mediaviewer.ui.player
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,6 +33,7 @@ fun PlaybackSpeedMenu(
             contentDescription = description
         },
     ) {
+        NeonPlayerIcon(PlayerIcons.Speed, contentDescription = null)
         Text("${formatPlaybackSpeed(current)} 倍")
     }
     DropdownMenu(
@@ -55,9 +53,10 @@ fun PlaybackSpeedMenu(
                 },
                 trailingIcon = {
                     if (speed == current) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
+                        NeonPlayerIcon(
+                            icon = PlayerIcons.Playing,
                             contentDescription = "已选择",
+                            active = true,
                         )
                     }
                 },

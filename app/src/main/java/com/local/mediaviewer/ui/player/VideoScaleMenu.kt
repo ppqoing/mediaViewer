@@ -1,12 +1,8 @@
 package com.local.mediaviewer.ui.player
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,8 +39,8 @@ fun VideoScaleMenu(
             },
             modifier = Modifier.testTag("video_scale_menu"),
         ) {
-            Icon(
-                imageVector = Icons.Default.AspectRatio,
+            NeonPlayerIcon(
+                icon = PlayerIcons.Scale,
                 contentDescription =
                     "画面模式：${videoScaleLabel(current)}",
             )
@@ -66,9 +62,10 @@ fun VideoScaleMenu(
                     },
                     leadingIcon = if (mode == current) {
                         {
-                            Icon(
-                                imageVector = Icons.Default.Check,
+                            NeonPlayerIcon(
+                                icon = PlayerIcons.Playing,
                                 contentDescription = null,
+                                active = true,
                             )
                         }
                     } else {

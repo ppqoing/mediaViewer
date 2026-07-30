@@ -9,16 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Forward10
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material.icons.filled.Replay10
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,7 +62,7 @@ fun VideoControlsOverlay(
                     .align(Alignment.CenterStart)
                     .padding(16.dp),
             ) {
-                Icon(Icons.Default.LockOpen, "解锁控制")
+                NeonPlayerIcon(PlayerIcons.Unlock, "解锁控制", active = true)
             }
             return@Box
         }
@@ -99,7 +89,11 @@ fun VideoControlsOverlay(
                     maxLines = 1,
                 )
                 IconButton(onClick = {}, enabled = false) {
-                    Icon(Icons.Default.SkipNext, "播放列表（即将支持）")
+                    NeonPlayerIcon(
+                        PlayerIcons.Queue,
+                        "播放列表（即将支持）",
+                        enabled = false,
+                    )
                 }
             }
         }
@@ -113,7 +107,11 @@ fun VideoControlsOverlay(
                 onClick = onSeekBack,
                 enabled = state.isSeekable && state.durationMs > 0L,
             ) {
-                Icon(Icons.Default.Replay10, "快退 10 秒")
+                NeonPlayerIcon(
+                    PlayerIcons.Back10,
+                    "快退 10 秒",
+                    enabled = state.isSeekable && state.durationMs > 0L,
+                )
             }
             PrimaryVideoControl(
                 state = state,
@@ -125,7 +123,11 @@ fun VideoControlsOverlay(
                 onClick = onSeekForward,
                 enabled = state.isSeekable && state.durationMs > 0L,
             ) {
-                Icon(Icons.Default.Forward10, "快进 10 秒")
+                NeonPlayerIcon(
+                    PlayerIcons.Forward10,
+                    "快进 10 秒",
+                    enabled = state.isSeekable && state.durationMs > 0L,
+                )
             }
         }
 
@@ -147,10 +149,18 @@ fun VideoControlsOverlay(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(onClick = onPrevious, enabled = state.canSkipPrevious) {
-                        Icon(Icons.Default.SkipPrevious, "上一项")
+                        NeonPlayerIcon(
+                            PlayerIcons.Previous,
+                            "上一项",
+                            enabled = state.canSkipPrevious,
+                        )
                     }
                     IconButton(onClick = onNext, enabled = state.canSkipNext) {
-                        Icon(Icons.Default.SkipNext, "下一项")
+                        NeonPlayerIcon(
+                            PlayerIcons.Next,
+                            "下一项",
+                            enabled = state.canSkipNext,
+                        )
                     }
                     PlaybackSpeedMenu(
                         current = state.playbackSpeed,
@@ -170,10 +180,10 @@ fun VideoControlsOverlay(
                         onVolumeChanged = onVolumeChanged,
                     )
                     IconButton(onClick = onLock) {
-                        Icon(Icons.Default.Lock, "锁定控制")
+                        NeonPlayerIcon(PlayerIcons.Lock, "锁定控制")
                     }
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.FullscreenExit, "退出全屏")
+                        NeonPlayerIcon(PlayerIcons.FullscreenExit, "退出全屏")
                     }
                 }
             }
@@ -191,12 +201,17 @@ private fun PrimaryVideoControl(
     val (description, icon, action) = when (state.status) {
         PlaybackStatus.PLAYING,
         PlaybackStatus.BUFFERING,
-        -> Triple("暂停", Icons.Default.Pause, onPause)
+        -> Triple("暂停", PlayerIcons.Pause, onPause)
 
-        PlaybackStatus.ENDED -> Triple("重新播放", Icons.Default.Replay, onReplay)
-        else -> Triple("播放", Icons.Default.PlayArrow, onPlay)
+        PlaybackStatus.ENDED -> Triple("重新播放", PlayerIcons.Replay, onReplay)
+        else -> Triple("播放", PlayerIcons.Play, onPlay)
     }
     FilledIconButton(onClick = action, enabled = state.status != PlaybackStatus.OPENING) {
-        Icon(icon, description)
+        NeonPlayerIcon(
+            icon,
+            description,
+            active = true,
+            enabled = state.status != PlaybackStatus.OPENING,
+        )
     }
 }

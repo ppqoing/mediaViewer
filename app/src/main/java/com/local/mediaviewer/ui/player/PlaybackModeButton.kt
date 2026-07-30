@@ -1,14 +1,8 @@
 package com.local.mediaviewer.ui.player
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FormatListBulleted
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.RepeatOne
-import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,14 +31,15 @@ fun PlaybackModeButton(
             },
     ) {
         Row {
-            Icon(
-                imageVector = when (mode) {
-                    PlaybackMode.SEQUENTIAL -> Icons.Default.FormatListBulleted
-                    PlaybackMode.REPEAT_ALL -> Icons.Default.Repeat
-                    PlaybackMode.REPEAT_ONE -> Icons.Default.RepeatOne
-                    PlaybackMode.SHUFFLE -> Icons.Default.Shuffle
+            NeonPlayerIcon(
+                icon = when (mode) {
+                    PlaybackMode.SEQUENTIAL -> PlayerIcons.Sequential
+                    PlaybackMode.REPEAT_ALL -> PlayerIcons.RepeatAll
+                    PlaybackMode.REPEAT_ONE -> PlayerIcons.RepeatOne
+                    PlaybackMode.SHUFFLE -> PlayerIcons.Shuffle
                 },
                 contentDescription = null,
+                active = true,
             )
             Text(label, modifier = Modifier.padding(start = 4.dp))
         }

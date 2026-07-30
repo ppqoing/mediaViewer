@@ -4,16 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Forward10
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material.icons.filled.Replay10
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -44,13 +35,13 @@ fun PlaybackTransportControls(
     ) {
         ControlButton(
             description = "上一项",
-            icon = { Icon(Icons.Default.SkipPrevious, null) },
+            icon = { enabled -> NeonPlayerIcon(PlayerIcons.Previous, null, enabled = enabled) },
             enabled = state.canSkipPrevious,
             onClick = onPrevious,
         )
         ControlButton(
             description = "快退 10 秒",
-            icon = { Icon(Icons.Default.Replay10, null) },
+            icon = { enabled -> NeonPlayerIcon(PlayerIcons.Back10, null, enabled = enabled) },
             enabled = seekEnabled,
             onClick = onSeekBack,
         )
@@ -62,13 +53,13 @@ fun PlaybackTransportControls(
         )
         ControlButton(
             description = "快进 10 秒",
-            icon = { Icon(Icons.Default.Forward10, null) },
+            icon = { enabled -> NeonPlayerIcon(PlayerIcons.Forward10, null, enabled = enabled) },
             enabled = seekEnabled,
             onClick = onSeekForward,
         )
         ControlButton(
             description = "下一项",
-            icon = { Icon(Icons.Default.SkipNext, null) },
+            icon = { enabled -> NeonPlayerIcon(PlayerIcons.Next, null, enabled = enabled) },
             enabled = state.canSkipNext,
             onClick = onNext,
         )
@@ -78,7 +69,7 @@ fun PlaybackTransportControls(
 @Composable
 private fun ControlButton(
     description: String,
-    icon: @Composable () -> Unit,
+    icon: @Composable (Boolean) -> Unit,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
@@ -92,7 +83,7 @@ private fun ControlButton(
                 contentDescription = description
             },
         ) {
-            icon()
+            icon(enabled)
         }
     }
 }
@@ -107,18 +98,18 @@ private fun PrimaryControlButton(
     val action = when (state.status) {
         PlaybackStatus.PLAYING,
         PlaybackStatus.BUFFERING,
-        -> PrimaryAction("暂停", { Icon(Icons.Default.Pause, null) }, onPause)
+        -> PrimaryAction("暂停", { enabled -> NeonPlayerIcon(PlayerIcons.Pause, null, active = true, enabled = enabled) }, onPause)
 
         PlaybackStatus.ENDED ->
             PrimaryAction(
                 "重新播放",
-                { Icon(Icons.Default.Replay, null) },
+                { enabled -> NeonPlayerIcon(PlayerIcons.Replay, null, active = true, enabled = enabled) },
                 onReplay,
             )
 
         else -> PrimaryAction(
             "播放",
-            { Icon(Icons.Default.PlayArrow, null) },
+            { enabled -> NeonPlayerIcon(PlayerIcons.Play, null, active = true, enabled = enabled) },
             onPlay,
         )
     }
@@ -134,13 +125,13 @@ private fun PrimaryControlButton(
                 contentDescription = action.description
             },
         ) {
-            action.icon()
+            action.icon(state.status != PlaybackStatus.OPENING)
         }
     }
 }
 
 private data class PrimaryAction(
     val description: String,
-    val icon: @Composable () -> Unit,
+    val icon: @Composable (Boolean) -> Unit,
     val onClick: () -> Unit,
 )

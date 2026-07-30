@@ -5,13 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.BrightnessMedium
-import androidx.compose.material.icons.filled.Forward10
-import androidx.compose.material.icons.filled.Replay10
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,22 +31,19 @@ internal fun PlayerGestureFeedbackOverlay(feedback: PlayerGestureFeedback?) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         when (value) {
-            is PlayerGestureFeedback.Seek -> Icon(
-                imageVector = if (value.deltaMs < 0) Icons.Filled.Replay10 else Icons.Filled.Forward10,
+            is PlayerGestureFeedback.Seek -> NeonPlayerIcon(
+                icon = if (value.deltaMs < 0) PlayerIcons.Back10 else PlayerIcons.Forward10,
                 contentDescription = null,
-                tint = Color.White,
             )
 
-            is PlayerGestureFeedback.Brightness -> Icon(
-                imageVector = Icons.Filled.BrightnessMedium,
+            is PlayerGestureFeedback.Brightness -> NeonPlayerIcon(
+                icon = PlayerIcons.Brightness,
                 contentDescription = null,
-                tint = Color.White,
             )
 
-            is PlayerGestureFeedback.Volume -> Icon(
-                imageVector = if (value.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+            is PlayerGestureFeedback.Volume -> NeonPlayerIcon(
+                icon = if (value.muted) PlayerIcons.Muted else PlayerIcons.Volume,
                 contentDescription = null,
-                tint = Color.White,
             )
         }
         Text(

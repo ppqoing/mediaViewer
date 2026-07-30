@@ -6,12 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,16 +44,17 @@ fun NowPlayingBar(
                     .semantics { contentDescription = "打开播放器：${item.name}" },
             )
             IconButton(onClick = onToggle) {
-                Icon(
-                    if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                NeonPlayerIcon(
+                    if (playing) PlayerIcons.Pause else PlayerIcons.Play,
                     contentDescription = if (playing) "暂停" else "播放",
+                    active = true,
                 )
             }
             IconButton(onClick = onNext) {
-                Icon(Icons.Default.SkipNext, contentDescription = "下一项")
+                NeonPlayerIcon(PlayerIcons.Next, contentDescription = "下一项")
             }
             IconButton(onClick = onOpenQueue) {
-                Icon(Icons.Default.QueueMusic, contentDescription = "打开队列")
+                NeonPlayerIcon(PlayerIcons.Queue, contentDescription = "打开队列")
             }
         }
     }
