@@ -29,7 +29,9 @@ class PlayerViewModel(
     private var endpointRetryUsed = false
     private var lastStatus = PlaybackStatus.IDLE
     private var leaving = false
-    private var playAfterSeekConfirmation = false
+    private var nextSeekGeneration = 0L
+    private var activeSeekConfirmation: SeekConfirmation? = null
+    private var playAfterSeekGeneration: Long? = null
     private var seekConfirmationTimeoutJob: Job? = null
     private val mutableUiState = MutableStateFlow(
         PlayerUiState(
@@ -65,9 +67,9 @@ class PlayerViewModel(
                     state.status == PlaybackStatus.ERROR ||
                     state.status == PlaybackStatus.ENDED
                 ) {
-                    cancelDeferredPlay()
+                    cancelSeekConfirmation()
                 }
-                completeDeferredPlayIfConfirmed()
+                completeSeekConfirmationIfResolved()
                 applyResumeIfReady()
                 if (
                     state.status == PlaybackStatus.ENDED &&
@@ -95,7 +97,7 @@ class PlayerViewModel(
                     val mediaChanged =
                         queue.currentMediaKey != current.currentMediaKey
                     val seekSync = if (mediaChanged) {
-                        cancelDeferredPlay()
+                        cancelSeekConfirmation()
                         current.seekSync.clear()
                     } else {
                         current.seekSync
@@ -135,9 +137,9 @@ class PlayerViewModel(
                         sessionState.playback.status == PlaybackStatus.ERROR ||
                         sessionState.playback.status == PlaybackStatus.ENDED
                     ) {
-                        cancelDeferredPlay()
+                        cancelSeekConfirmation()
                     }
-                    completeDeferredPlayIfConfirmed()
+                    completeSeekConfirmationIfResolved()
                 }
             }
         }
@@ -148,15 +150,13 @@ class PlayerViewModel(
             playNow()
             return
         }
-        playAfterSeekConfirmation = true
-        seekConfirmationTimeoutJob?.cancel()
-        seekConfirmationTimeoutJob = viewModelScope.launch {
-            delay(SEEK_CONFIRMATION_TIMEOUT_MS)
-            mutableUiState.value = mutableUiState.value.copy(
-                seekSync = mutableUiState.value.seekSync.clear(),
-            )
-            completeDeferredPlay()
-        }
+        val pending = requireNotNull(
+            mutableUiState.value.seekSync.pending,
+        )
+        val confirmation = activeSeekConfirmation
+            ?.takeIf { it.pending == pending }
+            ?: startSeekConfirmation(pending)
+        playAfterSeekGeneration = confirmation.generation
     }
 
     fun pause() {
@@ -183,7 +183,7 @@ class PlayerViewModel(
     fun next() = (controller as? QueuePlaybackController)?.skipNext()
 
     fun retry() {
-        cancelDeferredPlay()
+        cancelSeekConfirmation()
         if (controller is QueuePlaybackController) {
             controller.play()
             return
@@ -205,9 +205,10 @@ class PlayerViewModel(
         }
     }
 
-    fun beginScrub() = updateInteraction(
-        PlayerInteractionReducer::beginScrub,
-    )
+    fun beginScrub() {
+        cancelSeekConfirmation()
+        updateInteraction(PlayerInteractionReducer::beginScrub)
+    }
 
     fun previewScrub(positionMs: Long) {
         mutableUiState.value = PlayerInteractionReducer.updateScrub(
@@ -220,7 +221,11 @@ class PlayerViewModel(
         val (next, target) =
             PlayerInteractionReducer.finishScrub(mutableUiState.value)
         mutableUiState.value = next
-        target?.let(controller::seekTo)
+        val pending = next.seekSync.pending
+        if (target != null && pending != null) {
+            startSeekConfirmation(pending)
+            controller.seekTo(target)
+        }
     }
 
     fun setPlaybackSpeed(speed: Float) {
@@ -348,18 +353,57 @@ class PlayerViewModel(
             ?.mediaKey
             ?: currentRequest.mediaKey
 
-    private fun completeDeferredPlayIfConfirmed() {
-        if (mutableUiState.value.seekSync.pending == null) {
-            completeDeferredPlay()
+    private fun startSeekConfirmation(
+        pending: PendingSeek,
+    ): SeekConfirmation {
+        seekConfirmationTimeoutJob?.cancel()
+        playAfterSeekGeneration = null
+        val confirmation = SeekConfirmation(
+            generation = ++nextSeekGeneration,
+            pending = pending,
+        )
+        activeSeekConfirmation = confirmation
+        seekConfirmationTimeoutJob = viewModelScope.launch {
+            delay(SEEK_CONFIRMATION_TIMEOUT_MS)
+            handleSeekConfirmationTimeout(confirmation)
         }
+        return confirmation
     }
 
-    private fun completeDeferredPlay() {
-        if (!playAfterSeekConfirmation) return
-        playAfterSeekConfirmation = false
+    private fun completeSeekConfirmationIfResolved() {
+        val confirmation = activeSeekConfirmation ?: return
+        if (mutableUiState.value.seekSync.pending != null) return
+        completeSeekConfirmation(confirmation)
+    }
+
+    private fun handleSeekConfirmationTimeout(
+        confirmation: SeekConfirmation,
+    ) {
+        if (activeSeekConfirmation != confirmation) return
+        val current = mutableUiState.value
+        if (current.seekSync.pending != confirmation.pending) return
+        mutableUiState.value = current.copy(
+            seekSync = current.seekSync.copy(pending = null),
+            errorMessage = SEEK_CONFIRMATION_TIMEOUT_MESSAGE,
+        )
+        completeSeekConfirmation(confirmation)
+    }
+
+    private fun completeSeekConfirmation(
+        confirmation: SeekConfirmation,
+    ) {
+        if (activeSeekConfirmation != confirmation) return
+        val shouldPlay =
+            playAfterSeekGeneration == confirmation.generation
+        activeSeekConfirmation = null
+        if (shouldPlay) {
+            playAfterSeekGeneration = null
+        }
         seekConfirmationTimeoutJob?.cancel()
         seekConfirmationTimeoutJob = null
-        playNow()
+        if (shouldPlay) {
+            playNow()
+        }
     }
 
     private fun playNow() {
@@ -373,18 +417,30 @@ class PlayerViewModel(
     }
 
     private fun cancelDeferredPlay() {
-        playAfterSeekConfirmation = false
+        playAfterSeekGeneration = null
+    }
+
+    private fun cancelSeekConfirmation() {
+        cancelDeferredPlay()
+        activeSeekConfirmation = null
         seekConfirmationTimeoutJob?.cancel()
         seekConfirmationTimeoutJob = null
     }
 
     override fun onCleared() {
-        cancelDeferredPlay()
+        cancelSeekConfirmation()
         super.onCleared()
     }
+
+    private data class SeekConfirmation(
+        val generation: Long,
+        val pending: PendingSeek,
+    )
 
     private companion object {
         const val SEEK_INCREMENT_MS = 10_000L
         const val SEEK_CONFIRMATION_TIMEOUT_MS = 1_500L
+        const val SEEK_CONFIRMATION_TIMEOUT_MESSAGE =
+            "跳转位置未确认，已恢复实际进度"
     }
 }

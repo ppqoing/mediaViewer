@@ -4,16 +4,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.playback.PlaybackState
@@ -81,7 +83,7 @@ class PlaybackQueueUiTest {
         assertEquals("a" to 1, moved)
         rule.onNodeWithContentDescription("删除 第三首").performClick()
         assertEquals("c", removed)
-        rule.onNodeWithContentDescription("清空其他").performClick()
+        rule.onNodeWithText("清空其他").performClick()
         assertTrue(cleared)
     }
 
@@ -115,8 +117,36 @@ class PlaybackQueueUiTest {
     }
 
     @Test
-    fun draggingWholeQueueRowDownMovesItemOnce() {
-        var moved: Pair<String, Int>? = null
+    fun swipingQueueNormallyScrollsWithoutReordering() {
+        val moves = mutableListOf<Pair<String, Int>>()
+        val queue = PlaybackQueue(
+            items = (1..12).map { index -> item("$index", "第${index}首") },
+            currentMediaKey = "1",
+        )
+
+        rule.setContent {
+            MaterialTheme {
+                PlaybackQueueSheet(
+                    queue = queue,
+                    onSelect = {},
+                    onMove = { key, index -> moves += key to index },
+                    onRemove = {},
+                    onClearExceptCurrent = {},
+                    onStopAndClear = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        rule.onNode(hasScrollAction()).performTouchInput { swipeUp() }
+
+        rule.runOnIdle { assertTrue(moves.isEmpty()) }
+        rule.onNodeWithContentDescription("队列项 第12首").assertIsDisplayed()
+    }
+
+    @Test
+    fun longPressThenDraggingWholeQueueRowDownMovesItemOnce() {
+        val moves = mutableListOf<Pair<String, Int>>()
         val queue = PlaybackQueue(
             items = listOf(item("a", "第一首"), item("b", "第二首")),
             currentMediaKey = "a",
@@ -127,7 +157,7 @@ class PlaybackQueueUiTest {
                 PlaybackQueueSheet(
                     queue = queue,
                     onSelect = {},
-                    onMove = { key, index -> moved = key to index },
+                    onMove = { key, index -> moves += key to index },
                     onRemove = {},
                     onClearExceptCurrent = {},
                     onStopAndClear = {},
@@ -137,8 +167,14 @@ class PlaybackQueueUiTest {
         }
 
         rule.onNodeWithContentDescription("队列项 第一首，正在播放")
-            .performTouchInput { swipeDown() }
-        assertEquals("a" to 1, moved)
+            .performTouchInput {
+                val start = Offset(center.x, height * 0.2f)
+                down(start)
+                advanceEventTime(1_000L)
+                moveTo(Offset(center.x, height * 0.9f))
+                up()
+            }
+        rule.runOnIdle { assertEquals(listOf("a" to 1), moves) }
     }
 
     @Test

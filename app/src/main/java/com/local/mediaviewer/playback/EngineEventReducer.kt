@@ -32,12 +32,16 @@ object EngineEventReducer {
             )
 
             is EngineEvent.Buffering -> state.copy(
-                status = if (event.percent < 100f) {
-                    PlaybackStatus.BUFFERING
-                } else if (state.status == PlaybackStatus.BUFFERING) {
-                    PlaybackStatus.PLAYING
-                } else {
-                    state.status
+                status = when {
+                    event.percent >= 100f &&
+                        state.status == PlaybackStatus.BUFFERING ->
+                        PlaybackStatus.PLAYING
+
+                    event.percent < 100f &&
+                        state.status in bufferingEligibleStatuses ->
+                        PlaybackStatus.BUFFERING
+
+                    else -> state.status
                 },
                 bufferedPercent = event.percent.coerceIn(0f, 100f),
             )
@@ -82,4 +86,10 @@ object EngineEventReducer {
                 errorMessage = event.message,
             )
         }
+
+    private val bufferingEligibleStatuses = setOf(
+        PlaybackStatus.OPENING,
+        PlaybackStatus.BUFFERING,
+        PlaybackStatus.PLAYING,
+    )
 }

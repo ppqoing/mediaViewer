@@ -12,7 +12,7 @@ data class SeekSyncState(
     val previewMs: Long? = null,
     val pending: PendingSeek? = null,
 ) {
-    fun begin(actualMs: Long) = copy(previewMs = actualMs)
+    fun begin(actualMs: Long) = SeekSyncState(previewMs = actualMs)
 
     fun preview(targetMs: Long, durationMs: Long) = copy(
         previewMs = targetMs.coerceIn(0L, durationMs.coerceAtLeast(0L)),

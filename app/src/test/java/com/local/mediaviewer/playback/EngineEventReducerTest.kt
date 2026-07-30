@@ -106,6 +106,83 @@ class EngineEventReducerTest {
     }
 
     @Test
+    fun `暂停 seek 的缓冲和时间事件保持暂停`() {
+        val buffering = EngineEventReducer.reduce(
+            PlaybackState(
+                status = PlaybackStatus.PAUSED,
+                positionMs = 10_000L,
+            ),
+            EngineEvent.Buffering(35f),
+        )
+        assertEquals(PlaybackStatus.PAUSED, buffering.status)
+        assertEquals(35f, buffering.bufferedPercent)
+
+        val advanced = EngineEventReducer.reduce(
+            buffering,
+            EngineEvent.TimeChanged(20_000L),
+        )
+        assertEquals(PlaybackStatus.PAUSED, advanced.status)
+        assertEquals(20_000L, advanced.positionMs)
+
+        val completed = EngineEventReducer.reduce(
+            advanced,
+            EngineEvent.Buffering(100f),
+        )
+        assertEquals(PlaybackStatus.PAUSED, completed.status)
+        assertEquals(100f, completed.bufferedPercent)
+    }
+
+    @Test
+    fun `迟到的缓冲和时间事件不覆盖错误或结束终态`() {
+        listOf(
+            PlaybackState(
+                status = PlaybackStatus.ERROR,
+                errorMessage = "无法解码",
+            ),
+            PlaybackState(status = PlaybackStatus.ENDED),
+        ).forEach { terminal ->
+            val updated = listOf(
+                EngineEvent.Buffering(25f),
+                EngineEvent.TimeChanged(500L),
+                EngineEvent.Buffering(100f),
+            ).fold(terminal, EngineEventReducer::reduce)
+
+            assertEquals(terminal.status, updated.status)
+            assertEquals(terminal.errorMessage, updated.errorMessage)
+            assertEquals(500L, updated.positionMs)
+            assertEquals(100f, updated.bufferedPercent)
+        }
+    }
+
+    @Test
+    fun `播放中的缓冲仍可由时间前进或百分之百恢复播放`() {
+        val buffering = EngineEventReducer.reduce(
+            PlaybackState(
+                status = PlaybackStatus.PLAYING,
+                positionMs = 10_000L,
+            ),
+            EngineEvent.Buffering(25f),
+        )
+        assertEquals(PlaybackStatus.BUFFERING, buffering.status)
+
+        val advanced = EngineEventReducer.reduce(
+            buffering,
+            EngineEvent.TimeChanged(10_250L),
+        )
+        assertEquals(PlaybackStatus.PLAYING, advanced.status)
+
+        val bufferingAgain = EngineEventReducer.reduce(
+            advanced,
+            EngineEvent.Buffering(50f),
+        )
+        val completed = EngineEventReducer.reduce(
+            bufferingAgain,
+            EngineEvent.Buffering(100f),
+        )
+        assertEquals(PlaybackStatus.PLAYING, completed.status)
+    }
+
+    @Test
     fun `增量事件保留当前播放倍速`() {
         val initial = PlaybackState(
             status = PlaybackStatus.PLAYING,

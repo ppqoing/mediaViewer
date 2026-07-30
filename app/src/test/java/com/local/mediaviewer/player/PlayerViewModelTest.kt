@@ -704,6 +704,100 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun `paused seek without play falls back to actual position after timeout`() =
+        runTest(dispatcher) {
+            val controller = FakePlaybackController()
+            val viewModel = PlayerViewModel(
+                initialRequest = request(),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            controller.emit(playback(PlaybackStatus.PAUSED, 10_000L))
+            runCurrent()
+
+            viewModel.beginScrub()
+            viewModel.previewScrub(34_000L)
+            viewModel.commitScrub()
+
+            advanceTimeBy(1_501L)
+            runCurrent()
+
+            assertNull(viewModel.uiState.value.seekSync.pending)
+            assertEquals(10_000L, viewModel.uiState.value.displayedPositionMs)
+            assertTrue(
+                viewModel.uiState.value.errorMessage?.isNotBlank() == true,
+            )
+            assertEquals(0, controller.playCalls)
+        }
+
+    @Test
+    fun `play reuses timeout started by seek commit`() =
+        runTest(dispatcher) {
+            val controller = FakePlaybackController()
+            val viewModel = PlayerViewModel(
+                initialRequest = request(),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            controller.emit(playback(PlaybackStatus.PAUSED, 10_000L))
+            runCurrent()
+            viewModel.beginScrub()
+            viewModel.previewScrub(34_000L)
+            viewModel.commitScrub()
+
+            advanceTimeBy(1_000L)
+            viewModel.play()
+            advanceTimeBy(501L)
+            runCurrent()
+
+            assertNull(viewModel.uiState.value.seekSync.pending)
+            assertEquals(1, controller.playCalls)
+        }
+
+    @Test
+    fun `new scrub prevents stale seek timeout from clearing or playing it`() =
+        runTest(dispatcher) {
+            val controller = FakePlaybackController()
+            val viewModel = PlayerViewModel(
+                initialRequest = request(),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            controller.emit(playback(PlaybackStatus.PAUSED, 10_000L))
+            runCurrent()
+            viewModel.beginScrub()
+            viewModel.previewScrub(34_000L)
+            viewModel.commitScrub()
+            viewModel.play()
+
+            advanceTimeBy(1_000L)
+            viewModel.beginScrub()
+            viewModel.previewScrub(42_000L)
+            viewModel.commitScrub()
+            advanceTimeBy(501L)
+            runCurrent()
+
+            assertEquals(
+                42_000L,
+                viewModel.uiState.value.seekSync.pending?.targetMs,
+            )
+            assertEquals(42_000L, viewModel.uiState.value.displayedPositionMs)
+            assertEquals(0, controller.playCalls)
+
+            controller.emit(playback(PlaybackStatus.PAUSED, 41_500L))
+            runCurrent()
+
+            assertNull(viewModel.uiState.value.seekSync.pending)
+            assertEquals(0, controller.playCalls)
+        }
+
+    @Test
     fun `快退快进按十秒且截断到媒体边界`() = runTest(dispatcher) {
         val controller = FakePlaybackController()
         val viewModel = PlayerViewModel(

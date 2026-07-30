@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.filled.MoreVert
@@ -280,17 +280,17 @@ private fun Modifier.queueDragModifier(
     pointerInput(item.mediaKey, index, dragThresholdPx) {
         var accumulatedDrag = 0f
         var moveTriggered = false
-        detectVerticalDragGestures(
+        detectDragGesturesAfterLongPress(
             onDragStart = {
                 accumulatedDrag = 0f
                 moveTriggered = false
             },
-            onVerticalDrag = { change, dragAmount ->
+            onDrag = { change, dragAmount ->
                 if (moveTriggered) {
                     change.consume()
-                    return@detectVerticalDragGestures
+                    return@detectDragGesturesAfterLongPress
                 }
-                accumulatedDrag += dragAmount
+                accumulatedDrag += dragAmount.y
                 val destination = when {
                     accumulatedDrag <= -dragThresholdPx && canMoveUp -> index - 1
                     accumulatedDrag >= dragThresholdPx && canMoveDown -> index + 1

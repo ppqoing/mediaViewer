@@ -8,6 +8,16 @@ import org.junit.Test
 
 class SeekSyncStateTest {
     @Test
+    fun `new scrub clears the previous pending target`() {
+        val next = SeekSyncState(
+            pending = PendingSeek("movie", 34_000L),
+        ).begin(actualMs = 12_000L)
+
+        assertEquals(12_000L, next.previewMs)
+        assertNull(next.pending)
+    }
+
+    @Test
     fun `commit keeps target visible until matching engine position arrives`() {
         val preview = SeekSyncState()
             .begin(actualMs = 10_000L)
