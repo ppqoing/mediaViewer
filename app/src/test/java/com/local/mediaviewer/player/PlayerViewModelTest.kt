@@ -527,6 +527,90 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun `playback flow before session collector cannot play new item from old seek`() =
+        runTest(dispatcher) {
+            val first = queueItem("a", "A.mp3", MediaKind.AUDIO)
+            val second = queueItem("b", "B.mp3", MediaKind.AUDIO)
+            val controller = FakeQueuePlaybackController(
+                items = listOf(first, second),
+                currentMediaKey = first.mediaKey,
+            )
+            val viewModel = PlayerViewModel(
+                initialRequest = request().copy(
+                    name = first.name,
+                    mediaKey = first.mediaKey,
+                    kind = first.kind,
+                ),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            runCurrent()
+            controller.emitPlayback(
+                playback(PlaybackStatus.PAUSED, 10_000L),
+            )
+            runCurrent()
+            viewModel.beginScrub()
+            viewModel.previewScrub(34_000L)
+            viewModel.commitScrub()
+            viewModel.play()
+
+            controller.selectCurrent(
+                mediaKey = second.mediaKey,
+                playback = playback(PlaybackStatus.PAUSED, 0L),
+            )
+            runCurrent()
+            advanceTimeBy(1_501L)
+            runCurrent()
+
+            assertEquals(second.mediaKey, viewModel.uiState.value.currentMediaKey)
+            assertEquals(0, controller.playCalls)
+        }
+
+    @Test
+    fun `session flow before playback cannot play new item from old seek`() =
+        runTest(dispatcher) {
+            val first = queueItem("a", "A.mp3", MediaKind.AUDIO)
+            val second = queueItem("b", "B.mp3", MediaKind.AUDIO)
+            val controller = FakeQueuePlaybackController(
+                items = listOf(first, second),
+                currentMediaKey = first.mediaKey,
+            )
+            val viewModel = PlayerViewModel(
+                initialRequest = request().copy(
+                    name = first.name,
+                    mediaKey = first.mediaKey,
+                    kind = first.kind,
+                ),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            runCurrent()
+            controller.emitPlayback(
+                playback(PlaybackStatus.PAUSED, 10_000L),
+            )
+            runCurrent()
+            viewModel.beginScrub()
+            viewModel.previewScrub(34_000L)
+            viewModel.commitScrub()
+            viewModel.play()
+
+            controller.selectCurrentSessionFirst(
+                mediaKey = second.mediaKey,
+                playback = playback(PlaybackStatus.PAUSED, 0L),
+            )
+            runCurrent()
+            advanceTimeBy(1_501L)
+            runCurrent()
+
+            assertEquals(second.mediaKey, viewModel.uiState.value.currentMediaKey)
+            assertEquals(0, controller.playCalls)
+        }
+
+    @Test
     fun `离开保存快照但不释放应用级控制器且重复离开只完成一次`() =
         runTest(dispatcher) {
             val controller = FakePlaybackController()
@@ -1066,6 +1150,19 @@ private class FakeQueuePlaybackController(
             queue = queue,
             currentItem = queue.currentItem,
         )
+    }
+
+    fun selectCurrentSessionFirst(
+        mediaKey: String,
+        playback: PlaybackState,
+    ) {
+        val queue = mutableSession.value.queue.copy(currentMediaKey = mediaKey)
+        mutableSession.value = mutableSession.value.copy(
+            playback = playback,
+            queue = queue,
+            currentItem = queue.currentItem,
+        )
+        this.playback.value = playback
     }
 
     fun removeAndSelect(

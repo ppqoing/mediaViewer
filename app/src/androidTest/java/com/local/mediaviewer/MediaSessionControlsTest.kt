@@ -83,6 +83,8 @@ class MediaSessionControlsTest {
     @Test
     fun stopReleasesOnceAndColdControllerRestoresQueuePaused() {
         BackgroundPlaybackTestHarness().use { harness ->
+            val appController =
+                harness.container.playbackController as Media3PlaybackController
             val first = harness.connectController()
             first.run {
                 setMediaItems(harness.mediaQueue())
@@ -100,10 +102,10 @@ class MediaSessionControlsTest {
             }
             first.run { seekTo(12_000L) }
             harness.waitUntil("position becomes persistable") {
-                first.read(Player::getCurrentPosition) >= 11_500L
+                appController.sessionState.value.playback.positionMs >= 11_500L
             }
             val savedPosition =
-                first.read(Player::getCurrentPosition)
+                appController.sessionState.value.playback.positionMs
             val currentMediaKey =
                 harness.mediaQueue().first().mediaId
             val stopResult = first.read {
@@ -123,7 +125,7 @@ class MediaSessionControlsTest {
                 harness.container.persistedPosition(currentMediaKey) >= 10_000L,
             )
 
-            harness.connectController().use { restored ->
+            harness.connectControllerAfterRelease().use { restored ->
                 harness.waitUntil("cold controller restores persistent queue") {
                     restored.read(Player::getMediaItemCount) == 2
                 }

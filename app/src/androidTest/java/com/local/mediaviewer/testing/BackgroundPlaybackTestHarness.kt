@@ -39,6 +39,7 @@ import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import com.local.mediaviewer.settings.ServerSettingsRepository
 import java.io.Closeable
 import java.io.File
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -101,14 +102,40 @@ class BackgroundPlaybackTestHarness : Closeable {
 
     fun connectController(): TestMediaControllerConnection =
         TestMediaControllerConnection(
-            MediaController.Builder(
-                application,
-                SessionToken(
-                    application,
-                    ComponentName(application, PlaybackService::class.java),
-                ),
-            ).buildAsync(),
+            buildControllerFuture(),
         )
+
+    fun connectControllerAfterRelease(
+        timeoutMs: Long = 5_000L,
+    ): TestMediaControllerConnection {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var lastRejection: ExecutionException? = null
+        while (System.currentTimeMillis() < deadline) {
+            val future = buildControllerFuture()
+            try {
+                return TestMediaControllerConnection(
+                    future = future,
+                    timeoutMs = (deadline - System.currentTimeMillis())
+                        .coerceAtLeast(1L),
+                )
+            } catch (error: Throwable) {
+                onMain { MediaController.releaseFuture(future) }
+                val cause = (error as? ExecutionException)?.cause
+                if (
+                    cause !is SecurityException ||
+                    cause.message?.contains("Session rejected") != true
+                ) {
+                    throw error
+                }
+                lastRejection = error
+            }
+            Thread.sleep(25L)
+        }
+        throw IllegalStateException(
+            "Timed out waiting for playback service cold connection",
+            lastRejection,
+        )
+    }
 
     fun waitUntil(
         diagnostic: String,
@@ -166,6 +193,15 @@ class BackgroundPlaybackTestHarness : Closeable {
             .build()
     }
 
+    private fun buildControllerFuture(): ListenableFuture<MediaController> =
+        MediaController.Builder(
+            application,
+            SessionToken(
+                application,
+                ComponentName(application, PlaybackService::class.java),
+            ),
+        ).buildAsync()
+
     private companion object {
         const val LOGICAL_BASE_URL = "http://media.test:8080"
         const val VIDEO_TITLE = "后台测试视频"
@@ -176,8 +212,9 @@ class BackgroundPlaybackTestHarness : Closeable {
 @UnstableApi
 class TestMediaControllerConnection internal constructor(
     private val future: ListenableFuture<MediaController>,
+    timeoutMs: Long = 20_000L,
 ) : Closeable {
-    private val controller = future.get(20, TimeUnit.SECONDS)
+    private val controller = future.get(timeoutMs, TimeUnit.MILLISECONDS)
 
     fun run(block: MediaController.() -> Unit) {
         onMain { controller.block() }
@@ -187,7 +224,7 @@ class TestMediaControllerConnection internal constructor(
         onMain { block(controller) }
 
     override fun close() {
-        MediaController.releaseFuture(future)
+        onMain { MediaController.releaseFuture(future) }
     }
 }
 

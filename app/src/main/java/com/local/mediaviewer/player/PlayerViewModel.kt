@@ -372,6 +372,10 @@ class PlayerViewModel(
 
     private fun completeSeekConfirmationIfResolved() {
         val confirmation = activeSeekConfirmation ?: return
+        if (!confirmationMatchesCurrentMedia(confirmation)) {
+            cancelSeekConfirmation()
+            return
+        }
         if (mutableUiState.value.seekSync.pending != null) return
         completeSeekConfirmation(confirmation)
     }
@@ -380,6 +384,10 @@ class PlayerViewModel(
         confirmation: SeekConfirmation,
     ) {
         if (activeSeekConfirmation != confirmation) return
+        if (!confirmationMatchesCurrentMedia(confirmation)) {
+            cancelSeekConfirmation()
+            return
+        }
         val current = mutableUiState.value
         if (current.seekSync.pending != confirmation.pending) return
         mutableUiState.value = current.copy(
@@ -393,6 +401,10 @@ class PlayerViewModel(
         confirmation: SeekConfirmation,
     ) {
         if (activeSeekConfirmation != confirmation) return
+        if (!confirmationMatchesCurrentMedia(confirmation)) {
+            cancelSeekConfirmation()
+            return
+        }
         val shouldPlay =
             playAfterSeekGeneration == confirmation.generation
         activeSeekConfirmation = null
@@ -404,6 +416,14 @@ class PlayerViewModel(
         if (shouldPlay) {
             playNow()
         }
+    }
+
+    private fun confirmationMatchesCurrentMedia(
+        confirmation: SeekConfirmation,
+    ): Boolean {
+        val expectedMediaKey =
+            confirmation.pending.mediaKey ?: return true
+        return expectedMediaKey == currentMediaKey()
     }
 
     private fun playNow() {
