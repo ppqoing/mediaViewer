@@ -261,6 +261,48 @@ class PlayerScreenTest {
     }
 
     @Test
+    fun fullscreenBufferingKeepsCentralSpinnerClearOfTransportControls() {
+        rule.setContent {
+            MaterialTheme {
+                VideoPlayerScreen(
+                    state = PlayerUiState(
+                        name = "视频.mp4",
+                        kind = MediaKind.VIDEO,
+                        status = PlaybackStatus.BUFFERING,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                    ),
+                    controller = ScreenFakePlaybackController(),
+                    fullscreenController = ScreenFakeFullscreenController(),
+                    preferences = ScreenPlayerPreferencesRepository(),
+                    volumeController = ScreenFakeVolumeController(),
+                    brightnessController = ScreenFakeBrightnessController(),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    onRetry = {},
+                    onVideoScaleModeChanged = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("全屏").performClick()
+
+        rule.onNodeWithTag("video_buffering_spinner").assertIsDisplayed()
+        rule.onNodeWithContentDescription("暂停").assertDoesNotExist()
+        rule.onNodeWithTag("video_controls").assertDoesNotExist()
+    }
+
+    @Test
     fun audioBufferingShowsAudioSpinner() {
         rule.setContent {
             MaterialTheme {

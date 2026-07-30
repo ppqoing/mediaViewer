@@ -199,7 +199,10 @@ fun VideoPlayerScreen(
                             interaction = interaction.copy(feedback = feedback)
                         },
                     )
-                    if (interaction.controlsVisible || interaction.controlsLocked) {
+                    if (
+                        (interaction.controlsVisible || interaction.controlsLocked) &&
+                        (state.status != PlaybackStatus.BUFFERING || interaction.controlsLocked)
+                    ) {
                         VideoControlsOverlay(
                             state = state,
                             locked = interaction.controlsLocked,
