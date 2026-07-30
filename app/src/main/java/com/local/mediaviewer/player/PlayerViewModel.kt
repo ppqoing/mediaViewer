@@ -91,7 +91,7 @@ class PlayerViewModel(
                     val queue = sessionState.queue
                     val currentItem = sessionState.currentItem
                     val current = mutableUiState.value
-                    val mediaChanged = queue.currentMediaKey != null &&
+                    val mediaChanged =
                         queue.currentMediaKey != current.currentMediaKey
                     val seekSync = if (mediaChanged) {
                         cancelDeferredPlay()

@@ -447,6 +447,46 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun `clearing queue cancels deferred play for pending seek`() =
+        runTest(dispatcher) {
+            val item = queueItem("a", "A.mp3", MediaKind.AUDIO)
+            val controller = FakeQueuePlaybackController(
+                items = listOf(item),
+                currentMediaKey = item.mediaKey,
+            )
+            val viewModel = PlayerViewModel(
+                initialRequest = request().copy(
+                    name = item.name,
+                    mediaKey = item.mediaKey,
+                    kind = item.kind,
+                ),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            runCurrent()
+            controller.emitPlayback(
+                playback(PlaybackStatus.PAUSED, 10_000L),
+            )
+            runCurrent()
+
+            viewModel.beginScrub()
+            viewModel.previewScrub(34_000L)
+            viewModel.commitScrub()
+            viewModel.play()
+            controller.clearQueue()
+            runCurrent()
+
+            assertNull(viewModel.uiState.value.seekSync.pending)
+
+            advanceTimeBy(1_501L)
+            runCurrent()
+
+            assertEquals(0, controller.playCalls)
+        }
+
+    @Test
     fun `离开保存快照但不释放应用级控制器且重复离开只完成一次`() =
         runTest(dispatcher) {
             val controller = FakePlaybackController()
@@ -816,6 +856,7 @@ private class FakeQueuePlaybackController(
     override val sessionState: StateFlow<PlaybackSessionState> = mutableSession
     val preparedUrls = mutableListOf<String>()
     val selectCalls = mutableListOf<String>()
+    var playCalls = 0
     var reloadCalls = 0
     var closeCalls = 0
 
@@ -831,7 +872,9 @@ private class FakeQueuePlaybackController(
         )
     }
 
-    override fun play() = Unit
+    override fun play() {
+        playCalls += 1
+    }
     override fun pause() = Unit
     override fun stop() = Unit
     override fun seekTo(positionMs: Long) = Unit
@@ -895,6 +938,13 @@ private class FakeQueuePlaybackController(
         mutableSession.value = mutableSession.value.copy(
             queue = queue,
             currentItem = queue.currentItem,
+        )
+    }
+
+    fun clearQueue() {
+        mutableSession.value = mutableSession.value.copy(
+            queue = PlaybackQueue(),
+            currentItem = null,
         )
     }
 
