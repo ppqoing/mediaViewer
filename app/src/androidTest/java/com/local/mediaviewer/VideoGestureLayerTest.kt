@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
@@ -102,15 +103,23 @@ class VideoGestureLayerTest {
         rule.onNodeWithTag("video_gesture_layer").performTouchInput {
             down(Offset(width * 0.25f, height * 0.7f))
             moveTo(Offset(width * 0.25f, height * 0.3f))
+        }
+        rule.onNodeWithTag("gesture_brightness_rail").assertIsDisplayed()
+        rule.onNodeWithTag("video_gesture_layer").performTouchInput {
             up()
         }
+        rule.onNodeWithTag("gesture_brightness_rail").assertDoesNotExist()
         rule.runOnIdle { assertTrue(brightness.fraction.value > 0.5f) }
 
         rule.onNodeWithTag("video_gesture_layer").performTouchInput {
             down(Offset(width * 0.75f, height * 0.7f))
             moveTo(Offset(width * 0.75f, height * 0.3f))
+        }
+        rule.onNodeWithTag("gesture_volume_rail").assertIsDisplayed()
+        rule.onNodeWithTag("video_gesture_layer").performTouchInput {
             up()
         }
+        rule.onNodeWithTag("gesture_volume_rail").assertDoesNotExist()
         rule.runOnIdle { assertTrue(volume.state.value.current > 5) }
     }
 
