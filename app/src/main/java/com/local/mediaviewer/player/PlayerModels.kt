@@ -26,17 +26,20 @@ data class PlayerUiState(
     val errorMessage: String? = null,
     val videoScaleMode:
         VideoScaleMode = VideoScaleMode.BEST_FIT,
-    val previewPositionMs: Long? = null,
+    val seekSync: SeekSyncState = SeekSyncState(),
     val playbackSpeed: Float = 1f,
     val currentMediaKey: String? = null,
     val queueSize: Int = 0,
     val playbackMode: PlaybackMode = PlaybackMode.SEQUENTIAL,
     val canSkipPrevious: Boolean = false,
     val canSkipNext: Boolean = false,
-)
+) {
+    val previewPositionMs: Long?
+        get() = seekSync.previewMs
+}
 
 val PlayerUiState.displayedPositionMs: Long
-    get() = previewPositionMs ?: positionMs
+    get() = seekSync.displayedPosition(positionMs)
 
 fun PlayerUiState.withEngine(state: PlaybackState) = copy(
     status = state.status,

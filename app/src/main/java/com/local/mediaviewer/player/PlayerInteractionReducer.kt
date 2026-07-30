@@ -11,21 +11,20 @@ object PlayerInteractionReducer {
     )
 
     fun beginScrub(state: PlayerUiState): PlayerUiState =
-        state.copy(previewPositionMs = state.positionMs)
+        state.copy(seekSync = state.seekSync.begin(state.positionMs))
 
     fun updateScrub(
         state: PlayerUiState,
         previewMs: Long,
     ): PlayerUiState =
         state.copy(
-            previewPositionMs = previewMs.coerceIn(
-                0L,
-                state.durationMs.coerceAtLeast(0L),
-            ),
+            seekSync = state.seekSync.preview(previewMs, state.durationMs),
         )
 
     fun finishScrub(
         state: PlayerUiState,
-    ): Pair<PlayerUiState, Long?> =
-        state.copy(previewPositionMs = null) to state.previewPositionMs
+    ): Pair<PlayerUiState, Long?> {
+        val (seekSync, target) = state.seekSync.commit(state.currentMediaKey)
+        return state.copy(seekSync = seekSync) to target
+    }
 }

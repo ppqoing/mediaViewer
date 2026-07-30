@@ -29,7 +29,9 @@ class PlayerInteractionReducerTest {
 
         val (finished, commit) = PlayerInteractionReducer.finishScrub(preview)
         assertEquals(34_000L, commit)
+        assertNull(finished.seekSync.previewMs)
         assertNull(finished.previewPositionMs)
+        assertEquals(34_000L, finished.seekSync.pending?.targetMs)
     }
 }
 
