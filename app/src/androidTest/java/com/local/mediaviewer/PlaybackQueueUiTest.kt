@@ -38,7 +38,7 @@ class PlaybackQueueUiTest {
     val rule = createComposeRule()
 
     @Test
-    fun queueSheetSelectsRemovesClearsAndExposesMoveDownAction() {
+    fun queueSheetShowsLayeredRowsAndExposesActionsWithoutVisibleMoveButtons() {
         var selected: String? = null
         var moved: Pair<String, Int>? = null
         var removed: String? = null
@@ -62,10 +62,18 @@ class PlaybackQueueUiTest {
             }
         }
 
-        rule.onNodeWithContentDescription("正在播放：第一首").assertIsDisplayed()
-        rule.onNodeWithText("第二首").performClick()
+        rule.onNodeWithText("播放队列 · 3 项").assertIsDisplayed()
+        rule.onNodeWithText("顺序播放").assertIsDisplayed()
+        rule.onNodeWithContentDescription("队列项 第一首，正在播放")
+            .assertIsDisplayed()
+        rule.onNodeWithContentDescription("队列项 第二首，即将播放")
+            .assertIsDisplayed()
+        rule.onNodeWithContentDescription("上移 第一首").assertDoesNotExist()
+        rule.onNodeWithContentDescription("下移 第一首").assertDoesNotExist()
+
+        rule.onNodeWithContentDescription("队列项 第二首，即将播放").performClick()
         assertEquals("b", selected)
-        rule.onNodeWithContentDescription("拖动排序 第一首")
+        rule.onNodeWithContentDescription("队列项 第一首，正在播放")
             .fetchSemanticsNode()
             .config[SemanticsActions.CustomActions]
             .first { it.label == "下移" }
@@ -78,7 +86,36 @@ class PlaybackQueueUiTest {
     }
 
     @Test
-    fun draggingQueueHandleDownMovesItemOnce() {
+    fun deletingCurrentQueueItemRequiresConfirmation() {
+        var removed: String? = null
+        val queue = PlaybackQueue(
+            items = listOf(item("a", "第一首"), item("b", "第二首")),
+            currentMediaKey = "a",
+        )
+
+        rule.setContent {
+            MaterialTheme {
+                PlaybackQueueSheet(
+                    queue = queue,
+                    onSelect = {},
+                    onMove = { _, _ -> },
+                    onRemove = { removed = it },
+                    onClearExceptCurrent = {},
+                    onStopAndClear = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("删除 第一首").performClick()
+        rule.onNodeWithText("删除正在播放的项目？").assertIsDisplayed()
+        assertEquals(null, removed)
+        rule.onNodeWithText("删除").performClick()
+        assertEquals("a", removed)
+    }
+
+    @Test
+    fun draggingWholeQueueRowDownMovesItemOnce() {
         var moved: Pair<String, Int>? = null
         val queue = PlaybackQueue(
             items = listOf(item("a", "第一首"), item("b", "第二首")),
@@ -99,7 +136,7 @@ class PlaybackQueueUiTest {
             }
         }
 
-        rule.onNodeWithContentDescription("拖动排序 第一首")
+        rule.onNodeWithContentDescription("队列项 第一首，正在播放")
             .performTouchInput { swipeDown() }
         assertEquals("a" to 1, moved)
     }
