@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.mediaviewer.player.PlayerUiState
@@ -122,7 +123,11 @@ fun AudioPlayerScreen(
                 )
             }
             if (state.status == PlaybackStatus.BUFFERING) {
-                CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .testTag("audio_buffering_spinner"),
+                )
             }
             if (state.status == PlaybackStatus.ERROR) {
                 Text(state.errorMessage.orEmpty())

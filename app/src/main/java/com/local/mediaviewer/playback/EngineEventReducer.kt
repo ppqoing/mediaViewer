@@ -50,9 +50,20 @@ object EngineEventReducer {
                 status = PlaybackStatus.PAUSED,
             )
 
-            is EngineEvent.TimeChanged -> state.copy(
-                positionMs = event.positionMs.coerceAtLeast(0L),
-            )
+            is EngineEvent.TimeChanged -> {
+                val nextPosition = event.positionMs.coerceAtLeast(0L)
+                state.copy(
+                    status = if (
+                        state.status == PlaybackStatus.BUFFERING &&
+                        nextPosition > state.positionMs
+                    ) {
+                        PlaybackStatus.PLAYING
+                    } else {
+                        state.status
+                    },
+                    positionMs = nextPosition,
+                )
+            }
 
             is EngineEvent.DurationChanged -> state.copy(
                 durationMs = event.durationMs.coerceAtLeast(0L),

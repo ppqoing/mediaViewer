@@ -2,7 +2,6 @@ package com.local.mediaviewer.ui.player
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -10,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.player.displayedPositionMs
-import com.local.mediaviewer.playback.PlaybackStatus
 
 @Composable
 fun PlaybackTimeline(
@@ -37,15 +35,6 @@ fun PlaybackTimeline(
             enabled = state.isSeekable && state.durationMs > 0L,
             modifier = Modifier.testTag("playback_timeline"),
         )
-        if (state.status == PlaybackStatus.BUFFERING) {
-            LinearProgressIndicator(
-                progress = {
-                    (state.bufferedPercent / 100f)
-                        .coerceIn(0f, 1f)
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
         Text(
             text = "${formatPlaybackTime(state.displayedPositionMs)} / " +
                 formatPlaybackTime(state.durationMs),

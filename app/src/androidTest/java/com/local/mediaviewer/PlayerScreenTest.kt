@@ -219,6 +219,79 @@ class PlayerScreenTest {
         rule.onNodeWithText("重试").assertIsDisplayed()
         rule.onNodeWithText("返回").assertIsDisplayed()
     }
+
+    @Test
+    fun videoBufferingShowsCentralSpinnerAndSingleTimeline() {
+        rule.setContent {
+            MaterialTheme {
+                VideoPlayerScreen(
+                    state = PlayerUiState(
+                        name = "视频.mp4",
+                        kind = MediaKind.VIDEO,
+                        status = PlaybackStatus.BUFFERING,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                    ),
+                    controller = ScreenFakePlaybackController(),
+                    fullscreenController = ScreenFakeFullscreenController(),
+                    preferences = ScreenPlayerPreferencesRepository(),
+                    volumeController = ScreenFakeVolumeController(),
+                    brightnessController = ScreenFakeBrightnessController(),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    onRetry = {},
+                    onVideoScaleModeChanged = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithTag("playback_timeline").assertIsDisplayed()
+        rule.onNodeWithTag("video_buffering_spinner").assertIsDisplayed()
+        rule.onNodeWithTag("timeline_buffering_bar").assertDoesNotExist()
+    }
+
+    @Test
+    fun audioBufferingShowsAudioSpinner() {
+        rule.setContent {
+            MaterialTheme {
+                AudioPlayerScreen(
+                    state = PlayerUiState(
+                        name = "音乐.flac",
+                        kind = MediaKind.AUDIO,
+                        status = PlaybackStatus.BUFFERING,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                    ),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    onRetry = {},
+                    volumeController = ScreenFakeVolumeController(),
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithTag("audio_buffering_spinner").assertIsDisplayed()
+    }
 }
 
 private class ScreenFakeFullscreenController :

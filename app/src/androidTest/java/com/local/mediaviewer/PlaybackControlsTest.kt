@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
@@ -82,6 +83,37 @@ class PlaybackControlsTest {
 
         rule.onNodeWithContentDescription("重新播放")
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun bufferingPlayerKeepsSingleTimelineWithoutSecondBufferingBar() {
+        rule.setContent {
+            MaterialTheme {
+                PlayerControls(
+                    state = PlayerUiState(
+                        name = "视频.mp4",
+                        kind = MediaKind.VIDEO,
+                        status = PlaybackStatus.BUFFERING,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                    ),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                )
+            }
+        }
+
+        rule.onNodeWithTag("playback_timeline").assertIsDisplayed()
+        rule.onNodeWithTag("timeline_buffering_bar").assertDoesNotExist()
     }
 
 }

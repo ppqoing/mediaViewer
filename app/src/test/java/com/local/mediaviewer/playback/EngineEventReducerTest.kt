@@ -8,6 +8,21 @@ import org.junit.Test
 
 class EngineEventReducerTest {
     @Test
+    fun `time advancing exits stale buffering state`() {
+        val updated = EngineEventReducer.reduce(
+            PlaybackState(
+                status = PlaybackStatus.BUFFERING,
+                positionMs = 10_000L,
+                bufferedPercent = 25f,
+            ),
+            EngineEvent.TimeChanged(10_250L),
+        )
+
+        assertEquals(PlaybackStatus.PLAYING, updated.status)
+        assertEquals(10_250L, updated.positionMs)
+    }
+
+    @Test
     fun `时间长度缓冲和 seekable 增量更新`() {
         val initial = PlaybackState(status = PlaybackStatus.OPENING)
         val updated = listOf(
