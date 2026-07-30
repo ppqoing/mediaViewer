@@ -31,7 +31,20 @@ class AndroidVlcPlaybackEngine(
     private var videoHost: ViewGroup? = null
     private var videoLayout: VLCVideoLayout? = null
     private var videoScaleMode = VideoScaleMode.BEST_FIT
-    private var pendingVideoRebind: Runnable? = null
+    private val videoOutputRefreshScheduler =
+        VideoOutputRefreshScheduler(
+            postToOwner = { mainHandler.post(it) },
+            postDelayedToOwner = { task, delayMs ->
+                mainHandler.postDelayed(task, delayMs)
+            },
+            removeFromOwner = mainHandler::removeCallbacks,
+            isActive = {
+                !closed.get() && videoLayout != null
+            },
+            updateVideoSurfaces = {
+                mediaPlayer.updateVideoSurfaces()
+            },
+        )
 
     init {
         mediaPlayer.setEventListener(::onVlcEvent)
@@ -99,19 +112,14 @@ class AndroidVlcPlaybackEngine(
         if (closed.get()) return
         requireMainThread("刷新")
         val layout = videoLayout ?: return
-        mediaPlayer.updateVideoSurfaces()
-        cancelPendingVideoRebind()
-        val rebind = Runnable {
-            pendingVideoRebind = null
-            if (closed.get() || videoLayout !== layout) return@Runnable
+        videoOutputRefreshScheduler.refresh rebind@{
+            if (closed.get() || videoLayout !== layout) return@rebind
             mediaPlayer.detachViews()
             mediaPlayer.attachViews(layout, null, false, false)
             mediaPlayer.setVideoScale(
                 videoScaleMode.toLibVlcScaleType(),
             )
         }
-        pendingVideoRebind = rebind
-        mainHandler.postDelayed(rebind, VIDEO_REBIND_DELAY_MS)
     }
 
     override fun setVideoScaleMode(mode: VideoScaleMode) {
@@ -185,8 +193,7 @@ class AndroidVlcPlaybackEngine(
             MediaPlayer.Event.EncounteredError ->
                 EngineEvent.Error("VLC 无法播放此媒体")
             MediaPlayer.Event.Vout -> {
-                cancelPendingVideoRebind()
-                mediaPlayer.updateVideoSurfaces()
+                videoOutputRefreshScheduler.onVout()
                 return
             }
 
@@ -210,17 +217,12 @@ class AndroidVlcPlaybackEngine(
     }
 
     private fun detachVideoOutputInternal() {
-        cancelPendingVideoRebind()
+        videoOutputRefreshScheduler.cancel()
         if (videoLayout == null) return
         mediaPlayer.detachViews()
         videoHost?.removeAllViews()
         videoLayout = null
         videoHost = null
-    }
-
-    private fun cancelPendingVideoRebind() {
-        pendingVideoRebind?.let(mainHandler::removeCallbacks)
-        pendingVideoRebind = null
     }
 
     private fun requireMainThread(operation: String) {
@@ -270,6 +272,51 @@ class AndroidVlcPlaybackEngine(
 
     private companion object {
         const val MAIN_THREAD_TIMEOUT_SECONDS = 10L
+    }
+}
+
+internal class VideoOutputRefreshScheduler(
+    private val postToOwner: (Runnable) -> Unit,
+    private val postDelayedToOwner: (Runnable, Long) -> Unit,
+    private val removeFromOwner: (Runnable) -> Unit,
+    private val isActive: () -> Boolean,
+    private val updateVideoSurfaces: () -> Unit,
+) {
+    private var pendingRebind: Runnable? = null
+
+    fun refresh(rebind: () -> Unit) {
+        if (!isActive()) return
+        updateVideoSurfaces()
+        cancel()
+        lateinit var rebindTask: Runnable
+        rebindTask = Runnable {
+            if (pendingRebind !== rebindTask) return@Runnable
+            pendingRebind = null
+            if (isActive()) rebind()
+        }
+        pendingRebind = rebindTask
+        postDelayedToOwner(
+            rebindTask,
+            VIDEO_REBIND_DELAY_MS,
+        )
+    }
+
+    fun onVout() {
+        postToOwner(
+            Runnable {
+                if (!isActive()) return@Runnable
+                cancel()
+                updateVideoSurfaces()
+            },
+        )
+    }
+
+    fun cancel() {
+        pendingRebind?.let(removeFromOwner)
+        pendingRebind = null
+    }
+
+    private companion object {
         const val VIDEO_REBIND_DELAY_MS = 120L
     }
 }
