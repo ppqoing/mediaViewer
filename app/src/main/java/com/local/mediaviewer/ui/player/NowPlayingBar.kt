@@ -10,6 +10,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -22,6 +26,10 @@ import com.local.mediaviewer.queue.PlaybackSessionState
 @Composable
 fun NowPlayingBar(
     state: PlaybackSessionState,
+    volumeState: VolumeState,
+    onVolumeRefresh: () -> Unit,
+    onToggleMute: () -> Unit,
+    onVolumeChanged: (Float) -> Unit,
     onToggle: () -> Unit,
     onNext: () -> Unit,
     onOpenQueue: () -> Unit,
@@ -30,6 +38,7 @@ fun NowPlayingBar(
 ) {
     val item = state.currentItem ?: return
     val playing = state.playback.status == PlaybackStatus.PLAYING
+    var volumeExpanded by remember { mutableStateOf(false) }
     Surface(modifier = modifier, shadowElevation = 4.dp) {
         Row(
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp),
@@ -53,6 +62,14 @@ fun NowPlayingBar(
             IconButton(onClick = onNext) {
                 NeonPlayerIcon(PlayerIcons.Next, contentDescription = "下一项")
             }
+            PlaybackVolumeControl(
+                state = volumeState,
+                expanded = volumeExpanded,
+                onExpandedChanged = { volumeExpanded = it },
+                onRefresh = onVolumeRefresh,
+                onToggleMute = onToggleMute,
+                onVolumeChanged = onVolumeChanged,
+            )
             IconButton(onClick = onOpenQueue) {
                 NeonPlayerIcon(PlayerIcons.Queue, contentDescription = "打开队列")
             }

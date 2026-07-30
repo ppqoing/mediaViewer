@@ -230,6 +230,7 @@ fun VideoPlayerScreen(
                             volumeState = volumeState,
                             volumeExpanded = volumeExpanded,
                             onVolumeExpandedChanged = ::setVolumeExpanded,
+                            onVolumeRefresh = volumeController::refresh,
                             onToggleMute = volumeController::toggleMute,
                             onVolumeChanged = volumeController::setFraction,
                             onMenuExpandedChanged = { expanded ->
@@ -264,6 +265,7 @@ fun VideoPlayerScreen(
                             state = volumeState,
                             expanded = volumeExpanded,
                             onExpandedChanged = ::setVolumeExpanded,
+                            onRefresh = volumeController::refresh,
                             onToggleMute = volumeController::toggleMute,
                             onVolumeChanged = volumeController::setFraction,
                         )

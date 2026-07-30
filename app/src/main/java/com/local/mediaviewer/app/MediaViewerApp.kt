@@ -67,6 +67,15 @@ fun MediaViewerApp(
         },
 ) {
     val navController = rememberNavController()
+    val activity = requireNotNull(LocalActivity.current) {
+        "MediaViewer 必须托管在 Activity 中"
+    }
+    val volumeController = remember(activity) {
+        SystemVolumeController(
+            requireNotNull(activity.getSystemService(AudioManager::class.java)),
+        )
+    }
+    val volumeState by volumeController.state.collectAsStateWithLifecycle()
     val playbackSession by container.playbackController.sessionState
         .collectAsStateWithLifecycle()
     val currentEntry by navController.currentBackStackEntryAsState()
@@ -78,6 +87,10 @@ fun MediaViewerApp(
         currentEntry?.destination?.hasRoute<HomeRoute>() == true ||
             currentEntry?.destination?.hasRoute<BrowserRoute>() == true
         )
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        volumeController.refresh()
+    }
 
     LaunchedEffect(
         currentPlayerRequestNonce,
@@ -293,24 +306,13 @@ fun MediaViewerApp(
                 },
             )
             val state by player.uiState.collectAsStateWithLifecycle()
-            val activity = requireNotNull(LocalActivity.current) {
-                "播放器必须托管在 Activity 中"
-            }
             val fullscreenController = remember(activity) {
                 FullscreenController(activity)
-            }
-            val volumeController = remember(activity) {
-                SystemVolumeController(
-                    requireNotNull(activity.getSystemService(AudioManager::class.java)),
-                )
             }
             DisposableEffect(fullscreenController) {
                 onDispose {
                     fullscreenController.close()
                 }
-            }
-            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-                volumeController.refresh()
             }
             val leave = {
                 player.leave {
@@ -436,6 +438,10 @@ fun MediaViewerApp(
         if (showsMiniPlayer) {
             NowPlayingBar(
                 state = playbackSession,
+                volumeState = volumeState,
+                onVolumeRefresh = volumeController::refresh,
+                onToggleMute = volumeController::toggleMute,
+                onVolumeChanged = volumeController::setFraction,
                 onToggle = {
                     if (playbackSession.playback.status ==
                         com.local.mediaviewer.playback.PlaybackStatus.PLAYING

@@ -1,15 +1,22 @@
 package com.local.mediaviewer
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.ui.player.PlaybackVolumeControl
 import com.local.mediaviewer.ui.player.PlayerControls
+import com.local.mediaviewer.ui.player.VolumeState
 import org.junit.Rule
 import org.junit.Test
 
@@ -114,6 +121,28 @@ class PlaybackControlsTest {
 
         rule.onNodeWithTag("playback_timeline").assertIsDisplayed()
         rule.onNodeWithTag("timeline_buffering_bar").assertDoesNotExist()
+    }
+
+    @Test
+    fun volumeButtonOpensVerticalVolumePopup() {
+        var expanded by mutableStateOf(false)
+        rule.setContent {
+            MaterialTheme {
+                PlaybackVolumeControl(
+                    state = VolumeState(current = 5, maximum = 10, muted = false),
+                    expanded = expanded,
+                    onExpandedChanged = { expanded = it },
+                    onRefresh = {},
+                    onToggleMute = {},
+                    onVolumeChanged = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音").performClick()
+        rule.onNodeWithTag("volume_popup").assertIsDisplayed()
+        rule.onNodeWithTag("volume_slider_vertical").assertIsDisplayed()
+        rule.onNodeWithText("50%").assertIsDisplayed()
     }
 
 }

@@ -118,6 +118,7 @@ fun AudioPlayerScreen(
                         volumeExpanded = expanded
                         if (expanded) volumeController.refresh()
                     },
+                    onRefresh = volumeController::refresh,
                     onToggleMute = volumeController::toggleMute,
                     onVolumeChanged = volumeController::setFraction,
                 )

@@ -119,7 +119,7 @@ fun VideoGestureLayer(
 
                                         VideoGestureAxis.VOLUME -> {
                                             val fraction = (
-                                                startVolume.current.toFloat() / startVolume.maximum - deltaY / size.height
+                                                startVolume.fraction - deltaY / size.height
                                             ).coerceIn(0f, 1f)
                                             volumeController.setFraction(fraction)
                                             val state = volumeController.state.value

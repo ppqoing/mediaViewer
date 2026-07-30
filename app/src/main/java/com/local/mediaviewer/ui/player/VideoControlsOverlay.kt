@@ -45,6 +45,7 @@ fun VideoControlsOverlay(
     volumeState: VolumeState,
     volumeExpanded: Boolean,
     onVolumeExpandedChanged: (Boolean) -> Unit,
+    onVolumeRefresh: () -> Unit,
     onToggleMute: () -> Unit,
     onVolumeChanged: (Float) -> Unit,
     onMenuExpandedChanged: (Boolean) -> Unit,
@@ -185,6 +186,7 @@ fun VideoControlsOverlay(
                         state = volumeState,
                         expanded = volumeExpanded,
                         onExpandedChanged = onVolumeExpandedChanged,
+                        onRefresh = onVolumeRefresh,
                         onToggleMute = onToggleMute,
                         onVolumeChanged = onVolumeChanged,
                     )

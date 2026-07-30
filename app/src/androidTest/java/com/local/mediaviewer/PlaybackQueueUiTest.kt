@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -24,6 +25,7 @@ import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.ui.player.NowPlayingBar
 import com.local.mediaviewer.ui.player.PlaybackModeButton
 import com.local.mediaviewer.ui.player.PlaybackQueueSheet
+import com.local.mediaviewer.ui.player.VolumeState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -143,6 +145,10 @@ class PlaybackQueueUiTest {
                         ),
                         currentItem = item("a", "正在播放的歌曲"),
                     ),
+                    volumeState = VolumeState(current = 5, maximum = 10, muted = false),
+                    onVolumeRefresh = {},
+                    onToggleMute = {},
+                    onVolumeChanged = {},
                     onToggle = { toggled = true },
                     onNext = { next = true },
                     onOpenQueue = { openedQueue = true },
@@ -154,6 +160,8 @@ class PlaybackQueueUiTest {
         rule.onNodeWithText("正在播放的歌曲").assertIsDisplayed().performClick()
         rule.onNodeWithContentDescription("暂停").performClick()
         rule.onNodeWithContentDescription("下一项").performClick()
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音").performClick()
+        rule.onNodeWithTag("volume_slider_vertical").assertIsDisplayed()
         rule.onNodeWithContentDescription("打开队列").performClick()
         assertTrue(toggled)
         assertTrue(next)

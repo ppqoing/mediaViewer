@@ -5,6 +5,12 @@ import org.junit.Test
 
 class PlaybackVolumeControlTest {
     @Test
+    fun fractionIsClampedAndSafeWhenMaximumIsZero() {
+        assertEquals(0f, VolumeState(0, 0, true).fraction)
+        assertEquals(1f, VolumeState(12, 10, false).fraction)
+    }
+
+    @Test
     fun accessibilityDescriptionIncludesPercentageAndMuteState() {
         assertEquals(
             "音量，当前 50%，未静音",

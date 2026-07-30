@@ -11,6 +11,10 @@ data class VolumeState(
     val maximum: Int,
     val muted: Boolean,
 ) {
+    val fraction: Float
+        get() = if (maximum <= 0) 0f
+        else (current.toFloat() / maximum).coerceIn(0f, 1f)
+
     val percent: Int
         get() = if (maximum == 0) 0 else (current * 100f / maximum).roundToInt()
 }
