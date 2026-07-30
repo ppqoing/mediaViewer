@@ -22,6 +22,7 @@ import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 
@@ -298,8 +299,23 @@ class PlayerScreenTest {
         rule.onNodeWithContentDescription("全屏").performClick()
 
         rule.onNodeWithTag("video_buffering_spinner").assertIsDisplayed()
-        rule.onNodeWithContentDescription("暂停").assertDoesNotExist()
-        rule.onNodeWithTag("video_controls").assertDoesNotExist()
+        rule.onNodeWithTag("video_controls").assertIsDisplayed()
+        rule.onNodeWithContentDescription("暂停").assertIsDisplayed()
+        rule.onNodeWithContentDescription("退出全屏").assertIsDisplayed()
+        rule.onNodeWithTag("playback_timeline").assertIsDisplayed()
+
+        val spinnerBounds = rule
+            .onNodeWithTag("video_buffering_spinner")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val pauseBounds = rule
+            .onNodeWithContentDescription("暂停")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        assertFalse(
+            "全屏缓冲 spinner 不应与中央暂停按钮重叠",
+            spinnerBounds.overlaps(pauseBounds),
+        )
     }
 
     @Test
