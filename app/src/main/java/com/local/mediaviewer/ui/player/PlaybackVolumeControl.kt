@@ -2,6 +2,7 @@ package com.local.mediaviewer.ui.player
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.IconButton
@@ -64,7 +65,7 @@ fun PlaybackVolumeControl(
                     onValueChange = onVolumeChanged,
                     valueRange = 0f..1f,
                     modifier = Modifier
-                        .width(192.dp)
+                        .requiredWidth(192.dp)
                         .graphicsLayer { rotationZ = -90f }
                         .testTag("volume_slider_vertical"),
                 )

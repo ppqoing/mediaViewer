@@ -6,10 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -40,6 +37,7 @@ fun VideoGestureLayer(
     onBeginScrub: () -> Unit,
     onPreviewScrub: (Long) -> Unit,
     onCommitScrub: () -> Unit,
+    feedback: PlayerGestureFeedback?,
     onFeedback: (PlayerGestureFeedback?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -51,7 +49,6 @@ fun VideoGestureLayer(
     val currentOnCommitScrub by rememberUpdatedState(onCommitScrub)
     val currentOnFeedback by rememberUpdatedState(onFeedback)
     val currentPositionMs by rememberUpdatedState(positionMs)
-    var feedback by remember { mutableStateOf<PlayerGestureFeedback?>(null) }
 
     Box(
         modifier = modifier
@@ -64,7 +61,6 @@ fun VideoGestureLayer(
                         var pendingTapJob: Job? = null
 
                         fun emitFeedback(value: PlayerGestureFeedback?) {
-                            feedback = value
                             currentOnFeedback(value)
                         }
 
@@ -132,8 +128,10 @@ fun VideoGestureLayer(
                                 }
 
                                 val endedWithUp = changed?.changedToUpIgnoreConsumed() == true
-                                when {
-                                    axis == VideoGestureAxis.SEEK -> when (seekGestureCompletion(terminalEventType, endedWithUp)) {
+                                when (gestureCompletionAction(axis, endedWithUp)) {
+                                    GestureCompletionAction.SEEK -> when (
+                                        seekGestureCompletion(terminalEventType, endedWithUp)
+                                    ) {
                                         SeekGestureCompletion.COMMIT -> currentOnCommitScrub()
                                         SeekGestureCompletion.RESTORE_PREVIEW -> {
                                             currentOnPreviewScrub(gesturePositionMs)
@@ -141,10 +139,11 @@ fun VideoGestureLayer(
                                         }
                                     }
 
-                                    axis != VideoGestureAxis.UNDECIDED && !endedWithUp -> emitFeedback(null)
-                                    endedWithUp -> {
+                                    GestureCompletionAction.CLEAR_FEEDBACK -> emitFeedback(null)
+                                    GestureCompletionAction.HANDLE_TAP -> {
+                                        val upChange = requireNotNull(changed)
                                         val previous = pendingTap
-                                        val elapsed = changed.uptimeMillis - (previous?.upTime ?: Long.MIN_VALUE)
+                                        val elapsed = upChange.uptimeMillis - (previous?.upTime ?: Long.MIN_VALUE)
                                         if (previous != null && elapsed <= viewConfiguration.doubleTapTimeoutMillis) {
                                             pendingTapJob?.cancel()
                                             pendingTap = null
@@ -167,16 +166,18 @@ fun VideoGestureLayer(
                                             }
                                         } else {
                                             pendingTapJob?.cancel()
-                                            pendingTap = PendingTap(down.position.x, changed.uptimeMillis)
+                                            pendingTap = PendingTap(down.position.x, upChange.uptimeMillis)
                                             pendingTapJob = launch {
                                                 delay(viewConfiguration.doubleTapTimeoutMillis)
-                                                if (pendingTap?.upTime == changed.uptimeMillis) {
+                                                if (pendingTap?.upTime == upChange.uptimeMillis) {
                                                     pendingTap = null
                                                     currentOnSingleTap()
                                                 }
                                             }
                                         }
                                     }
+
+                                    GestureCompletionAction.NONE -> Unit
                                 }
                                 completed = true
                             } finally {
@@ -208,6 +209,29 @@ private data class PendingTap(
 internal enum class SeekGestureCompletion {
     COMMIT,
     RESTORE_PREVIEW,
+}
+
+internal enum class GestureCompletionAction {
+    SEEK,
+    CLEAR_FEEDBACK,
+    HANDLE_TAP,
+    NONE,
+}
+
+internal fun gestureCompletionAction(
+    axis: VideoGestureAxis,
+    endedWithUp: Boolean,
+): GestureCompletionAction = when (axis) {
+    VideoGestureAxis.SEEK -> GestureCompletionAction.SEEK
+    VideoGestureAxis.BRIGHTNESS,
+    VideoGestureAxis.VOLUME,
+    -> GestureCompletionAction.CLEAR_FEEDBACK
+
+    VideoGestureAxis.UNDECIDED -> if (endedWithUp) {
+        GestureCompletionAction.HANDLE_TAP
+    } else {
+        GestureCompletionAction.NONE
+    }
 }
 
 internal fun seekGestureCompletion(

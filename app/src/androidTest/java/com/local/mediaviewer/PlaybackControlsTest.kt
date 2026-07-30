@@ -17,6 +17,8 @@ import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.ui.player.PlaybackVolumeControl
 import com.local.mediaviewer.ui.player.PlayerControls
 import com.local.mediaviewer.ui.player.VolumeState
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -143,6 +145,77 @@ class PlaybackControlsTest {
         rule.onNodeWithTag("volume_popup").assertIsDisplayed()
         rule.onNodeWithTag("volume_slider_vertical").assertIsDisplayed()
         rule.onNodeWithText("50%").assertIsDisplayed()
+
+        val popupHeight = rule.onNodeWithTag("volume_popup")
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .height
+        val sliderHeight = rule.onNodeWithTag("volume_slider_vertical")
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .height
+        assertTrue(
+            "旋转后的音量滑块有效长度应至少达到弹层轨道容器的 80%",
+            sliderHeight >= popupHeight * 0.8f,
+        )
+    }
+
+    @Test
+    fun volumeTriggerDoesNotToggleMute() {
+        var expanded by mutableStateOf(false)
+        var muteCalls = 0
+        rule.setContent {
+            MaterialTheme {
+                PlaybackVolumeControl(
+                    state = VolumeState(current = 5, maximum = 10, muted = false),
+                    expanded = expanded,
+                    onExpandedChanged = { expanded = it },
+                    onRefresh = {},
+                    onToggleMute = { muteCalls++ },
+                    onVolumeChanged = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音").performClick()
+        rule.runOnIdle { assertEquals(0, muteCalls) }
+        rule.onNodeWithContentDescription("静音").performClick()
+        rule.runOnIdle { assertEquals(1, muteCalls) }
+    }
+
+    @Test
+    fun volumePollingContinuesWhileExpandedAndStopsWhenClosed() {
+        rule.mainClock.autoAdvance = false
+        var expanded by mutableStateOf(false)
+        var refreshCalls = 0
+        rule.setContent {
+            MaterialTheme {
+                PlaybackVolumeControl(
+                    state = VolumeState(current = 5, maximum = 10, muted = false),
+                    expanded = expanded,
+                    onExpandedChanged = { expanded = it },
+                    onRefresh = { refreshCalls++ },
+                    onToggleMute = {},
+                    onVolumeChanged = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音").performClick()
+        rule.waitForIdle()
+        val callsAfterOpening = refreshCalls
+        assertTrue("展开后应立即刷新", callsAfterOpening >= 1)
+
+        rule.mainClock.advanceTimeBy(251L)
+        rule.waitForIdle()
+        assertTrue("展开期间应持续刷新", refreshCalls > callsAfterOpening)
+
+        rule.runOnIdle { expanded = false }
+        rule.waitForIdle()
+        val callsAfterClosing = refreshCalls
+        rule.mainClock.advanceTimeBy(1_000L)
+        rule.waitForIdle()
+        assertEquals(callsAfterClosing, refreshCalls)
     }
 
 }

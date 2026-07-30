@@ -194,6 +194,7 @@ fun VideoPlayerScreen(
                             interaction = interaction.copy(scrubbing = false)
                             onCommitScrub()
                         },
+                        feedback = interaction.feedback,
                         onFeedback = { feedback ->
                             revealControls()
                             interaction = interaction.copy(feedback = feedback)

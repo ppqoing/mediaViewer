@@ -2,9 +2,12 @@ package com.local.mediaviewer
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
@@ -12,9 +15,11 @@ import com.local.mediaviewer.ui.player.PlayerBrightnessController
 import com.local.mediaviewer.ui.player.PlayerVolumeController
 import com.local.mediaviewer.ui.player.VideoGestureLayer
 import com.local.mediaviewer.ui.player.VolumeState
+import com.local.mediaviewer.player.PlayerGestureFeedback
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -99,7 +104,6 @@ class VideoGestureLayerTest {
             moveTo(Offset(width * 0.25f, height * 0.3f))
             up()
         }
-        rule.onNodeWithTag("gesture_brightness_rail").assertIsDisplayed()
         rule.runOnIdle { assertTrue(brightness.fraction.value > 0.5f) }
 
         rule.onNodeWithTag("video_gesture_layer").performTouchInput {
@@ -107,8 +111,32 @@ class VideoGestureLayerTest {
             moveTo(Offset(width * 0.75f, height * 0.3f))
             up()
         }
-        rule.onNodeWithTag("gesture_volume_rail").assertIsDisplayed()
         rule.runOnIdle { assertTrue(volume.state.value.current > 5) }
+    }
+
+    @Test
+    fun verticalDragReleaseClearsRailAndDoesNotScheduleSingleTap() {
+        rule.mainClock.autoAdvance = false
+        var singleTapCalls = 0
+        val feedbackEvents = mutableListOf<PlayerGestureFeedback?>()
+        setGestureLayer(
+            onSingleTap = { singleTapCalls++ },
+            onFeedback = { feedbackEvents += it },
+        )
+
+        rule.onNodeWithTag("video_gesture_layer").performTouchInput {
+            down(Offset(width * 0.75f, height * 0.7f))
+            moveTo(Offset(width * 0.75f, height * 0.3f))
+            up()
+        }
+
+        rule.onNodeWithTag("gesture_volume_rail").assertDoesNotExist()
+        rule.mainClock.advanceTimeBy(1_000L)
+        rule.runOnIdle {
+            assertTrue(feedbackEvents.any { it is PlayerGestureFeedback.Volume })
+            assertNull(feedbackEvents.last())
+            assertEquals(0, singleTapCalls)
+        }
     }
 
     private fun setGestureLayer(
@@ -120,9 +148,13 @@ class VideoGestureLayerTest {
         onBeginScrub: () -> Unit = {},
         onPreviewScrub: (Long) -> Unit = {},
         onCommitScrub: () -> Unit = {},
+        onFeedback: (PlayerGestureFeedback?) -> Unit = {},
     ) {
         rule.setContent {
             MaterialTheme {
+                var feedback by remember {
+                    mutableStateOf<PlayerGestureFeedback?>(null)
+                }
                 VideoGestureLayer(
                     enabled = true,
                     durationMs = 100_000L,
@@ -135,7 +167,11 @@ class VideoGestureLayerTest {
                     onBeginScrub = onBeginScrub,
                     onPreviewScrub = onPreviewScrub,
                     onCommitScrub = onCommitScrub,
-                    onFeedback = {},
+                    feedback = feedback,
+                    onFeedback = { value ->
+                        feedback = value
+                        onFeedback(value)
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
