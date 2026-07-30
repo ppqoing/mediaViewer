@@ -45,7 +45,15 @@ class AndroidVlcPlaybackEngine(
             playbackSpeed = mutableState.value.playbackSpeed,
         )
         val media = Media(libVlc, Uri.parse(url))
-        media.setHWDecoderEnabled(true, false)
+        val decoderConfiguration =
+            VlcVideoDecoderPolicy.compatibility
+        media.setHWDecoderEnabled(
+            decoderConfiguration.hardwareDecodingEnabled,
+            decoderConfiguration.forceHardwareDecoding,
+        )
+        decoderConfiguration.mediaOptions.forEach(
+            media::addOption,
+        )
         media.addOption(":network-caching=1500")
         mediaPlayer.media = media
         media.release()

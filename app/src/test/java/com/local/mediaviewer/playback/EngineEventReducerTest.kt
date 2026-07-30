@@ -80,6 +80,17 @@ class EngineEventReducerTest {
     }
 
     @Test
+    fun `缓冲达到百分之百退出缓冲状态`() {
+        val updated = EngineEventReducer.reduce(
+            PlaybackState(status = PlaybackStatus.BUFFERING),
+            EngineEvent.Buffering(100f),
+        )
+
+        assertEquals(PlaybackStatus.PLAYING, updated.status)
+        assertEquals(100f, updated.bufferedPercent)
+    }
+
+    @Test
     fun `增量事件保留当前播放倍速`() {
         val initial = PlaybackState(
             status = PlaybackStatus.PLAYING,
