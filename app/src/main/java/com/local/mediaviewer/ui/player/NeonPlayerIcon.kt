@@ -1,17 +1,33 @@
 package com.local.mediaviewer.ui.player
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
 internal val NeonCyan = Color(0xFF48E7FF)
 internal val NeonPurple = Color(0xFF9B6CFF)
+
+internal data class NeonPlayerIconVisualState(
+    val showActiveAccent: Boolean,
+    val showDisabledMark: Boolean,
+)
+
+internal fun neonPlayerIconVisualState(
+    active: Boolean,
+    enabled: Boolean,
+): NeonPlayerIconVisualState = NeonPlayerIconVisualState(
+    showActiveAccent = active && enabled,
+    showDisabledMark = !enabled,
+)
 
 @Composable
 fun NeonPlayerIcon(
@@ -21,9 +37,10 @@ fun NeonPlayerIcon(
     enabled: Boolean = true,
     modifier: Modifier = Modifier.size(24.dp),
 ) {
+    val visualState = neonPlayerIconVisualState(active, enabled)
     val foreground = if (enabled) NeonCyan else NeonCyan.copy(alpha = 0.38f)
     Box(modifier = modifier) {
-        if (active) {
+        if (visualState.showActiveAccent) {
             Icon(
                 icon,
                 contentDescription = null,
@@ -37,5 +54,16 @@ fun NeonPlayerIcon(
             tint = foreground,
             modifier = Modifier.matchParentSize(),
         )
+        if (visualState.showDisabledMark) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                drawLine(
+                    color = Color.White.copy(alpha = 0.78f),
+                    start = Offset(size.width * 0.18f, size.height * 0.18f),
+                    end = Offset(size.width * 0.82f, size.height * 0.82f),
+                    strokeWidth = 2.dp.toPx(),
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
     }
 }
