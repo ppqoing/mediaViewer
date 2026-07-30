@@ -2,7 +2,9 @@ package com.local.mediaviewer.home
 
 import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.AppResult
+import com.local.mediaviewer.model.ServerShare
 import com.local.mediaviewer.model.SessionEndpoint
+import com.local.mediaviewer.model.ShareAuthenticationMode
 import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
@@ -39,7 +41,7 @@ class HomeViewModelTest {
 
         assertEquals(1, session.connectCalls)
         assertEquals(
-            HomeUiState.Connected("192.168.1.17"),
+            HomeUiState.Connected("192.168.1.17", listOf(HOME_SHARE)),
             viewModel.uiState.value,
         )
     }
@@ -60,7 +62,7 @@ class HomeViewModelTest {
 
         assertEquals(2, session.connectCalls)
         assertEquals(
-            HomeUiState.Connected("192.168.1.17"),
+            HomeUiState.Connected("192.168.1.17", listOf(HOME_SHARE)),
             viewModel.uiState.value,
         )
     }
@@ -91,6 +93,7 @@ private class HomeFakeSession(
                     "192.168.1.17",
                 ),
                 listOf("192.168.1.17"),
+                listOf(HOME_SHARE),
             )
         }
     }
@@ -104,3 +107,11 @@ private class HomeFakeSession(
     override suspend fun refreshAfterRequestFailure(): AppResult<SessionEndpoint> =
         AppResult.Failure(AppError.NetworkFailure("not used"))
 }
+
+private val HOME_SHARE = ServerShare(
+    id = "4f01061d-9b75-4f7d-96db-49c801e96188",
+    displayName = "家庭相册",
+    urlPrefix = "家庭相册",
+    directoryBrowsing = true,
+    authenticationMode = ShareAuthenticationMode.ANONYMOUS,
+)

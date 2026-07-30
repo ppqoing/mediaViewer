@@ -2,8 +2,10 @@ package com.local.mediaviewer.session
 
 import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.AppResult
+import com.local.mediaviewer.model.ServerShare
 import com.local.mediaviewer.model.ServerConfig
 import com.local.mediaviewer.model.SessionEndpoint
+import com.local.mediaviewer.model.ShareAuthenticationMode
 import com.local.mediaviewer.model.ValidatedServerUrl
 import com.local.mediaviewer.network.ConnectionProbe
 import com.local.mediaviewer.network.ConnectionTestResult
@@ -20,7 +22,7 @@ import org.junit.Test
 
 class ServerSessionManagerTest {
     @Test
-    fun `启动连接保存最近成功 IPv4 但保留逻辑域名`() = runTest {
+    fun `启动连接保存最近成功 IPv4 和共享但保留逻辑域名`() = runTest {
         val settings = FakeSettings(
             ServerConfig("http://media.example:8080"),
         )
@@ -39,6 +41,7 @@ class ServerSessionManagerTest {
                         "http://203.0.113.7:8080",
                         "203.0.113.7",
                     ),
+                    shares = listOf(SESSION_SHARE),
                 ),
             )
         }
@@ -48,6 +51,7 @@ class ServerSessionManagerTest {
 
         val state = manager.state.value as ServerSessionState.Connected
         assertEquals("203.0.113.7", state.endpoint.ipv4)
+        assertEquals(listOf(SESSION_SHARE), state.shares)
         assertEquals(
             listOf("10.0.0.8", "203.0.113.7"),
             state.resolvedIpv4s,
@@ -210,6 +214,14 @@ class ServerSessionManagerTest {
             )
         }
 }
+
+private val SESSION_SHARE = ServerShare(
+    id = "4f01061d-9b75-4f7d-96db-49c801e96188",
+    displayName = "家庭相册",
+    urlPrefix = "家庭相册",
+    directoryBrowsing = true,
+    authenticationMode = ShareAuthenticationMode.ANONYMOUS,
+)
 
 private class FakeSettings(initial: ServerConfig) : ServerSettingsRepository {
     private val flow = MutableStateFlow(initial)

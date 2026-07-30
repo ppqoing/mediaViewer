@@ -2,7 +2,7 @@ package com.local.mediaviewer.browser
 
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
-import com.local.mediaviewer.model.RootShare
+import com.local.mediaviewer.model.ServerShare
 
 data class Breadcrumb(
     val label: String,
@@ -10,7 +10,7 @@ data class Breadcrumb(
 )
 
 data class BrowserPage(
-    val root: RootShare,
+    val root: ServerShare,
     val logicalDirectoryUrl: String,
     val requestDirectoryUrl: String,
     val breadcrumbs: List<Breadcrumb>,

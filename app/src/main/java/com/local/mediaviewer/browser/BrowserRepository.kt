@@ -2,17 +2,17 @@ package com.local.mediaviewer.browser
 
 import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.AppResult
-import com.local.mediaviewer.model.RootShare
+import com.local.mediaviewer.model.ServerShare
 import com.local.mediaviewer.model.SessionEndpoint
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
 interface BrowserRepository {
-    suspend fun openRoot(root: RootShare): AppResult<BrowserPage>
+    suspend fun openRoot(root: ServerShare): AppResult<BrowserPage>
 
     suspend fun openDirectory(
-        root: RootShare,
+        root: ServerShare,
         logicalUrl: String,
         breadcrumbs: List<Breadcrumb>,
     ): AppResult<BrowserPage>
@@ -22,11 +22,14 @@ class DefaultBrowserRepository(
     private val contentRepository: DirectoryContentRepository,
     private val session: ServerSessionManager,
 ) : BrowserRepository {
-    override suspend fun openRoot(root: RootShare): AppResult<BrowserPage> {
+    override suspend fun openRoot(root: ServerShare): AppResult<BrowserPage> {
         val endpoint = currentEndpoint() ?: return unavailable()
-        val logicalUrl = requireNotNull(
-            endpoint.logicalBaseUrl.toHttpUrl().resolve(root.path),
-        ).toString()
+        val logicalUrl = endpoint.logicalBaseUrl.toHttpUrl()
+            .newBuilder()
+            .addPathSegment(root.urlPrefix)
+            .addPathSegment("")
+            .build()
+            .toString()
         return load(
             root = root,
             logicalUrl = logicalUrl,
@@ -35,7 +38,7 @@ class DefaultBrowserRepository(
     }
 
     override suspend fun openDirectory(
-        root: RootShare,
+        root: ServerShare,
         logicalUrl: String,
         breadcrumbs: List<Breadcrumb>,
     ): AppResult<BrowserPage> {
@@ -47,7 +50,7 @@ class DefaultBrowserRepository(
     }
 
     private suspend fun load(
-        root: RootShare,
+        root: ServerShare,
         logicalUrl: String,
         breadcrumbs: List<Breadcrumb>,
     ): AppResult<BrowserPage> {

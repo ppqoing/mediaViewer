@@ -15,9 +15,10 @@ import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.image.ReaderPreferencesRepository
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
-import com.local.mediaviewer.model.RootShare
+import com.local.mediaviewer.model.ServerShare
 import com.local.mediaviewer.model.ServerConfig
 import com.local.mediaviewer.model.SessionEndpoint
+import com.local.mediaviewer.model.ShareAuthenticationMode
 import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackEngine
@@ -185,6 +186,7 @@ private class FakeServerSessionManager(
         ServerSessionState.Connected(
             endpoint,
             listOf(endpoint.ipv4),
+            FAKE_SHARES,
         ),
     )
     override val state: StateFlow<ServerSessionState> = mutable
@@ -193,6 +195,7 @@ private class FakeServerSessionManager(
         mutable.value = ServerSessionState.Connected(
             endpoint,
             listOf(endpoint.ipv4),
+            FAKE_SHARES,
         )
     }
 
@@ -220,10 +223,11 @@ private class FakeBrowserRepository(
     private val template: DirectoryContent,
 ) : BrowserRepository {
     override suspend fun openRoot(
-        root: RootShare,
+        root: ServerShare,
     ): AppResult<BrowserPage> {
-        val logical = endpoint.logicalBaseUrl + root.path
-        val request = endpoint.requestBaseUrl + root.path
+        val path = "/${root.urlPrefix}/"
+        val logical = endpoint.logicalBaseUrl + path
+        val request = endpoint.requestBaseUrl + path
         val folder = entry(
             name = "示例目录",
             logicalUrl = logical + "nested/",
@@ -244,7 +248,7 @@ private class FakeBrowserRepository(
     }
 
     override suspend fun openDirectory(
-        root: RootShare,
+        root: ServerShare,
         logicalUrl: String,
         breadcrumbs: List<Breadcrumb>,
     ): AppResult<BrowserPage> {
@@ -593,6 +597,23 @@ private const val FAKE_LOGICAL_BASE_URL =
     "http://media.test:8080"
 private const val FAKE_REQUEST_BASE_URL =
     "http://127.0.0.1:8080"
+
+private val FAKE_SHARES = listOf(
+    ServerShare(
+        id = "4f01061d-9b75-4f7d-96db-49c801e96188",
+        displayName = "MiddleDir",
+        urlPrefix = "middle",
+        directoryBrowsing = true,
+        authenticationMode = ShareAuthenticationMode.ANONYMOUS,
+    ),
+    ServerShare(
+        id = "0447a975-eccb-4802-a8f5-5f574971876c",
+        displayName = "pik",
+        urlPrefix = "pik",
+        directoryBrowsing = true,
+        authenticationMode = ShareAuthenticationMode.ANONYMOUS,
+    ),
+)
 
 private class InMemoryPlaybackPositionStore :
     PlaybackPositionStore {

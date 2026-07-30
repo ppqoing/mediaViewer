@@ -13,7 +13,8 @@ import com.local.mediaviewer.image.readerPreferencesDataStore
 import com.local.mediaviewer.network.DefaultCaddyDirectoryClient
 import com.local.mediaviewer.network.DefaultConnectionProbe
 import com.local.mediaviewer.network.DefaultDirectoryJsonParser
-import com.local.mediaviewer.network.OkHttpDirectoryProbeTransport
+import com.local.mediaviewer.network.DefaultShareDiscoveryParser
+import com.local.mediaviewer.network.OkHttpShareDiscoveryTransport
 import com.local.mediaviewer.network.SystemIpv4Resolver
 import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
 import com.local.mediaviewer.playback.MediaViewerDatabase
@@ -75,8 +76,8 @@ class DefaultAppContainer(
     )
     private val resolver = SystemIpv4Resolver()
     private val probe = DefaultConnectionProbe(
-        transport = OkHttpDirectoryProbeTransport(),
-        parser = directoryParser,
+        transport = OkHttpShareDiscoveryTransport(),
+        parser = DefaultShareDiscoveryParser(),
     )
 
     override val sessionManager: ServerSessionManager =

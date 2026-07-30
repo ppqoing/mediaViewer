@@ -23,6 +23,18 @@ sealed interface AppError {
         override val userMessage = "服务器返回 HTTP $statusCode"
     }
 
+    data object DiscoveryNotSupported : AppError {
+        override val userMessage = "服务器不支持共享发现接口，请升级 RangeShelf"
+    }
+
+    data object InvalidDiscoveryResponse : AppError {
+        override val userMessage = "共享发现响应格式无效"
+    }
+
+    data class UnsupportedDiscoveryVersion(val schemaVersion: Int) : AppError {
+        override val userMessage = "不支持共享发现协议版本 $schemaVersion"
+    }
+
     data class ProbeFailure(
         val resolvedIpv4s: List<String>,
         val lastError: String,

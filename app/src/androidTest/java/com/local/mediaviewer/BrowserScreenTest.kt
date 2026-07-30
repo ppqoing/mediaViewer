@@ -19,7 +19,8 @@ import com.local.mediaviewer.browser.BrowserUiState
 import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
-import com.local.mediaviewer.model.RootShare
+import com.local.mediaviewer.model.ServerShare
+import com.local.mediaviewer.model.ShareAuthenticationMode
 import com.local.mediaviewer.navigation.HomeRoute
 import com.local.mediaviewer.navigation.ImageReaderRoute
 import com.local.mediaviewer.navigation.PlayerRoute
@@ -197,7 +198,7 @@ class BrowserScreenTest {
 }
 
 private fun browserPage(entries: List<DirectoryEntry>) = BrowserPage(
-    root = RootShare.MIDDLE,
+    root = BROWSER_SHARE,
     logicalDirectoryUrl = "http://media.example/middle/",
     requestDirectoryUrl = "http://192.0.2.1/middle/",
     breadcrumbs = listOf(
@@ -216,4 +217,12 @@ private fun browserEntry(name: String, kind: MediaKind) = DirectoryEntry(
     logicalUrl = "http://media.example/middle/$name",
     requestUrl = "http://192.0.2.1/middle/$name",
     kind = kind,
+)
+
+private val BROWSER_SHARE = ServerShare(
+    id = "4f01061d-9b75-4f7d-96db-49c801e96188",
+    displayName = "MiddleDir",
+    urlPrefix = "middle",
+    directoryBrowsing = true,
+    authenticationMode = ShareAuthenticationMode.ANONYMOUS,
 )

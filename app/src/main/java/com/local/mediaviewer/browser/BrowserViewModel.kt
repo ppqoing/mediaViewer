@@ -6,7 +6,7 @@ import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
-import com.local.mediaviewer.model.RootShare
+import com.local.mediaviewer.model.ServerShare
 import com.local.mediaviewer.queue.QueueMediaItem
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -28,7 +28,7 @@ sealed interface BrowserUiState {
 }
 
 class BrowserViewModel(
-    private val root: RootShare,
+    private val root: ServerShare,
     private val repository: BrowserRepository,
 ) : ViewModel() {
     private val pages = mutableListOf<BrowserPage>()

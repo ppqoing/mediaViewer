@@ -8,10 +8,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 
+/**
+ * 显示可恢复错误及其操作按钮。
+ *
+ * @param message 面向用户的错误说明。
+ * @param onRetry 用户点击操作按钮时执行的回调。
+ * @param actionLabel 操作按钮文字，默认为“重试”。
+ */
 @Composable
 fun AppErrorPanel(
     message: String,
     onRetry: () -> Unit,
+    actionLabel: String = "重试",
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -19,7 +27,7 @@ fun AppErrorPanel(
     ) {
         Text(message)
         Button(onClick = onRetry) {
-            Text("重试")
+            Text(actionLabel)
         }
     }
 }

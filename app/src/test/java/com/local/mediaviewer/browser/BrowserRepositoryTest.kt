@@ -4,8 +4,9 @@ import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
-import com.local.mediaviewer.model.RootShare
+import com.local.mediaviewer.model.ServerShare
 import com.local.mediaviewer.model.SessionEndpoint
+import com.local.mediaviewer.model.ShareAuthenticationMode
 import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
@@ -33,7 +34,7 @@ class BrowserRepositoryTest {
             session = BrowserSession(browserEndpoint("192.0.2.1")),
         )
 
-        val result = repository.openRoot(RootShare.MIDDLE)
+        val result = repository.openRoot(MIDDLE_SHARE)
 
         val page = (result as AppResult.Success<BrowserPage>).value
         assertEquals(listOf(logicalUrl), contentRepository.logicalUrls)
@@ -65,14 +66,14 @@ class BrowserRepositoryTest {
         )
 
         val result = repository.openDirectory(
-            root = RootShare.MIDDLE,
+            root = MIDDLE_SHARE,
             logicalUrl = logicalUrl,
             breadcrumbs = breadcrumbs,
         )
 
         val page = (result as AppResult.Success<BrowserPage>).value
         assertEquals(listOf(logicalUrl), contentRepository.logicalUrls)
-        assertEquals(RootShare.MIDDLE, page.root)
+        assertEquals(MIDDLE_SHARE, page.root)
         assertEquals(logicalUrl, page.logicalDirectoryUrl)
         assertEquals(requestUrl, page.requestDirectoryUrl)
         assertEquals(breadcrumbs, page.breadcrumbs)
@@ -90,7 +91,7 @@ class BrowserRepositoryTest {
         )
 
         val result = repository.openDirectory(
-            root = RootShare.PIK,
+            root = PIK_SHARE,
             logicalUrl = "http://media.example:8080/pik/",
             breadcrumbs = emptyList(),
         )
@@ -113,7 +114,7 @@ class BrowserRepositoryTest {
             ),
         )
 
-        val result = repository.openRoot(RootShare.MIDDLE)
+        val result = repository.openRoot(MIDDLE_SHARE)
 
         assertEquals(
             AppError.NetworkFailure("服务器尚未连接"),
@@ -122,6 +123,22 @@ class BrowserRepositoryTest {
         assertEquals(emptyList<String>(), contentRepository.logicalUrls)
     }
 }
+
+private val MIDDLE_SHARE = ServerShare(
+    id = "4f01061d-9b75-4f7d-96db-49c801e96188",
+    displayName = "MiddleDir",
+    urlPrefix = "middle",
+    directoryBrowsing = true,
+    authenticationMode = ShareAuthenticationMode.ANONYMOUS,
+)
+
+private val PIK_SHARE = ServerShare(
+    id = "0447a975-eccb-4802-a8f5-5f574971876c",
+    displayName = "pik",
+    urlPrefix = "pik",
+    directoryBrowsing = true,
+    authenticationMode = ShareAuthenticationMode.ANONYMOUS,
+)
 
 private fun browserEndpoint(ipv4: String) = SessionEndpoint(
     logicalBaseUrl = "http://media.example:8080",

@@ -14,6 +14,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.SnackbarHostState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -32,7 +33,6 @@ import com.local.mediaviewer.browser.BrowserPlaybackAction
 import com.local.mediaviewer.home.HomeViewModel
 import com.local.mediaviewer.image.ImageReaderViewModel
 import com.local.mediaviewer.model.MediaKind
-import com.local.mediaviewer.model.RootShare
 import com.local.mediaviewer.navigation.BrowserRoute
 import com.local.mediaviewer.navigation.CurrentPlayerNavigationRequests
 import com.local.mediaviewer.navigation.HomeRoute
@@ -44,7 +44,9 @@ import com.local.mediaviewer.navigation.resolvePlayerRouteContent
 import com.local.mediaviewer.player.PlayerRequest
 import com.local.mediaviewer.player.PlayerViewModel
 import com.local.mediaviewer.settings.SettingsViewModel
+import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.ui.browser.BrowserScreen
+import com.local.mediaviewer.ui.components.AppErrorPanel
 import com.local.mediaviewer.ui.home.HomeScreen
 import com.local.mediaviewer.ui.image.ImageReaderScreen
 import com.local.mediaviewer.ui.player.AudioPlayerScreen
@@ -110,8 +112,8 @@ fun MediaViewerApp(
                 onOpenSettings = {
                     navController.navigate(SettingsRoute)
                 },
-                onOpenRoot = { root ->
-                    navController.navigate(BrowserRoute(root.id))
+                onOpenShare = { share ->
+                    navController.navigate(BrowserRoute(share.id))
                 },
             )
         }
@@ -146,7 +148,31 @@ fun MediaViewerApp(
         }
         composable<BrowserRoute> { entry ->
             val route = entry.toRoute<BrowserRoute>()
-            val root = RootShare.fromId(route.rootId)
+            val sessionState by container.sessionManager.state
+                .collectAsStateWithLifecycle()
+            if (sessionState == ServerSessionState.Connecting) {
+                CircularProgressIndicator()
+                return@composable
+            }
+            val connected = sessionState as? ServerSessionState.Connected
+            if (connected == null) {
+                AppErrorPanel(
+                    message = "服务器连接已中断",
+                    onRetry = { navController.popBackStack() },
+                    actionLabel = "返回",
+                )
+                return@composable
+            }
+            val root = connected.shares
+                .firstOrNull { share -> share.id == route.rootId }
+            if (root == null) {
+                AppErrorPanel(
+                    message = "共享不存在或已从服务器移除",
+                    onRetry = { navController.popBackStack() },
+                    actionLabel = "返回",
+                )
+                return@composable
+            }
             val browser: BrowserViewModel = viewModel(
                 key = "browser:${root.id}",
                 factory = viewModelFactory {

@@ -100,6 +100,7 @@ class DefaultServerSessionManager(
         mutableState.value = ServerSessionState.Connected(
             endpoint = result.endpoint,
             resolvedIpv4s = result.resolvedIpv4s,
+            shares = result.shares,
         )
     }
 

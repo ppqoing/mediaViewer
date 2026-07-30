@@ -18,14 +18,14 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $expectedApplicationId = 'com.local.mediaviewer'
-$expectedVersionName = '1.0.1'
-$expectedVersionCode = 2
+$expectedVersionName = '1.1.0'
+$expectedVersionCode = 3
 $expectedAbi = 'arm64-v8a'
 $expectedMinSdk = 29
 $expectedTargetSdk = 36
 $maximumBytes = 70MB
 $artifactName = (
-    'mediaviewer-v1.0.1-arm64-v8a-release.apk'
+    'mediaviewer-v1.1.0-arm64-v8a-release.apk'
 )
 
 function Invoke-Checked {
@@ -327,7 +327,7 @@ $completedAt = [DateTimeOffset]::Now.ToString(
 )
 $verificationPath = Join-Path `
     $repositoryRoot `
-    'docs\verification\2026-07-29-arm64-compressed-release.md'
+    'docs\verification\2026-07-30-arm64-compressed-release.md'
 $record = @"
 # mediaviewer arm64 压缩 Release 验收记录
 

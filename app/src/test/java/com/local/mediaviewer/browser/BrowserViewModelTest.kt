@@ -4,7 +4,8 @@ import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
-import com.local.mediaviewer.model.RootShare
+import com.local.mediaviewer.model.ServerShare
+import com.local.mediaviewer.model.ShareAuthenticationMode
 import java.time.Instant
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -82,7 +83,7 @@ class BrowserViewModelTest {
         )
         val pages = ArrayDeque(listOf(rootPage, subPage, subPage))
         val viewModel = BrowserViewModel(
-            root = RootShare.MIDDLE,
+            root = MIDDLE_SHARE,
             repository = QueueBrowserRepository(pages),
         )
 
@@ -136,7 +137,7 @@ class BrowserViewModelTest {
                     "http://media.example:8080/pik/",
                 ),
             ),
-            root = RootShare.PIK,
+            root = PIK_SHARE,
         )
         val repository = ResultQueueBrowserRepository(
             ArrayDeque(
@@ -146,7 +147,7 @@ class BrowserViewModelTest {
                 ),
             ),
         )
-        val viewModel = BrowserViewModel(RootShare.PIK, repository)
+        val viewModel = BrowserViewModel(PIK_SHARE, repository)
 
         advanceUntilIdle()
         val error = viewModel.uiState.value as BrowserUiState.Error
@@ -187,7 +188,7 @@ class BrowserViewModelTest {
         )
         val deepResult = CompletableDeferred<BrowserPage>()
         val viewModel = BrowserViewModel(
-            RootShare.MIDDLE,
+            MIDDLE_SHARE,
             ControlledBrowserRepository(rootPage, subPage, deepUrl, deepResult),
         )
         advanceUntilIdle()
@@ -211,11 +212,11 @@ class BrowserViewModelTest {
 private class QueueBrowserRepository(
     private val pages: ArrayDeque<BrowserPage>,
 ) : BrowserRepository {
-    override suspend fun openRoot(root: RootShare): AppResult<BrowserPage> =
+    override suspend fun openRoot(root: ServerShare): AppResult<BrowserPage> =
         AppResult.Success(pages.removeFirst())
 
     override suspend fun openDirectory(
-        root: RootShare,
+        root: ServerShare,
         logicalUrl: String,
         breadcrumbs: List<Breadcrumb>,
     ): AppResult<BrowserPage> =
@@ -225,11 +226,11 @@ private class QueueBrowserRepository(
 private class ResultQueueBrowserRepository(
     private val results: ArrayDeque<AppResult<BrowserPage>>,
 ) : BrowserRepository {
-    override suspend fun openRoot(root: RootShare): AppResult<BrowserPage> =
+    override suspend fun openRoot(root: ServerShare): AppResult<BrowserPage> =
         results.removeFirst()
 
     override suspend fun openDirectory(
-        root: RootShare,
+        root: ServerShare,
         logicalUrl: String,
         breadcrumbs: List<Breadcrumb>,
     ): AppResult<BrowserPage> =
@@ -242,11 +243,11 @@ private class ControlledBrowserRepository(
     private val deepUrl: String,
     private val deepResult: CompletableDeferred<BrowserPage>,
 ) : BrowserRepository {
-    override suspend fun openRoot(root: RootShare): AppResult<BrowserPage> =
+    override suspend fun openRoot(root: ServerShare): AppResult<BrowserPage> =
         AppResult.Success(rootPage)
 
     override suspend fun openDirectory(
-        root: RootShare,
+        root: ServerShare,
         logicalUrl: String,
         breadcrumbs: List<Breadcrumb>,
     ): AppResult<BrowserPage> =
@@ -262,7 +263,7 @@ private fun page(
     entries: List<DirectoryEntry>,
     breadcrumbs: List<Breadcrumb> =
         listOf(Breadcrumb("MiddleDir", logicalUrl)),
-    root: RootShare = RootShare.MIDDLE,
+    root: ServerShare = MIDDLE_SHARE,
 ) = BrowserPage(
     root = root,
     logicalDirectoryUrl = logicalUrl,
@@ -294,3 +295,19 @@ private fun currentPage(viewModel: BrowserViewModel): BrowserPage =
         is BrowserUiState.Empty -> state.page
         else -> error("No page: $state")
     }
+
+private val MIDDLE_SHARE = ServerShare(
+    id = "4f01061d-9b75-4f7d-96db-49c801e96188",
+    displayName = "MiddleDir",
+    urlPrefix = "middle",
+    directoryBrowsing = true,
+    authenticationMode = ShareAuthenticationMode.ANONYMOUS,
+)
+
+private val PIK_SHARE = ServerShare(
+    id = "0447a975-eccb-4802-a8f5-5f574971876c",
+    displayName = "pik",
+    urlPrefix = "pik",
+    directoryBrowsing = true,
+    authenticationMode = ShareAuthenticationMode.ANONYMOUS,
+)
