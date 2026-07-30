@@ -20,12 +20,14 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -562,6 +564,64 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun `paused scrub defers play until engine confirms target`() =
+        runTest(dispatcher) {
+            val controller = FakePlaybackController()
+            val viewModel = PlayerViewModel(
+                initialRequest = request(),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            controller.emit(playback(PlaybackStatus.PAUSED, 10_000L))
+            runCurrent()
+
+            viewModel.beginScrub()
+            viewModel.previewScrub(34_000L)
+            viewModel.commitScrub()
+            viewModel.play()
+
+            assertEquals(listOf(34_000L), controller.seekCalls)
+            assertEquals(0, controller.playCalls)
+            assertEquals(
+                34_000L,
+                viewModel.uiState.value.displayedPositionMs,
+            )
+
+            controller.emit(playback(PlaybackStatus.PAUSED, 33_500L))
+            runCurrent()
+
+            assertEquals(1, controller.playCalls)
+            assertNull(viewModel.uiState.value.seekSync.pending)
+        }
+
+    @Test
+    fun `pending seek play falls back after timeout`() =
+        runTest(dispatcher) {
+            val controller = FakePlaybackController()
+            val viewModel = PlayerViewModel(
+                initialRequest = request(),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            controller.emit(playback(PlaybackStatus.PAUSED, 10_000L))
+            runCurrent()
+            viewModel.beginScrub()
+            viewModel.previewScrub(34_000L)
+            viewModel.commitScrub()
+            viewModel.play()
+
+            advanceTimeBy(1_501L)
+            runCurrent()
+
+            assertEquals(1, controller.playCalls)
+            assertNull(viewModel.uiState.value.seekSync.pending)
+        }
+
+    @Test
     fun `快退快进按十秒且截断到媒体边界`() = runTest(dispatcher) {
         val controller = FakePlaybackController()
         val viewModel = PlayerViewModel(
@@ -638,6 +698,16 @@ private fun request() = PlayerRequest(
     requestUrl = "http://192.0.2.1:8080/middle/movie.mp4",
     mediaKey = "http://media.example:8080/middle/movie.mp4",
     kind = MediaKind.VIDEO,
+)
+
+private fun playback(
+    status: PlaybackStatus,
+    positionMs: Long,
+) = PlaybackState(
+    status = status,
+    positionMs = positionMs,
+    durationMs = 60_000L,
+    isSeekable = true,
 )
 
 private fun queueItem(

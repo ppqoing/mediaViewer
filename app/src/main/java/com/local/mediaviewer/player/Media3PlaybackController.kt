@@ -416,7 +416,7 @@ class Media3PlaybackController(
                 !closed &&
                 connectionMachine.isCurrent(handle)
             ) {
-                delay(500L)
+                delay(POSITION_OBSERVER_INTERVAL_MS)
                 publish(handle.controller)
             }
         }
@@ -523,6 +523,7 @@ class Media3PlaybackController(
 
     private companion object {
         const val MAX_PENDING_COMMANDS = 32
+        const val POSITION_OBSERVER_INTERVAL_MS = 250L
         const val RECONNECT_DELAY_MS = 500L
     }
 }

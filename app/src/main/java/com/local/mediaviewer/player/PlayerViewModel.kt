@@ -7,6 +7,8 @@ import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.session.ServerSessionManager
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,10 +28,13 @@ class PlayerViewModel(
     private var endpointRetryUsed = false
     private var lastStatus = PlaybackStatus.IDLE
     private var leaving = false
+    private var playAfterSeekConfirmation = false
+    private var seekConfirmationTimeoutJob: Job? = null
     private val mutableUiState = MutableStateFlow(
         PlayerUiState(
             name = initialRequest.name,
             kind = initialRequest.kind,
+            currentMediaKey = initialRequest.mediaKey,
         ),
     )
     val uiState: StateFlow<PlayerUiState> = mutableUiState.asStateFlow()
@@ -46,7 +51,22 @@ class PlayerViewModel(
         }
         viewModelScope.launch {
             controller.state.collect { state ->
-                mutableUiState.value = mutableUiState.value.withEngine(state)
+                val current = mutableUiState.value
+                val reconciled = current.seekSync.reconcile(
+                    mediaKey = currentMediaKey(),
+                    actualMs = state.positionMs,
+                    status = state.status,
+                )
+                mutableUiState.value = current
+                    .withEngine(state)
+                    .copy(seekSync = reconciled)
+                if (
+                    state.status == PlaybackStatus.ERROR ||
+                    state.status == PlaybackStatus.ENDED
+                ) {
+                    cancelDeferredPlay()
+                }
+                completeDeferredPlayIfConfirmed()
                 applyResumeIfReady()
                 if (
                     state.status == PlaybackStatus.ENDED &&
@@ -70,6 +90,15 @@ class PlayerViewModel(
                 queueController.sessionState.collect { sessionState ->
                     val queue = sessionState.queue
                     val currentItem = sessionState.currentItem
+                    val current = mutableUiState.value
+                    val mediaChanged = queue.currentMediaKey != null &&
+                        queue.currentMediaKey != current.currentMediaKey
+                    val seekSync = if (mediaChanged) {
+                        cancelDeferredPlay()
+                        current.seekSync.clear()
+                    } else {
+                        current.seekSync
+                    }
                     if (currentItem != null) {
                         currentRequest = PlayerRequest(
                             name = currentItem.name,
@@ -79,7 +108,12 @@ class PlayerViewModel(
                             kind = currentItem.kind,
                         )
                     }
-                    mutableUiState.value = mutableUiState.value
+                    val reconciled = seekSync.reconcile(
+                        mediaKey = queue.currentMediaKey,
+                        actualMs = sessionState.playback.positionMs,
+                        status = sessionState.playback.status,
+                    )
+                    mutableUiState.value = current
                         .withEngine(sessionState.playback)
                         .copy(
                             name = currentItem?.name
@@ -94,15 +128,38 @@ class PlayerViewModel(
                             errorMessage = sessionState.errorMessage
                                 ?: sessionState.playback.errorMessage,
                             playbackSpeed = queue.playbackSpeed,
+                            seekSync = reconciled,
                         )
+                    if (
+                        sessionState.playback.status == PlaybackStatus.ERROR ||
+                        sessionState.playback.status == PlaybackStatus.ENDED
+                    ) {
+                        cancelDeferredPlay()
+                    }
+                    completeDeferredPlayIfConfirmed()
                 }
             }
         }
     }
 
-    fun play() = controller.play()
+    fun play() {
+        if (mutableUiState.value.seekSync.pending == null) {
+            controller.play()
+            return
+        }
+        playAfterSeekConfirmation = true
+        seekConfirmationTimeoutJob?.cancel()
+        seekConfirmationTimeoutJob = viewModelScope.launch {
+            delay(SEEK_CONFIRMATION_TIMEOUT_MS)
+            mutableUiState.value = mutableUiState.value.copy(
+                seekSync = mutableUiState.value.seekSync.clear(),
+            )
+            completeDeferredPlay()
+        }
+    }
 
     fun pause() {
+        cancelDeferredPlay()
         controller.pause()
         viewModelScope.launch {
             saveSnapshot(ended = false)
@@ -125,6 +182,7 @@ class PlayerViewModel(
     fun next() = (controller as? QueuePlaybackController)?.skipNext()
 
     fun retry() {
+        cancelDeferredPlay()
         if (controller is QueuePlaybackController) {
             controller.play()
             return
@@ -281,7 +339,41 @@ class PlayerViewModel(
         mutableUiState.value = transform(mutableUiState.value)
     }
 
+    private fun currentMediaKey(): String =
+        (controller as? QueuePlaybackController)
+            ?.sessionState
+            ?.value
+            ?.currentItem
+            ?.mediaKey
+            ?: currentRequest.mediaKey
+
+    private fun completeDeferredPlayIfConfirmed() {
+        if (mutableUiState.value.seekSync.pending == null) {
+            completeDeferredPlay()
+        }
+    }
+
+    private fun completeDeferredPlay() {
+        if (!playAfterSeekConfirmation) return
+        playAfterSeekConfirmation = false
+        seekConfirmationTimeoutJob?.cancel()
+        seekConfirmationTimeoutJob = null
+        controller.play()
+    }
+
+    private fun cancelDeferredPlay() {
+        playAfterSeekConfirmation = false
+        seekConfirmationTimeoutJob?.cancel()
+        seekConfirmationTimeoutJob = null
+    }
+
+    override fun onCleared() {
+        cancelDeferredPlay()
+        super.onCleared()
+    }
+
     private companion object {
         const val SEEK_INCREMENT_MS = 10_000L
+        const val SEEK_CONFIRMATION_TIMEOUT_MS = 1_500L
     }
 }
