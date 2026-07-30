@@ -16,6 +16,28 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class LocalVideoOutputBinderTest {
     @Test
+    fun `same uid can refresh attached output without reloading media`() = runTest {
+        val engine = ServiceTestEngine()
+        val coordinator = serviceTestCoordinator(this, engine)
+        val binder = LocalVideoOutputBinder(
+            coordinator = coordinator,
+            callingUid = { 42 },
+            processUid = { 42 },
+        )
+        val host = FrameLayout(
+            ApplicationProvider.getApplicationContext<Context>(),
+        )
+        binder.attach(host)
+
+        binder.refresh()
+
+        assertEquals(1, engine.refreshVideoOutputCalls)
+        assertEquals(0, engine.prepareCalls)
+        binder.detach()
+        coordinator.close()
+    }
+
+    @Test
     fun `same uid attach and detach are idempotent`() = runTest {
         val engine = ServiceTestEngine()
         val coordinator = serviceTestCoordinator(this, engine)
@@ -55,6 +77,7 @@ class LocalVideoOutputBinderTest {
         listOf<() -> Unit>(
             { binder.attach(host) },
             { binder.detach() },
+            { binder.refresh() },
             { binder.setScaleMode(VideoScaleMode.BEST_FIT) },
         ).forEach { operation ->
             assertThrows(SecurityException::class.java, operation)
@@ -86,6 +109,7 @@ class LocalVideoOutputBinderTest {
         listOf<() -> Unit>(
             { binder.attach(host) },
             { binder.detach() },
+            { binder.refresh() },
             { binder.setScaleMode(VideoScaleMode.BEST_FIT) },
         ).forEach { operation ->
             assertThrows(IllegalStateException::class.java, operation)

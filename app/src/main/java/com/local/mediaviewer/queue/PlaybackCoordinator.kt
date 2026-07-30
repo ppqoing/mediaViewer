@@ -379,6 +379,8 @@ class PlaybackCoordinator(
 
     override fun detachVideoOutput() = engine.detachVideoOutput()
 
+    override fun refreshVideoOutput() = engine.refreshVideoOutput()
+
     override fun setVideoScaleMode(mode: VideoScaleMode) = engine.setVideoScaleMode(mode)
 
     override fun close() {

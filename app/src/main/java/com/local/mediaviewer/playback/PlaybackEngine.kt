@@ -23,6 +23,8 @@ interface PlaybackEngine : AutoCloseable {
 
     fun detachVideoOutput()
 
+    fun refreshVideoOutput() = Unit
+
     fun setVideoScaleMode(mode: VideoScaleMode)
 
     fun setPlaybackSpeed(speed: Float)

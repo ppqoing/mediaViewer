@@ -31,6 +31,7 @@ class AndroidVlcPlaybackEngine(
     private var videoHost: ViewGroup? = null
     private var videoLayout: VLCVideoLayout? = null
     private var videoScaleMode = VideoScaleMode.BEST_FIT
+    private var pendingVideoRebind: Runnable? = null
 
     init {
         mediaPlayer.setEventListener(::onVlcEvent)
@@ -92,6 +93,25 @@ class AndroidVlcPlaybackEngine(
         if (closed.get()) return
         requireMainThread("解绑")
         detachVideoOutputInternal()
+    }
+
+    override fun refreshVideoOutput() {
+        if (closed.get()) return
+        requireMainThread("刷新")
+        val layout = videoLayout ?: return
+        mediaPlayer.updateVideoSurfaces()
+        cancelPendingVideoRebind()
+        val rebind = Runnable {
+            pendingVideoRebind = null
+            if (closed.get() || videoLayout !== layout) return@Runnable
+            mediaPlayer.detachViews()
+            mediaPlayer.attachViews(layout, null, false, false)
+            mediaPlayer.setVideoScale(
+                videoScaleMode.toLibVlcScaleType(),
+            )
+        }
+        pendingVideoRebind = rebind
+        mainHandler.postDelayed(rebind, VIDEO_REBIND_DELAY_MS)
     }
 
     override fun setVideoScaleMode(mode: VideoScaleMode) {
@@ -165,6 +185,7 @@ class AndroidVlcPlaybackEngine(
             MediaPlayer.Event.EncounteredError ->
                 EngineEvent.Error("VLC 无法播放此媒体")
             MediaPlayer.Event.Vout -> {
+                cancelPendingVideoRebind()
                 mediaPlayer.updateVideoSurfaces()
                 return
             }
@@ -189,11 +210,17 @@ class AndroidVlcPlaybackEngine(
     }
 
     private fun detachVideoOutputInternal() {
+        cancelPendingVideoRebind()
         if (videoLayout == null) return
         mediaPlayer.detachViews()
         videoHost?.removeAllViews()
         videoLayout = null
         videoHost = null
+    }
+
+    private fun cancelPendingVideoRebind() {
+        pendingVideoRebind?.let(mainHandler::removeCallbacks)
+        pendingVideoRebind = null
     }
 
     private fun requireMainThread(operation: String) {
@@ -243,6 +270,7 @@ class AndroidVlcPlaybackEngine(
 
     private companion object {
         const val MAIN_THREAD_TIMEOUT_SECONDS = 10L
+        const val VIDEO_REBIND_DELAY_MS = 120L
     }
 }
 

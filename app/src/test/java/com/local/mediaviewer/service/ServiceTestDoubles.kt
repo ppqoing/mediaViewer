@@ -46,6 +46,7 @@ internal class ServiceTestEngine : PlaybackEngine {
     val scaleModes = mutableListOf<VideoScaleMode>()
     var prepareCalls = 0
     var playCalls = 0
+    var refreshVideoOutputCalls = 0
 
     override fun prepare(url: String) {
         prepareCalls += 1
@@ -57,6 +58,10 @@ internal class ServiceTestEngine : PlaybackEngine {
 
     override fun detachVideoOutput() {
         detachCalls += 1
+    }
+
+    override fun refreshVideoOutput() {
+        refreshVideoOutputCalls += 1
     }
 
     override fun setVideoScaleMode(mode: VideoScaleMode) {

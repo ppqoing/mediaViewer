@@ -10,13 +10,53 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
 import com.local.mediaviewer.playback.VideoScaleMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.util.VLCVideoLayout
 
 @RunWith(AndroidJUnit4::class)
 class LibVlcVideoOutputTest {
+    @Test
+    fun refreshKeepsAttachedLayoutStateAndMediaIdentity() {
+        val context =
+            ApplicationProvider.getApplicationContext<Context>()
+        val engine = AndroidVlcPlaybackEngine(context)
+        try {
+            ActivityScenario.launch(
+                MainActivity::class.java,
+            ).use { scenario ->
+                scenario.onActivity { activity ->
+                    val host = FrameLayout(activity)
+                    activity.setContentView(
+                        host,
+                        ViewGroup.LayoutParams(800, 450),
+                    )
+                    engine.prepare(
+                        "http://media.example:8080/movie.mp4",
+                    )
+                    engine.attachVideoOutput(host)
+                    val stateBeforeRefresh = engine.state.value
+                    val mediaPlayer = engine.mediaPlayerForTest()
+                    val mediaBeforeRefresh = mediaPlayer.media
+
+                    engine.refreshVideoOutput()
+
+                    assertEquals(1, host.childCount)
+                    assertTrue(
+                        host.getChildAt(0) is VLCVideoLayout,
+                    )
+                    assertEquals(stateBeforeRefresh, engine.state.value)
+                    assertSame(mediaBeforeRefresh, mediaPlayer.media)
+                }
+            }
+        } finally {
+            engine.close()
+        }
+    }
+
     @Test
     fun videoLayoutFillsHostAcceptsScaleModesAndReattaches() {
         val context =
@@ -77,4 +117,11 @@ class LibVlcVideoOutputTest {
             engine.close()
         }
     }
+}
+
+private fun AndroidVlcPlaybackEngine.mediaPlayerForTest(): MediaPlayer {
+    val field = AndroidVlcPlaybackEngine::class.java
+        .getDeclaredField("mediaPlayer")
+    field.isAccessible = true
+    return field.get(this) as MediaPlayer
 }

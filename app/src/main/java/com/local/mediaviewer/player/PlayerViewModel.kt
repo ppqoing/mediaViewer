@@ -3,6 +3,7 @@ package com.local.mediaviewer.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.local.mediaviewer.core.AppResult
+import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
@@ -144,7 +145,7 @@ class PlayerViewModel(
 
     fun play() {
         if (mutableUiState.value.seekSync.pending == null) {
-            controller.play()
+            playNow()
             return
         }
         playAfterSeekConfirmation = true
@@ -358,6 +359,16 @@ class PlayerViewModel(
         playAfterSeekConfirmation = false
         seekConfirmationTimeoutJob?.cancel()
         seekConfirmationTimeoutJob = null
+        playNow()
+    }
+
+    private fun playNow() {
+        if (
+            currentRequest.kind == MediaKind.VIDEO &&
+            lastStatus == PlaybackStatus.PAUSED
+        ) {
+            controller.refreshVideoOutput()
+        }
         controller.play()
     }
 

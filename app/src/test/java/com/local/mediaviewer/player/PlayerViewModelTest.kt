@@ -122,6 +122,46 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `paused video refreshes output immediately before user play`() =
+        runTest(dispatcher) {
+            val controller = FakePlaybackController()
+            val viewModel = PlayerViewModel(
+                initialRequest = request(),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            controller.emit(playback(PlaybackStatus.PAUSED, 10_000L))
+            runCurrent()
+
+            viewModel.play()
+
+            assertEquals(listOf("refresh", "play"), controller.playCommands)
+            assertEquals(1, controller.refreshVideoOutputCalls)
+        }
+
+    @Test
+    fun `paused audio plays without refreshing video output`() =
+        runTest(dispatcher) {
+            val controller = FakePlaybackController()
+            val viewModel = PlayerViewModel(
+                initialRequest = request().copy(kind = MediaKind.AUDIO),
+                controller = controller,
+                positionStore = FakeStore(),
+                session = FakePlayerSession(),
+                autoStart = false,
+            )
+            controller.emit(playback(PlaybackStatus.PAUSED, 10_000L))
+            runCurrent()
+
+            viewModel.play()
+
+            assertEquals(listOf("play"), controller.playCommands)
+            assertEquals(0, controller.refreshVideoOutputCalls)
+        }
+
+    @Test
     fun `暂停和结束使用当前快照写入`() = runTest(dispatcher) {
         val controller = FakePlaybackController()
         val store = FakeStore()
@@ -624,6 +664,7 @@ class PlayerViewModelTest {
 
             assertEquals(listOf(34_000L), controller.seekCalls)
             assertEquals(0, controller.playCalls)
+            assertEquals(0, controller.refreshVideoOutputCalls)
             assertEquals(
                 34_000L,
                 viewModel.uiState.value.displayedPositionMs,
@@ -633,6 +674,7 @@ class PlayerViewModelTest {
             runCurrent()
 
             assertEquals(1, controller.playCalls)
+            assertEquals(listOf("refresh", "play"), controller.playCommands)
             assertNull(viewModel.uiState.value.seekSync.pending)
         }
 
@@ -768,7 +810,9 @@ private class FakePlaybackController : PlaybackController {
     val seekCalls = mutableListOf<Long>()
     val playbackSpeeds = mutableListOf<Float>()
     val scaleModes = mutableListOf<VideoScaleMode>()
+    val playCommands = mutableListOf<String>()
     var playCalls = 0
+    var refreshVideoOutputCalls = 0
     var pauseCalls = 0
     var closeCalls = 0
 
@@ -780,6 +824,11 @@ private class FakePlaybackController : PlaybackController {
 
     override fun detachVideoOutput() = Unit
 
+    override fun refreshVideoOutput() {
+        refreshVideoOutputCalls += 1
+        playCommands += "refresh"
+    }
+
     override fun setVideoScaleMode(mode: VideoScaleMode) {
         scaleModes += mode
     }
@@ -790,6 +839,7 @@ private class FakePlaybackController : PlaybackController {
 
     override fun play() {
         playCalls += 1
+        playCommands += "play"
     }
 
     override fun pause() {

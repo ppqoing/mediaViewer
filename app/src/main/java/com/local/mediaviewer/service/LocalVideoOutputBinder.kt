@@ -41,6 +41,14 @@ class LocalVideoOutputBinder internal constructor(
         }
     }
 
+    fun refresh() {
+        enforceSameUid()
+        synchronized(lock) {
+            checkActive()
+            if (attachedHost != null) coordinator.refreshVideoOutput()
+        }
+    }
+
     internal fun invalidate() {
         if (!released.compareAndSet(false, true)) return
         synchronized(lock) {

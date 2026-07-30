@@ -54,6 +54,8 @@ interface PlaybackController : AutoCloseable {
 
     fun detachVideoOutput()
 
+    fun refreshVideoOutput() = Unit
+
     fun retryVideoOutput() = Unit
 
     fun setVideoScaleMode(mode: VideoScaleMode)

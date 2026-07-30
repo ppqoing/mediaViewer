@@ -309,6 +309,14 @@ class Media3PlaybackController(
         mutableVideoOutputState.value = VideoOutputConnectionState.Detached
     }
 
+    override fun refreshVideoOutput() {
+        runCatching {
+            localVideoBinder?.refresh()
+        }.onFailure {
+            failVideoOutput("画面恢复失败")
+        }
+    }
+
     override fun retryVideoOutput() {
         if (pendingVideoHost == null || closed) return
         if (localVideoBound || localVideoBinding) {
