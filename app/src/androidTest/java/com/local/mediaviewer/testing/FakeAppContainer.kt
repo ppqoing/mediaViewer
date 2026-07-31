@@ -29,6 +29,7 @@ import com.local.mediaviewer.player.PlaybackController
 import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.queue.PlaybackCoordinator
+import com.local.mediaviewer.queue.PlaybackNotice
 import com.local.mediaviewer.queue.PlaybackQueue
 import com.local.mediaviewer.queue.PlaybackQueueRepository
 import com.local.mediaviewer.queue.PlaybackSessionState
@@ -40,7 +41,9 @@ import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 class FakeAppContainer(
@@ -49,6 +52,7 @@ class FakeAppContainer(
         ImageReaderMode = ImageReaderMode.COMIC,
     directoryContent:
         DirectoryContent = defaultDirectoryContent(),
+    initialHasShownVideoGestures: Boolean = false,
 ) : AppContainer, AutoCloseable {
     private val endpoint = SessionEndpoint(
         logicalBaseUrl = FAKE_LOGICAL_BASE_URL,
@@ -66,9 +70,16 @@ class FakeAppContainer(
         ReaderPreferencesRepository =
         readerPreferences
     override val playerPreferencesRepository: PlayerPreferencesRepository =
-        FakePlayerPreferencesRepository()
-    override val sessionManager: ServerSessionManager =
-        FakeServerSessionManager(endpoint)
+        FakePlayerPreferencesRepository(initialHasShownVideoGestures)
+    private val fakeSessionManager = FakeServerSessionManager(endpoint)
+    override val sessionManager: ServerSessionManager
+        get() = fakeSessionManager
+    val sessionConnectCalls: Int
+        get() = fakeSessionManager.connectCalls
+
+    fun emitServerSession(state: ServerSessionState) {
+        fakeSessionManager.emit(state)
+    }
     override val directoryContentRepository:
         DirectoryContentRepository =
         FakeDirectoryContentRepository(
@@ -134,8 +145,10 @@ private class FakeReaderPreferencesRepository(
     }
 }
 
-private class FakePlayerPreferencesRepository : PlayerPreferencesRepository {
-    private val mutable = MutableStateFlow(false)
+private class FakePlayerPreferencesRepository(
+    initiallyShown: Boolean,
+) : PlayerPreferencesRepository {
+    private val mutable = MutableStateFlow(initiallyShown)
     override val hasShownVideoGestures: Flow<Boolean> = mutable
 
     override suspend fun markVideoGesturesShown() {
@@ -190,13 +203,20 @@ private class FakeServerSessionManager(
         ),
     )
     override val state: StateFlow<ServerSessionState> = mutable
+    var connectCalls = 0
+        private set
 
     override suspend fun connectSaved() {
+        connectCalls += 1
         mutable.value = ServerSessionState.Connected(
             endpoint,
             listOf(endpoint.ipv4),
             FAKE_SHARES,
         )
+    }
+
+    fun emit(state: ServerSessionState) {
+        mutable.value = state
     }
 
     override suspend fun testCandidate(
@@ -500,9 +520,19 @@ private class FakePlaybackController : PlaybackController {
 class FakeQueuePlaybackController : QueuePlaybackController {
     private val playback = FakePlaybackController()
     private val mutableSession = MutableStateFlow(PlaybackSessionState())
+    private val mutableNotices =
+        MutableSharedFlow<PlaybackNotice>(extraBufferCapacity = 4)
 
     override val state: StateFlow<PlaybackState> = playback.state
     override val sessionState: StateFlow<PlaybackSessionState> = mutableSession
+    override val notices: SharedFlow<PlaybackNotice> = mutableNotices
+    val appendCalls = mutableListOf<QueueMediaItem>()
+    val moveCalls = mutableListOf<Pair<String, Int>>()
+    val removeCalls = mutableListOf<String>()
+    var reconnectCalls = 0
+        private set
+    var retryPersistenceCalls = 0
+        private set
 
     override fun prepare(url: String) = playback.prepare(url)
 
@@ -539,6 +569,7 @@ class FakeQueuePlaybackController : QueuePlaybackController {
     }
 
     override fun append(item: QueueMediaItem) {
+        appendCalls += item
         val queue = mutableSession.value.queue
         updateQueue(
             queue.items.filterNot { it.mediaKey == item.mediaKey } + item,
@@ -559,9 +590,31 @@ class FakeQueuePlaybackController : QueuePlaybackController {
 
     override fun skipNext() = Unit
 
-    override fun move(mediaKey: String, toIndex: Int) = Unit
+    override fun move(mediaKey: String, toIndex: Int) {
+        moveCalls += mediaKey to toIndex
+        val queue = mutableSession.value.queue
+        val from = queue.items.indexOfFirst { it.mediaKey == mediaKey }
+        if (from < 0) return
+        val reordered = queue.items.toMutableList()
+        val item = reordered.removeAt(from)
+        reordered.add(toIndex.coerceIn(0, reordered.size), item)
+        updateQueue(reordered, queue.currentMediaKey)
+    }
 
-    override fun remove(mediaKey: String) = Unit
+    override fun remove(mediaKey: String) {
+        removeCalls += mediaKey
+        val queue = mutableSession.value.queue
+        val removedIndex = queue.items.indexOfFirst { it.mediaKey == mediaKey }
+        if (removedIndex < 0) return
+        val remaining = queue.items.filterNot { it.mediaKey == mediaKey }
+        val nextCurrent = if (queue.currentMediaKey == mediaKey) {
+            remaining.getOrNull(removedIndex.coerceAtMost(remaining.lastIndex))
+                ?.mediaKey
+        } else {
+            queue.currentMediaKey
+        }
+        updateQueue(remaining, nextCurrent)
+    }
 
     override fun clearExceptCurrent() = Unit
 
@@ -573,11 +626,23 @@ class FakeQueuePlaybackController : QueuePlaybackController {
         )
     }
 
+    override fun reconnect() {
+        reconnectCalls += 1
+    }
+
+    override fun retryPersistence() {
+        retryPersistenceCalls += 1
+    }
+
     override fun close() = Unit
 
     fun emitSessionState(state: PlaybackSessionState) {
         mutableSession.value = state
         playback.emit(state.playback)
+    }
+
+    fun emitNotice(notice: PlaybackNotice) {
+        check(mutableNotices.tryEmit(notice))
     }
 
     private fun updateQueue(

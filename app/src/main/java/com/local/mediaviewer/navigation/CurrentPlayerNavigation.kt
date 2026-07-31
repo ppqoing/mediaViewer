@@ -1,5 +1,6 @@
 package com.local.mediaviewer.navigation
 
+import androidx.navigation.NavHostController
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.queue.PlaybackSessionState
 import com.local.mediaviewer.queue.QueueMediaItem
@@ -17,6 +18,15 @@ fun isCurrentPlayerNotificationRequest(
     action: String?,
     requested: Boolean,
 ): Boolean = action == ACTION_OPEN_CURRENT_PLAYER && requested
+
+internal fun NavHostController.leavePlayerSafely() {
+    if (!popBackStack()) {
+        navigate(HomeRoute) {
+            popUpTo(graph.startDestinationId) { inclusive = false }
+            launchSingleTop = true
+        }
+    }
+}
 
 class CurrentPlayerNavigationRequests {
     private val mutableRequestNonce = MutableStateFlow(0L)
@@ -62,32 +72,4 @@ fun resolvePlayerEntryState(
     session.playback.status == PlaybackStatus.OPENING || !waitExpired ->
         PlayerEntryState.Connecting
     else -> PlayerEntryState.Empty
-}
-
-sealed interface PlayerRouteContent {
-    data object Waiting : PlayerRouteContent
-
-    data object Empty : PlayerRouteContent
-
-    data class Ready(
-        val item: QueueMediaItem,
-    ) : PlayerRouteContent
-}
-
-@Deprecated("Task 7 root integration will use PlayerEntryState")
-fun resolvePlayerRouteContent(
-    session: PlaybackSessionState,
-    hasPresentedItem: Boolean,
-): PlayerRouteContent = when (
-    val entry = resolvePlayerEntryState(
-        session = session,
-        hasPresentedItem = hasPresentedItem,
-        waitExpired = false,
-    )
-) {
-    is PlayerEntryState.Ready -> PlayerRouteContent.Ready(entry.item)
-    PlayerEntryState.Empty -> PlayerRouteContent.Empty
-    PlayerEntryState.Connecting,
-    is PlayerEntryState.Failed,
-    -> PlayerRouteContent.Waiting
 }

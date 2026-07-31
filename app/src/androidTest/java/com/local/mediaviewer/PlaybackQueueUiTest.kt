@@ -27,6 +27,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -35,18 +36,25 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.local.mediaviewer.app.MediaViewerApp
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.queue.PlaybackNotice
+import com.local.mediaviewer.queue.PlaybackNoticeAction
+import com.local.mediaviewer.queue.PlaybackNoticeKind
 import com.local.mediaviewer.queue.PlaybackQueue
 import com.local.mediaviewer.queue.PlaybackSessionState
 import com.local.mediaviewer.queue.QueueMediaItem
+import com.local.mediaviewer.testing.FakeAppContainer
 import com.local.mediaviewer.ui.player.NowPlayingBar
 import com.local.mediaviewer.ui.player.PlaybackModeButton
 import com.local.mediaviewer.ui.player.PlaybackQueueSheet
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -58,6 +66,129 @@ import org.junit.runner.RunWith
 class PlaybackQueueUiTest {
     @get:Rule
     val rule = createComposeRule()
+
+    private val appContainers = mutableListOf<FakeAppContainer>()
+
+    @After
+    fun closeAppContainers() {
+        appContainers.forEach(FakeAppContainer::close)
+        appContainers.clear()
+    }
+
+    // 计划的 mini→ordinary→fullscreen 序列在 compose 测试宿主上不可完整执行：
+    // 真实 FullscreenWindowPolicy 进入全屏时设置 SENSOR_LANDSCAPE，
+    // androidx.test.core 的 EmptyActivity 宿主未声明 configChanges，
+    // Activity 立即重建并清空 setContent 层次（logcat 可见
+    // VRI[InstrumentationActivityInvoker$EmptyActivity] 销毁，
+    // 后续断言报 "No compose hierarchies found"）。
+    // 普通与全屏队列入口在 root 共享同一个 onOpenQueue 回调
+    // （VideoPlayerScreen 内部把两者都接到传入的 onOpenQueue），
+    // 因此根级接线由 mini/ordinary 两条腿覆盖；
+    // queue_entry_fullscreen 按钮本身由 VideoControlsOverlayTest 锁定。
+    @Test
+    fun miniThenOrdinaryQueueEntriesOpenTheSameRootQueueSheet() {
+        launchRootQueueApp()
+
+        rule.onNodeWithTag("queue_entry_mini").performClick()
+        rule.onNodeWithText("播放队列 · 3 项").assertIsDisplayed()
+        rule.onNodeWithContentDescription("关闭播放队列").performClick()
+
+        rule.onNodeWithContentDescription("打开播放器：movie.mp4").performClick()
+        rule.onNodeWithTag("queue_entry_ordinary").performClick()
+        rule.onNodeWithText("播放队列 · 3 项").assertIsDisplayed()
+        rule.onNodeWithContentDescription("关闭播放队列").performClick()
+    }
+
+    @Test
+    fun ordinaryDeleteUndoRestoresTheOriginalItemAndIndex() {
+        val container = launchRootQueueApp()
+        rule.onNodeWithTag("queue_entry_mini").performClick()
+        rule.onNodeWithContentDescription("删除 第二首.mp3").performClick()
+        rule.onNodeWithText("已从队列删除 第二首.mp3").assertIsDisplayed()
+        rule.onNodeWithText("撤销").performClick()
+
+        rule.waitUntil(5_000) {
+            container.fakePlaybackController.sessionState.value.queue.items
+                .map(QueueMediaItem::mediaKey) ==
+                listOf("video", "second", "third")
+        }
+        assertEquals(
+            listOf("second"),
+            container.fakePlaybackController.removeCalls,
+        )
+        assertEquals(
+            listOf("second"),
+            container.fakePlaybackController.appendCalls.map { it.mediaKey },
+        )
+        assertEquals(
+            listOf("second" to 1),
+            container.fakePlaybackController.moveCalls,
+        )
+    }
+
+    @Test
+    fun persistenceNoticeRetryKeepsTheRootQueueSheetOpenAndDeduplicatesId() {
+        val container = launchRootQueueApp()
+        rule.onNodeWithTag("queue_entry_mini").performClick()
+        val notice = PlaybackNotice(
+            id = 9L,
+            kind = PlaybackNoticeKind.QUEUE_SAVE_FAILED,
+            message = "播放队列保存失败",
+            action = PlaybackNoticeAction.RETRY_PERSISTENCE,
+        )
+        container.fakePlaybackController.emitNotice(notice)
+        container.fakePlaybackController.emitNotice(notice)
+
+        rule.onNodeWithText("播放队列保存失败").assertIsDisplayed()
+        rule.onNodeWithText("重试").performClick()
+        rule.runOnIdle {
+            assertEquals(
+                1,
+                container.fakePlaybackController.retryPersistenceCalls,
+            )
+        }
+        rule.onNodeWithText("播放队列 · 3 项").assertIsDisplayed()
+    }
+
+    @Test
+    fun persistence_notice_is_visible_with_queue_open_and_retry_keeps_the_sheet_open() {
+        val container = FakeAppContainer(
+            ApplicationProvider.getApplicationContext(),
+        )
+        appContainers += container
+        rule.setContent { MediaViewerApp(container) }
+        val fakePlaybackController = container.fakePlaybackController
+        fakePlaybackController.replaceQueue(
+            items = listOf(
+                QueueMediaItem(
+                    mediaKey = "a",
+                    name = "第一首",
+                    logicalUrl = "http://media.test/a.mp3",
+                    kind = MediaKind.AUDIO,
+                ),
+            ),
+            startMediaKey = "a",
+        )
+        rule.onNodeWithTag("queue_entry_mini").assertIsDisplayed().performClick()
+        val notice = PlaybackNotice(
+            id = 9L,
+            kind = PlaybackNoticeKind.QUEUE_SAVE_FAILED,
+            message = "播放队列保存失败",
+            action = PlaybackNoticeAction.RETRY_PERSISTENCE,
+        )
+        fakePlaybackController.emitNotice(notice)
+        fakePlaybackController.emitNotice(notice)
+
+        rule.onNodeWithText("播放队列保存失败").assertIsDisplayed()
+        rule.onNodeWithText("重试").performClick()
+        assertEquals(1, fakePlaybackController.retryPersistenceCalls)
+        rule.onNodeWithText("播放队列 · 1 项").assertIsDisplayed()
+        rule.waitUntil(5_000) {
+            rule.onAllNodesWithText("播放队列保存失败")
+                .fetchSemanticsNodes().isEmpty()
+        }
+        assertEquals(1, fakePlaybackController.retryPersistenceCalls)
+    }
 
     @Test
     fun queueSheetShowsLayeredRowsAndExposesActionsWithoutVisibleMoveButtons() {
@@ -931,6 +1062,29 @@ class PlaybackQueueUiTest {
                     "正在缓冲，可暂停",
                 ),
             )
+    }
+
+    private fun rootItems() = listOf(
+        item("video", "movie.mp4", MediaKind.VIDEO),
+        item("second", "第二首.mp3", MediaKind.AUDIO),
+        item("third", "第三首.mp3", MediaKind.AUDIO),
+    )
+
+    private fun launchRootQueueApp(
+        items: List<QueueMediaItem> = rootItems(),
+    ): FakeAppContainer {
+        val container = FakeAppContainer(
+            context = ApplicationProvider.getApplicationContext(),
+            initialHasShownVideoGestures = true,
+        )
+        appContainers += container
+        container.fakePlaybackController.replaceQueue(
+            items = items,
+            startMediaKey = items.first().mediaKey,
+        )
+        rule.setContent { MediaViewerApp(container) }
+        rule.onNodeWithTag("queue_entry_mini").assertIsDisplayed()
+        return container
     }
 
     private fun showQueue(

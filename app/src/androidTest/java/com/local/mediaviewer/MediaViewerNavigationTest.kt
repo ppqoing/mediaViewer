@@ -1,6 +1,9 @@
 package com.local.mediaviewer
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
@@ -8,15 +11,22 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.app.MediaViewerApp
 import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.model.MediaKind
+import com.local.mediaviewer.navigation.CurrentPlayerNavigationRequests
+import com.local.mediaviewer.navigation.PLAYER_ENTRY_WAIT_TIMEOUT_MS
+import com.local.mediaviewer.queue.PlaybackQueue
+import com.local.mediaviewer.queue.PlaybackSessionState
 import com.local.mediaviewer.queue.QueueMediaItem
+import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.testing.FakeAppContainer
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -28,14 +38,17 @@ class MediaViewerNavigationTest {
     val rule = createComposeRule()
 
     private lateinit var container: FakeAppContainer
+    private lateinit var currentPlayerRequests: CurrentPlayerNavigationRequests
 
     @Before
     fun setUp() {
         container = FakeAppContainer(
             ApplicationProvider.getApplicationContext(),
+            initialHasShownVideoGestures = true,
         )
+        currentPlayerRequests = CurrentPlayerNavigationRequests()
         rule.setContent {
-            MediaViewerApp(container)
+            MediaViewerApp(container, currentPlayerRequests)
         }
         rule.waitUntil(5_000) {
             rule.onAllNodesWithText("MiddleDir")
@@ -62,7 +75,7 @@ class MediaViewerNavigationTest {
         openNestedDirectory()
         rule.onNodeWithText("样例.wav").performClick()
         rule.onNodeWithText("样例.wav").assertIsDisplayed()
-        rule.onNodeWithTag("seek").assertExists()
+        rule.onNodeWithTag("playback_timeline").assertExists()
     }
 
     @Test
@@ -104,7 +117,110 @@ class MediaViewerNavigationTest {
         )
 
         rule.onNodeWithText("队列歌曲.mp3").assertIsDisplayed()
-        rule.onNodeWithContentDescription("打开队列").assertIsDisplayed()
+        rule.onNodeWithTag("queue_entry_mini").assertIsDisplayed()
+    }
+
+    @Test
+    fun app_scope_connects_once_and_navigation_does_not_connect_again() {
+        rule.waitUntil(5_000) { container.sessionConnectCalls == 1 }
+        rule.onNodeWithContentDescription("设置").performClick()
+        rule.onNodeWithText("服务器设置").assertIsDisplayed()
+        assertEquals(1, container.sessionConnectCalls)
+    }
+
+    @Test
+    fun browser_remains_visible_during_global_reconnect() {
+        openNestedDirectory()
+        rule.onNodeWithText("样例.mp4").assertIsDisplayed()
+
+        container.emitServerSession(ServerSessionState.Connecting)
+        rule.waitForIdle()
+
+        rule.onNodeWithText("样例.mp4").assertIsDisplayed()
+        rule.onNodeWithText("正在重新连接").assertIsDisplayed()
+    }
+
+    @Test
+    fun failed_player_has_reconnect_and_back_without_an_infinite_spinner() {
+        val item = QueueMediaItem(
+            mediaKey = "video-a",
+            name = "video-a",
+            logicalUrl = "http://media.test/video-a",
+            kind = MediaKind.VIDEO,
+        )
+        container.fakePlaybackController.emitSessionState(
+            PlaybackSessionState(
+                queue = PlaybackQueue(listOf(item), currentMediaKey = item.mediaKey),
+                currentItem = item,
+            ),
+        )
+        currentPlayerRequests.requestOpenCurrentPlayer()
+        rule.onNodeWithText("video-a").assertIsDisplayed()
+        container.fakePlaybackController.emitSessionState(
+            PlaybackSessionState(errorMessage = "服务连接失败"),
+        )
+
+        rule.onNodeWithText("服务连接失败").assertIsDisplayed()
+        rule.onNodeWithText("重连播放器").performClick()
+        assertEquals(1, container.fakePlaybackController.reconnectCalls)
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithText("MediaViewer").assertIsDisplayed()
+    }
+
+    @Test
+    fun browser_player_back_returns_to_the_same_directory() {
+        openNestedDirectory()
+        rule.onNodeWithText("样例.mp4").performClick()
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithTag("breadcrumb_1").assertIsDisplayed()
+        rule.onNode(
+            hasText("样例.mp4") and
+                hasAnyAncestor(hasTestTag("browser_list")),
+        ).assertIsDisplayed()
+    }
+
+    @Test
+    fun notification_request_from_browser_returns_home_and_empty_queue_exits_once() {
+        val item = QueueMediaItem(
+            mediaKey = "video-a",
+            name = "video-a",
+            logicalUrl = "http://media.test/video-a",
+            kind = MediaKind.VIDEO,
+        )
+        container.fakePlaybackController.emitSessionState(
+            PlaybackSessionState(
+                queue = PlaybackQueue(listOf(item), currentMediaKey = item.mediaKey),
+                currentItem = item,
+            ),
+        )
+        openNestedDirectory()
+
+        currentPlayerRequests.requestOpenCurrentPlayer()
+        rule.onNodeWithText("video-a").assertIsDisplayed()
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithText("MediaViewer").assertIsDisplayed()
+        rule.onNodeWithTag("breadcrumb_1").assertDoesNotExist()
+
+        currentPlayerRequests.requestOpenCurrentPlayer()
+        rule.onNodeWithText("video-a").assertIsDisplayed()
+        container.fakePlaybackController.emitSessionState(PlaybackSessionState())
+        rule.waitForIdle()
+        rule.onNodeWithText("MediaViewer").assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(PLAYER_ENTRY_WAIT_TIMEOUT_MS + 1_000L)
+        rule.onNodeWithText("MediaViewer").assertIsDisplayed()
+    }
+
+    @Test
+    fun dirty_settings_back_uses_discard_confirmation() {
+        rule.onNodeWithContentDescription("设置").performClick()
+        rule.onNodeWithText("服务器设置").assertIsDisplayed()
+        rule.onNodeWithTag("server_url")
+            .performClick()
+            .performTextInput("/edited")
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithText("放弃未保存的服务器更改？").assertIsDisplayed()
+        rule.onNodeWithText("放弃更改").performClick()
+        rule.onNodeWithText("MediaViewer").assertIsDisplayed()
     }
 
     private fun openNestedDirectory() {
