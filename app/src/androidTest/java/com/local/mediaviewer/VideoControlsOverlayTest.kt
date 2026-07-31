@@ -1,7 +1,14 @@
 package com.local.mediaviewer
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -21,6 +28,7 @@ import com.local.mediaviewer.ui.player.VideoPlayerScreen
 import com.local.mediaviewer.ui.player.VolumeState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -47,21 +55,68 @@ class VideoControlsOverlayTest {
         rule.mainClock.advanceTimeBy(5_000)
         rule.onNodeWithTag("video_controls").assertIsDisplayed()
         rule.onNodeWithContentDescription("锁定控制").performClick()
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
         rule.onNodeWithContentDescription("播放").assertDoesNotExist()
         rule.onNodeWithTag("playback_timeline").assertDoesNotExist()
         rule.onNodeWithContentDescription("解锁控制").assertIsDisplayed()
         rule.onNodeWithContentDescription("解锁控制").performClick()
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
         rule.onNodeWithContentDescription("播放").assertIsDisplayed()
     }
 
-    private fun setOverlay(status: PlaybackStatus) {
+    @Test
+    fun fullscreenPrimaryUsesRealPlayPauseAndReplayCallbacks() {
+        var status by mutableStateOf(PlaybackStatus.IDLE)
+        var plays = 0
+        var pauses = 0
+        var replays = 0
+        setOverlay(
+            statusProvider = { status },
+            onPlay = { plays++ },
+            onPause = { pauses++ },
+            onReplay = { replays++ },
+        )
+
+        rule.onNodeWithContentDescription("播放").performClick()
+        rule.runOnIdle {
+            assertEquals(1, plays)
+            status = PlaybackStatus.BUFFERING
+        }
+        rule.onNodeWithContentDescription("暂停")
+            .assertIsEnabled()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "正在缓冲，可暂停",
+                ),
+            )
+            .performClick()
+        rule.runOnIdle {
+            assertEquals(1, pauses)
+            status = PlaybackStatus.ENDED
+        }
+        rule.onNodeWithContentDescription("重新播放").performClick()
+        rule.runOnIdle { assertEquals(1, replays) }
+    }
+
+    private fun setOverlay(status: PlaybackStatus) =
+        setOverlay(statusProvider = { status })
+
+    private fun setOverlay(
+        statusProvider: () -> PlaybackStatus,
+        onPlay: () -> Unit = {},
+        onPause: () -> Unit = {},
+        onReplay: () -> Unit = {},
+    ) {
         rule.setContent {
             MaterialTheme {
                 VideoPlayerScreen(
                     state = PlayerUiState(
                         name = "视频.mp4",
                         kind = MediaKind.VIDEO,
-                        status = status,
+                        status = statusProvider(),
                         durationMs = 60_000L,
                         isSeekable = true,
                     ),
@@ -70,9 +125,9 @@ class VideoControlsOverlayTest {
                     preferences = OverlayPreferencesRepository(),
                     volumeController = OverlayVolumeController(),
                     brightnessController = OverlayBrightnessController(),
-                    onPlay = {},
-                    onPause = {},
-                    onReplay = {},
+                    onPlay = onPlay,
+                    onPause = onPause,
+                    onReplay = onReplay,
                     onSeekBack = {},
                     onSeekForward = {},
                     onBeginScrub = {},

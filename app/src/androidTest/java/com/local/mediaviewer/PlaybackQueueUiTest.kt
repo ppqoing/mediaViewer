@@ -6,7 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -27,7 +31,7 @@ import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.ui.player.NowPlayingBar
 import com.local.mediaviewer.ui.player.PlaybackModeButton
 import com.local.mediaviewer.ui.player.PlaybackQueueSheet
-import com.local.mediaviewer.ui.player.VolumeState
+import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -202,50 +206,68 @@ class PlaybackQueueUiTest {
     }
 
     @Test
-    fun nowPlayingBarExposesTransportAndNavigationActions() {
-        var toggled = false
-        var next = false
-        var openedQueue = false
-        var openedPlayer = false
+    fun miniPrimaryUsesRealPlayPauseAndReplayCallbacks() {
+        val item = item("a", "movie.mp4", MediaKind.VIDEO)
+        var plays = 0
+        var pauses = 0
+        var replays = 0
+        var state by mutableStateOf(
+            PlaybackSessionState(
+                playback = PlaybackState(status = PlaybackStatus.IDLE),
+                queue = PlaybackQueue(listOf(item), item.mediaKey),
+                currentItem = item,
+            ),
+        )
         rule.setContent {
-            MaterialTheme {
+            MediaViewerTheme {
                 NowPlayingBar(
-                    state = PlaybackSessionState(
-                        playback = PlaybackState(status = PlaybackStatus.PLAYING),
-                        queue = PlaybackQueue(
-                            items = listOf(item("a", "正在播放的歌曲")),
-                            currentMediaKey = "a",
-                        ),
-                        currentItem = item("a", "正在播放的歌曲"),
-                    ),
-                    volumeState = VolumeState(current = 5, maximum = 10, muted = false),
-                    onVolumeRefresh = {},
-                    onToggleMute = {},
-                    onVolumeChanged = {},
-                    onToggle = { toggled = true },
-                    onNext = { next = true },
-                    onOpenQueue = { openedQueue = true },
-                    onOpenPlayer = { openedPlayer = true },
+                    state = state,
+                    onPlay = { plays++ },
+                    onPause = { pauses++ },
+                    onReplay = { replays++ },
+                    onNext = {},
+                    onOpenQueue = {},
+                    onOpenPlayer = {},
                 )
             }
         }
 
-        rule.onNodeWithText("正在播放的歌曲").assertIsDisplayed().performClick()
-        rule.onNodeWithContentDescription("暂停").performClick()
-        rule.onNodeWithContentDescription("下一项").performClick()
-        rule.onNodeWithContentDescription("音量，当前 50%，未静音").performClick()
-        rule.onNodeWithTag("volume_slider_vertical").assertIsDisplayed()
-        rule.onNodeWithContentDescription("打开队列").performClick()
-        assertTrue(toggled)
-        assertTrue(next)
-        assertTrue(openedQueue)
-        assertTrue(openedPlayer)
+        rule.onNodeWithContentDescription("音量", substring = true).assertDoesNotExist()
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音").assertDoesNotExist()
+        rule.onNodeWithContentDescription("播放").performClick()
+        rule.runOnIdle {
+            assertEquals(1, plays)
+            state = state.copy(
+                playback = state.playback.copy(status = PlaybackStatus.BUFFERING),
+            )
+        }
+        rule.onNodeWithContentDescription("暂停")
+            .assertIsEnabled()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "正在缓冲，可暂停",
+                ),
+            )
+            .performClick()
+        rule.runOnIdle {
+            assertEquals(1, pauses)
+            state = state.copy(
+                playback = state.playback.copy(status = PlaybackStatus.ENDED),
+            )
+        }
+        rule.onNodeWithContentDescription("重新播放").performClick()
+        rule.runOnIdle { assertEquals(1, replays) }
     }
 
-    private fun item(key: String, name: String) = QueueMediaItem(
+    private fun item(
+        key: String,
+        name: String,
+        kind: MediaKind = MediaKind.AUDIO,
+    ) = QueueMediaItem(
         mediaKey = key,
         name = name,
-        logicalUrl = "http://media.test/$key.mp3",
-        kind = MediaKind.AUDIO,
+        logicalUrl = "http://media.test/$key",
+        kind = kind,
     )
 }

@@ -4,7 +4,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -17,6 +21,7 @@ import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.ui.player.PlaybackVolumeControl
 import com.local.mediaviewer.ui.player.PlayerControls
 import com.local.mediaviewer.ui.player.VolumeState
+import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -25,6 +30,73 @@ import org.junit.Test
 class PlaybackControlsTest {
     @get:Rule
     val rule = createComposeRule()
+
+    private fun showOrdinaryPrimary(
+        status: PlaybackStatus,
+        onPlay: () -> Unit,
+        onPause: () -> Unit,
+        onReplay: () -> Unit,
+    ) {
+        rule.setContent {
+            MediaViewerTheme {
+                PlayerControls(
+                    state = PlayerUiState(
+                        name = "movie.mp4",
+                        kind = MediaKind.VIDEO,
+                        status = status,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                    ),
+                    onPlay = onPlay,
+                    onPause = onPause,
+                    onReplay = onReplay,
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun ordinaryIdleUsesPlayCallback() {
+        var plays = 0
+        showOrdinaryPrimary(PlaybackStatus.IDLE, { plays++ }, {}, {})
+
+        rule.onNodeWithContentDescription("播放").performClick()
+        rule.runOnIdle { assertEquals(1, plays) }
+    }
+
+    @Test
+    fun ordinaryBufferingStaysEnabledAndPauses() {
+        var pauses = 0
+        showOrdinaryPrimary(PlaybackStatus.BUFFERING, {}, { pauses++ }, {})
+
+        rule.onNodeWithContentDescription("暂停")
+            .assertIsEnabled()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "正在缓冲，可暂停",
+                ),
+            )
+            .performClick()
+        rule.runOnIdle { assertEquals(1, pauses) }
+    }
+
+    @Test
+    fun ordinaryEndedUsesReplayCallback() {
+        var replays = 0
+        showOrdinaryPrimary(PlaybackStatus.ENDED, {}, {}, { replays++ })
+
+        rule.onNodeWithContentDescription("重新播放").performClick()
+        rule.runOnIdle { assertEquals(1, replays) }
+    }
 
     @Test
     fun playingUnseekablePlayerShowsAllSharedControls() {
@@ -202,6 +274,7 @@ class PlaybackControlsTest {
         }
 
         rule.onNodeWithContentDescription("音量，当前 50%，未静音").performClick()
+        rule.mainClock.advanceTimeByFrame()
         rule.waitForIdle()
         val callsAfterOpening = refreshCalls
         assertTrue("展开后应立即刷新", callsAfterOpening >= 1)

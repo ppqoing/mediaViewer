@@ -1,20 +1,22 @@
 package com.local.mediaviewer.ui.player
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.ui.components.PlayerIconButton
 
 @Composable
 fun PlaybackTransportControls(
@@ -95,43 +97,30 @@ private fun PrimaryControlButton(
     onPause: () -> Unit,
     onReplay: () -> Unit,
 ) {
-    val action = when (state.status) {
-        PlaybackStatus.PLAYING,
-        PlaybackStatus.BUFFERING,
-        -> PrimaryAction("暂停", { enabled -> NeonPlayerIcon(PlayerIcons.Pause, null, active = true, enabled = enabled) }, onPause)
-
-        PlaybackStatus.ENDED ->
-            PrimaryAction(
-                "重新播放",
-                { enabled -> NeonPlayerIcon(PlayerIcons.Replay, null, active = true, enabled = enabled) },
-                onReplay,
-            )
-
-        else -> PrimaryAction(
-            "播放",
-            { enabled -> NeonPlayerIcon(PlayerIcons.Play, null, active = true, enabled = enabled) },
-            onPlay,
-        )
-    }
-    FilledIconButton(
-        onClick = action.onClick,
-        enabled = state.status != PlaybackStatus.OPENING,
-        modifier = Modifier
-            .size(64.dp)
-            .semantics { role = Role.Button },
+    val action = playbackPrimaryAction(state.status)
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(64.dp),
     ) {
-        androidx.compose.foundation.layout.Box(
-            modifier = Modifier.semantics {
-                contentDescription = action.description
+        PlayerIconButton(
+            icon = action.icon,
+            contentDescription = action.contentDescription,
+            stateDescription = action.stateDescription,
+            enabled = action.enabled,
+            loading = action.loading,
+            onClick = {
+                action.command.invoke(onPlay, onPause, onReplay)
             },
-        ) {
-            action.icon(state.status != PlaybackStatus.OPENING)
+            modifier = Modifier.size(64.dp),
+        )
+        if (state.status == PlaybackStatus.BUFFERING) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 2.dp, y = (-2).dp)
+                    .size(18.dp),
+                strokeWidth = 2.dp,
+            )
         }
     }
 }
-
-private data class PrimaryAction(
-    val description: String,
-    val icon: @Composable (Boolean) -> Unit,
-    val onClick: () -> Unit,
-)

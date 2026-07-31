@@ -8,9 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -23,6 +24,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.ui.components.PlayerIconButton
 
 @Composable
 fun VideoControlsOverlay(
@@ -209,20 +211,26 @@ private fun PrimaryVideoControl(
     onPause: () -> Unit,
     onReplay: () -> Unit,
 ) {
-    val (description, icon, action) = when (state.status) {
-        PlaybackStatus.PLAYING,
-        PlaybackStatus.BUFFERING,
-        -> Triple("暂停", PlayerIcons.Pause, onPause)
-
-        PlaybackStatus.ENDED -> Triple("重新播放", PlayerIcons.Replay, onReplay)
-        else -> Triple("播放", PlayerIcons.Play, onPlay)
-    }
-    FilledIconButton(onClick = action, enabled = state.status != PlaybackStatus.OPENING) {
-        NeonPlayerIcon(
-            icon,
-            description,
-            active = true,
-            enabled = state.status != PlaybackStatus.OPENING,
+    val action = playbackPrimaryAction(state.status)
+    Box(contentAlignment = Alignment.Center) {
+        PlayerIconButton(
+            icon = action.icon,
+            contentDescription = action.contentDescription,
+            stateDescription = action.stateDescription,
+            enabled = action.enabled,
+            loading = action.loading,
+            onClick = {
+                action.command.invoke(onPlay, onPause, onReplay)
+            },
         )
+        if (state.status == PlaybackStatus.BUFFERING) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 2.dp, y = (-2).dp)
+                    .size(18.dp),
+                strokeWidth = 2.dp,
+            )
+        }
     }
 }
