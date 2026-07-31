@@ -18,10 +18,12 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerGestureFeedback
+import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
 internal fun PlayerGestureFeedbackOverlay(feedback: PlayerGestureFeedback?) {
     val value = feedback ?: return
+    val playerColors = MediaTheme.playerColors
     Box(modifier = Modifier.fillMaxSize()) {
         when (value) {
             is PlayerGestureFeedback.Seek -> Row(
@@ -50,6 +52,7 @@ internal fun PlayerGestureFeedbackOverlay(feedback: PlayerGestureFeedback?) {
                 fraction = value.percent / 100f,
                 label = "亮度",
                 icon = PlayerIcons.Brightness,
+                fillColor = playerColors.brightness,
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(24.dp)
@@ -60,6 +63,7 @@ internal fun PlayerGestureFeedbackOverlay(feedback: PlayerGestureFeedback?) {
                 fraction = value.percent / 100f,
                 label = "音量",
                 icon = if (value.muted) PlayerIcons.Muted else PlayerIcons.Volume,
+                fillColor = playerColors.volume,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(24.dp)

@@ -1,9 +1,16 @@
 package com.local.mediaviewer
 
+import android.os.ParcelFileDescriptor
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -15,6 +22,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.test.espresso.Espresso
+import androidx.test.platform.app.InstrumentationRegistry
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
@@ -26,6 +36,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import kotlin.math.roundToInt
 
 class PlaybackControlsTest {
     @get:Rule
@@ -198,10 +209,44 @@ class PlaybackControlsTest {
     }
 
     @Test
-    fun volumeButtonOpensVerticalVolumePopup() {
+    fun timelineUsesSeparateStableCurrentAndDurationLabels() {
+        rule.setContent {
+            MediaViewerTheme {
+                PlayerControls(
+                    state = PlayerUiState(
+                        name = "视频.mp4",
+                        kind = MediaKind.VIDEO,
+                        status = PlaybackStatus.PAUSED,
+                        positionMs = 5_000L,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                    ),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                )
+            }
+        }
+
+        rule.onNodeWithTag("playback_timeline").assertIsDisplayed()
+        rule.onNodeWithText("00:05").assertIsDisplayed()
+        rule.onNodeWithText("01:00").assertIsDisplayed()
+        rule.onNodeWithText("00:05 / 01:00").assertDoesNotExist()
+    }
+
+    @Test
+    fun volumeButtonOpensTrueVerticalVolumePopup() {
         var expanded by mutableStateOf(false)
         rule.setContent {
-            MaterialTheme {
+            MediaViewerTheme {
                 PlaybackVolumeControl(
                     state = VolumeState(current = 5, maximum = 10, muted = false),
                     expanded = expanded,
@@ -217,19 +262,6 @@ class PlaybackControlsTest {
         rule.onNodeWithTag("volume_popup").assertIsDisplayed()
         rule.onNodeWithTag("volume_slider_vertical").assertIsDisplayed()
         rule.onNodeWithText("50%").assertIsDisplayed()
-
-        val popupHeight = rule.onNodeWithTag("volume_popup")
-            .fetchSemanticsNode()
-            .boundsInRoot
-            .height
-        val sliderHeight = rule.onNodeWithTag("volume_slider_vertical")
-            .fetchSemanticsNode()
-            .boundsInRoot
-            .height
-        assertTrue(
-            "旋转后的音量滑块有效长度应至少达到弹层轨道容器的 80%",
-            sliderHeight >= popupHeight * 0.8f,
-        )
     }
 
     @Test
@@ -237,7 +269,7 @@ class PlaybackControlsTest {
         var expanded by mutableStateOf(false)
         var muteCalls = 0
         rule.setContent {
-            MaterialTheme {
+            MediaViewerTheme {
                 PlaybackVolumeControl(
                     state = VolumeState(current = 5, maximum = 10, muted = false),
                     expanded = expanded,
@@ -250,6 +282,7 @@ class PlaybackControlsTest {
         }
 
         rule.onNodeWithContentDescription("音量，当前 50%，未静音").performClick()
+        rule.onNodeWithTag("volume_slider_vertical").assertIsDisplayed()
         rule.runOnIdle { assertEquals(0, muteCalls) }
         rule.onNodeWithContentDescription("静音").performClick()
         rule.runOnIdle { assertEquals(1, muteCalls) }
@@ -261,7 +294,7 @@ class PlaybackControlsTest {
         var expanded by mutableStateOf(false)
         var refreshCalls = 0
         rule.setContent {
-            MaterialTheme {
+            MediaViewerTheme {
                 PlaybackVolumeControl(
                     state = VolumeState(current = 5, maximum = 10, muted = false),
                     expanded = expanded,
@@ -291,4 +324,282 @@ class PlaybackControlsTest {
         assertEquals(callsAfterClosing, refreshCalls)
     }
 
+    @Test
+    fun volumePopupClosesAfterThreeSecondsWithoutInteraction() {
+        rule.mainClock.autoAdvance = false
+        var expanded by mutableStateOf(false)
+        var dismissCalls = 0
+        rule.setContent {
+            MediaViewerTheme {
+                PlaybackVolumeControl(
+                    state = VolumeState(5, 10, false),
+                    expanded = expanded,
+                    onExpandedChanged = { nextExpanded ->
+                        if (!nextExpanded) {
+                            dismissCalls += 1
+                        }
+                        expanded = nextExpanded
+                    },
+                    onRefresh = {},
+                    onToggleMute = {},
+                    onVolumeChanged = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音")
+            .performClick()
+        // Start the expanded composition and its LaunchedEffect before
+        // measuring the idle interval.
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(
+            milliseconds = 2_999L,
+            ignoreFrameDuration = true,
+        )
+        rule.onNodeWithTag("volume_popup").assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(
+            milliseconds = 2L,
+            ignoreFrameDuration = true,
+        )
+        // One frame resumes the deadline coroutine; the next applies the
+        // parent's expanded=false state.
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertEquals(
+                "3-second idle deadline must invoke onExpandedChanged(false)",
+                1,
+                dismissCalls,
+            )
+            assertTrue(!expanded)
+        }
+        // DropdownMenu keeps its independent popup composition alive for its
+        // Material exit transition after expanded becomes false.
+        rule.mainClock.advanceTimeBy(500L)
+        rule.waitForIdle()
+        rule.onNodeWithTag("volume_popup").assertDoesNotExist()
+    }
+
+    @Test
+    fun verticalAdjustmentResetsVolumePopupDeadline() {
+        rule.mainClock.autoAdvance = false
+        var expanded by mutableStateOf(false)
+        var state by mutableStateOf(VolumeState(5, 10, false))
+        rule.setContent {
+            MediaViewerTheme {
+                PlaybackVolumeControl(
+                    state = state,
+                    expanded = expanded,
+                    onExpandedChanged = { expanded = it },
+                    onRefresh = {},
+                    onToggleMute = {},
+                    onVolumeChanged = { fraction ->
+                        state = state.copy(
+                            current = (fraction * state.maximum).roundToInt(),
+                        )
+                    },
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音")
+            .performClick()
+        rule.mainClock.advanceTimeBy(2_000L)
+        rule.onNodeWithTag("volume_slider_vertical")
+            .performSemanticsAction(SemanticsActions.SetProgress) {
+                it(0.8f)
+            }
+        // Parent-owned volume state becomes observable to the control on
+        // the next composition frame; the idle deadline starts there.
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        rule.onNodeWithText("80%").assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(
+            milliseconds = 2_999L,
+            ignoreFrameDuration = true,
+        )
+        rule.onNodeWithTag("volume_popup").assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(
+            milliseconds = 2L,
+            ignoreFrameDuration = true,
+        )
+        // One frame resumes the deadline coroutine; the next applies the
+        // parent's expanded=false state.
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        rule.runOnIdle { assertTrue(!expanded) }
+        rule.mainClock.advanceTimeBy(500L)
+        rule.waitForIdle()
+        rule.onNodeWithTag("volume_popup").assertDoesNotExist()
+    }
+
+    @Test
+    fun muteAndExternalVolumeChangesEachResetThePopupDeadline() {
+        rule.mainClock.autoAdvance = false
+        var expanded by mutableStateOf(false)
+        var state by mutableStateOf(VolumeState(5, 10, false))
+        var muteCalls = 0
+        rule.setContent {
+            MediaViewerTheme {
+                PlaybackVolumeControl(
+                    state = state,
+                    expanded = expanded,
+                    onExpandedChanged = { expanded = it },
+                    onRefresh = {},
+                    onToggleMute = {
+                        muteCalls += 1
+                        state = state.copy(muted = !state.muted)
+                    },
+                    onVolumeChanged = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音")
+            .performClick()
+        rule.mainClock.advanceTimeBy(2_000L)
+        rule.onNodeWithContentDescription("静音").performClick()
+        // The mute result is observed by the control on this frame.
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("取消静音").assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(
+            // Leave enough time for the next frame to observe the external
+            // state update before this mute-reset deadline can expire.
+            milliseconds = 2_980L,
+            ignoreFrameDuration = true,
+        )
+        rule.onNodeWithTag("volume_popup").assertIsDisplayed()
+        rule.runOnIdle {
+            assertEquals(1, muteCalls)
+            state = state.copy(current = 7)
+        }
+        // External state resets the deadline once the child observes it.
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("音量，当前 70%，已静音")
+            .assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(
+            milliseconds = 2_999L,
+            ignoreFrameDuration = true,
+        )
+        rule.onNodeWithTag("volume_popup").assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(
+            milliseconds = 2L,
+            ignoreFrameDuration = true,
+        )
+        // One frame resumes the deadline coroutine; the next applies the
+        // parent's expanded=false state.
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        rule.runOnIdle { assertTrue(!expanded) }
+        rule.mainClock.advanceTimeBy(500L)
+        rule.waitForIdle()
+        rule.onNodeWithTag("volume_popup").assertDoesNotExist()
+    }
+
+    @Test
+    fun systemBackClosesVolumePopupWithoutLeavingPlayer() {
+        rule.mainClock.autoAdvance = false
+        var expanded by mutableStateOf(false)
+        var dismissCalls = 0
+        rule.setContent {
+            MediaViewerTheme {
+                PlaybackVolumeControl(
+                    state = VolumeState(5, 10, false),
+                    expanded = expanded,
+                    onExpandedChanged = { nextExpanded ->
+                        if (!nextExpanded) {
+                            dismissCalls += 1
+                        }
+                        expanded = nextExpanded
+                    },
+                    onRefresh = {},
+                    onToggleMute = {},
+                    onVolumeChanged = {},
+                )
+            }
+        }
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音")
+            .performClick()
+        rule.mainClock.advanceTimeBy(500L)
+        rule.waitForIdle()
+        rule.onNodeWithTag("volume_popup").assertIsDisplayed()
+        Espresso.pressBack()
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertEquals(1, dismissCalls)
+            assertTrue(!expanded)
+        }
+        rule.mainClock.advanceTimeBy(500L)
+        rule.waitForIdle()
+        rule.onNodeWithTag("volume_popup").assertDoesNotExist()
+    }
+
+    @Test
+    fun tappingOutsideDismissesVolumePopup() {
+        rule.mainClock.autoAdvance = false
+        var expanded by mutableStateOf(false)
+        var dismissCalls = 0
+        rule.setContent {
+            MediaViewerTheme {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("volume_test_host"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    PlaybackVolumeControl(
+                        state = VolumeState(5, 10, false),
+                        expanded = expanded,
+                        onExpandedChanged = { nextExpanded ->
+                            if (!nextExpanded) {
+                                dismissCalls += 1
+                            }
+                            expanded = nextExpanded
+                        },
+                        onRefresh = {},
+                        onToggleMute = {},
+                        onVolumeChanged = {},
+                    )
+                }
+            }
+        }
+        rule.onNodeWithContentDescription("音量，当前 50%，未静音")
+            .performClick()
+        rule.mainClock.advanceTimeBy(500L)
+        rule.waitForIdle()
+        rule.onNodeWithTag("volume_popup").assertIsDisplayed()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val displayMetrics = instrumentation.targetContext.resources.displayMetrics
+        // The anchor is centered. Ten percent across and twenty percent down
+        // stays in app content while remaining well clear of its popup.
+        val outsideX = (displayMetrics.widthPixels * 0.10f).roundToInt()
+        val outsideY = (displayMetrics.heightPixels * 0.20f).roundToInt()
+        ParcelFileDescriptor.AutoCloseInputStream(
+            instrumentation.uiAutomation.executeShellCommand(
+                "input tap $outsideX $outsideY",
+            ),
+        ).use { output ->
+            output.readBytes()
+        }
+        instrumentation.waitForIdleSync()
+        // The 500 ms enter settle plus this 1,000 ms remains below the
+        // 3-second idle deadline, so only the outside tap can dismiss it.
+        rule.mainClock.advanceTimeBy(1_000L)
+        rule.waitForIdle()
+        rule.runOnIdle {
+            assertEquals(1, dismissCalls)
+            assertTrue(!expanded)
+        }
+        rule.mainClock.advanceTimeBy(500L)
+        rule.waitForIdle()
+        rule.onNodeWithTag("volume_popup").assertDoesNotExist()
+    }
 }

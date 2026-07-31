@@ -8,6 +8,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -105,6 +108,19 @@ class VideoGestureLayerTest {
             moveTo(Offset(width * 0.25f, height * 0.3f))
         }
         rule.onNodeWithTag("gesture_brightness_rail").assertIsDisplayed()
+        rule.onNodeWithTag("gesture_brightness_rail")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.ContentDescription,
+                    listOf("亮度"),
+                ),
+            )
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "90%",
+                ),
+            )
         rule.onNodeWithTag("video_gesture_layer").performTouchInput {
             up()
         }
@@ -116,6 +132,19 @@ class VideoGestureLayerTest {
             moveTo(Offset(width * 0.75f, height * 0.3f))
         }
         rule.onNodeWithTag("gesture_volume_rail").assertIsDisplayed()
+        rule.onNodeWithTag("gesture_volume_rail")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.ContentDescription,
+                    listOf("音量"),
+                ),
+            )
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "90%",
+                ),
+            )
         rule.onNodeWithTag("video_gesture_layer").performTouchInput {
             up()
         }

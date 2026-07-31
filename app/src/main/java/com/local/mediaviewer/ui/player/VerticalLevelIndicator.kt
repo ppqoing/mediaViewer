@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -16,8 +17,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
@@ -26,6 +28,7 @@ fun VerticalLevelIndicator(
     fraction: Float,
     label: String,
     icon: ImageVector,
+    fillColor: Color,
     modifier: Modifier = Modifier,
 ) {
     val safeFraction = fraction.coerceIn(0f, 1f)
@@ -38,8 +41,9 @@ fun VerticalLevelIndicator(
             .height(220.dp)
             .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(16.dp))
             .padding(horizontal = 12.dp, vertical = 16.dp)
-            .semantics(mergeDescendants = true) {
-                contentDescription = "$label $percent%"
+            .clearAndSetSemantics {
+                contentDescription = label
+                stateDescription = "$percent%"
             },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -47,6 +51,9 @@ fun VerticalLevelIndicator(
             icon = icon,
             contentDescription = null,
             active = true,
+            modifier = Modifier
+                .size(24.dp)
+                .clearAndSetSemantics {},
         )
         Text(
             text = "$percent%",
@@ -65,7 +72,7 @@ fun VerticalLevelIndicator(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(safeFraction)
-                    .background(MaterialTheme.colorScheme.primary, trackShape),
+                    .background(fillColor, trackShape),
             )
         }
     }

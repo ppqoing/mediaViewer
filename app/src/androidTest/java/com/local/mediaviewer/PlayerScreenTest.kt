@@ -196,7 +196,9 @@ class PlayerScreenTest {
         }
 
         rule.onNodeWithText("音乐.flac").assertIsDisplayed()
-        rule.onNodeWithText("00:30 / 02:00").assertIsDisplayed()
+        rule.onNodeWithText("00:30").assertIsDisplayed()
+        rule.onNodeWithText("02:00").assertIsDisplayed()
+        rule.onNodeWithText("00:30 / 02:00").assertDoesNotExist()
         rule.onNodeWithText("已从 00:30 继续播放").assertIsDisplayed()
         rule.onNodeWithContentDescription("播放").assertIsDisplayed()
         rule.onNodeWithContentDescription("快退 10 秒")
@@ -245,10 +247,12 @@ class PlayerScreenTest {
 
         rule.onNodeWithContentDescription("音量，当前 50%，未静音").assertIsDisplayed()
         rule.onNodeWithContentDescription("音量，当前 50%，未静音").performClick()
+        rule.onNodeWithTag("volume_slider_vertical").assertIsDisplayed()
+        rule.runOnIdle { assertEquals(0, volumeController.toggleMuteCalls) }
         rule.onNodeWithContentDescription("静音").performClick()
+        rule.runOnIdle { assertEquals(1, volumeController.toggleMuteCalls) }
         rule.onNodeWithContentDescription("音量，当前 0%，已静音").assertIsDisplayed()
         rule.onNodeWithContentDescription("取消静音").assertIsDisplayed()
-        rule.onNodeWithTag("volume_slider_vertical").assertIsDisplayed()
         rule.onNodeWithContentDescription("亮度").assertDoesNotExist()
         rule.onNodeWithContentDescription("锁定控制").assertDoesNotExist()
         rule.onNodeWithContentDescription("画面比例").assertDoesNotExist()
@@ -624,6 +628,8 @@ private class ScreenFakeVolumeController :
         ),
     )
     override val state: StateFlow<com.local.mediaviewer.ui.player.VolumeState> = mutable
+    var toggleMuteCalls = 0
+        private set
 
     override fun refresh() = Unit
 
@@ -636,6 +642,7 @@ private class ScreenFakeVolumeController :
     override fun adjustByFraction(delta: Float) = Unit
 
     override fun toggleMute() {
+        toggleMuteCalls += 1
         mutable.value = if (mutable.value.muted) {
             mutable.value.copy(current = 5, muted = false)
         } else {
