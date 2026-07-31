@@ -10,13 +10,17 @@ import com.local.mediaviewer.model.ValidatedServerUrl
 import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
+import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -26,6 +30,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -122,23 +127,562 @@ class SettingsViewModelTest {
     @Test
     fun `成功结果显式保存后提交同一探测结果`() = runTest(dispatcher) {
         val successful = successfulResult()
-        val session = SettingsFakeSession { AppResult.Success(successful) }
+        val saveGate = CompletableDeferred<Unit>()
+        val session = SettingsFakeSession(
+            saveGate = saveGate,
+        ) { AppResult.Success(successful) }
         val viewModel = SettingsViewModel(
             SettingsFakeRepository(ServerConfig()),
             SettingsFakeReaderPreferences(),
             session,
         )
+        var savedEvents = 0
+        backgroundScope.launch(
+            UnconfinedTestDispatcher(testScheduler),
+        ) {
+            viewModel.saved.collect {
+                savedEvents += 1
+            }
+        }
         advanceUntilIdle()
         viewModel.onInputChanged("http://media.example:8080")
         viewModel.testConnection()
         advanceUntilIdle()
 
+        assertTrue(
+            viewModel.uiState.value.hasUnsavedServerChange,
+        )
         viewModel.save()
+        runCurrent()
+
+        assertTrue(viewModel.uiState.value.isSaving)
+        assertFalse(viewModel.uiState.value.canSave)
+        viewModel.save()
+        runCurrent()
+        assertEquals(1, session.saveCalls)
+
+        saveGate.complete(Unit)
         advanceUntilIdle()
 
         assertEquals(1, session.saveCalls)
         assertEquals(successful, session.savedResult)
+        assertEquals(listOf(successful), session.saveAttempts)
+        assertFalse(viewModel.uiState.value.isSaving)
+        assertFalse(viewModel.uiState.value.canSave)
+        assertFalse(
+            viewModel.uiState.value.hasUnsavedServerChange,
+        )
+        assertNull(viewModel.uiState.value.saveError)
+        assertEquals(1, savedEvents)
     }
+
+    @Test
+    fun `save failure remains editable and the same tested result can be retried`() =
+        runTest(dispatcher) {
+            val successful = successfulResult()
+            val saveGate = CompletableDeferred<Unit>()
+            val session = SettingsFakeSession(
+                saveResults = ArrayDeque(
+                    listOf(
+                        Result.failure<Unit>(
+                            IOException("disk full"),
+                        ),
+                        Result.success(Unit),
+                    ),
+                ),
+                saveGate = saveGate,
+            ) {
+                AppResult.Success(successful)
+            }
+            val viewModel = SettingsViewModel(
+                SettingsFakeRepository(ServerConfig()),
+                SettingsFakeReaderPreferences(),
+                session,
+            )
+            var savedEvents = 0
+            backgroundScope.launch(
+                UnconfinedTestDispatcher(testScheduler),
+            ) {
+                viewModel.saved.collect {
+                    savedEvents += 1
+                }
+            }
+            advanceUntilIdle()
+            viewModel.onInputChanged(
+                successful.server.logicalBaseUrl,
+            )
+            viewModel.testConnection()
+            advanceUntilIdle()
+
+            viewModel.save()
+            runCurrent()
+
+            assertTrue(viewModel.uiState.value.isSaving)
+            assertFalse(viewModel.uiState.value.canSave)
+            saveGate.complete(Unit)
+            advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.isSaving)
+            assertEquals(
+                "保存失败，请重试",
+                viewModel.uiState.value.saveError,
+            )
+            assertTrue(viewModel.uiState.value.canSave)
+            assertEquals(
+                successful.endpoint.ipv4,
+                viewModel.uiState.value.selectedIpv4,
+            )
+            assertEquals(
+                successful.server.logicalBaseUrl,
+                viewModel.uiState.value.input,
+            )
+            assertEquals(0, savedEvents)
+
+            viewModel.save()
+            advanceUntilIdle()
+
+            assertEquals(2, session.saveCalls)
+            assertEquals(
+                listOf(successful, successful),
+                session.saveAttempts,
+            )
+            assertEquals(successful, session.savedResult)
+            assertNull(viewModel.uiState.value.saveError)
+            assertFalse(viewModel.uiState.value.isSaving)
+            assertFalse(viewModel.uiState.value.canSave)
+            assertFalse(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+            assertEquals(1, savedEvents)
+        }
+
+    @Test
+    fun `fatal save errors remain observable instead of becoming retryable failures`() {
+        val fatal = AssertionError("fatal save failure")
+
+        val thrown = assertThrows(AssertionError::class.java) {
+            runTest(dispatcher) {
+                val successful = successfulResult()
+                val session = SettingsFakeSession(
+                    saveResults = ArrayDeque(
+                        listOf(Result.failure<Unit>(fatal)),
+                    ),
+                ) {
+                    AppResult.Success(successful)
+                }
+                val viewModel = SettingsViewModel(
+                    SettingsFakeRepository(ServerConfig()),
+                    SettingsFakeReaderPreferences(),
+                    session,
+                )
+                advanceUntilIdle()
+                viewModel.onInputChanged(
+                    successful.server.logicalBaseUrl,
+                )
+                viewModel.testConnection()
+                advanceUntilIdle()
+
+                viewModel.save()
+                advanceUntilIdle()
+            }
+        }
+
+        assertEquals("fatal save failure", thrown.message)
+    }
+
+    @Test
+    fun `editing B while A saves keeps B dirty and does not navigate away`() =
+        runTest(dispatcher) {
+            val resultA = successfulResult()
+            val inputB = "http://other.example:8080"
+            val saveGate = CompletableDeferred<Unit>()
+            val session = SettingsFakeSession(
+                saveGate = saveGate,
+            ) {
+                AppResult.Success(resultA)
+            }
+            val viewModel = SettingsViewModel(
+                SettingsFakeRepository(ServerConfig()),
+                SettingsFakeReaderPreferences(),
+                session,
+            )
+            var savedEvents = 0
+            backgroundScope.launch(
+                UnconfinedTestDispatcher(testScheduler),
+            ) {
+                viewModel.saved.collect {
+                    savedEvents += 1
+                }
+            }
+            advanceUntilIdle()
+            viewModel.onInputChanged(
+                resultA.server.logicalBaseUrl,
+            )
+            viewModel.testConnection()
+            advanceUntilIdle()
+
+            viewModel.save()
+            runCurrent()
+            viewModel.onInputChanged(inputB)
+
+            assertTrue(viewModel.uiState.value.isSaving)
+            assertEquals(inputB, viewModel.uiState.value.input)
+            assertFalse(viewModel.uiState.value.canSave)
+            assertTrue(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+
+            saveGate.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(resultA, session.savedResult)
+            assertEquals(inputB, viewModel.uiState.value.input)
+            assertFalse(viewModel.uiState.value.isSaving)
+            assertFalse(viewModel.uiState.value.canSave)
+            assertTrue(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+            assertEquals(
+                SettingsBackDecision.CONFIRM_DISCARD,
+                viewModel.requestBack(),
+            )
+            assertEquals(0, savedEvents)
+
+            viewModel.save()
+            advanceUntilIdle()
+            assertEquals(1, session.saveCalls)
+        }
+
+    @Test
+    fun `a successful B probe becomes saveable only after the pending A save completes`() =
+        runTest(dispatcher) {
+            val resultA = successfulResult()
+            val resultB = successfulResult(
+                logicalBaseUrl =
+                    "http://other.example:8080",
+                host = "other.example",
+                selectedIpv4 = "203.0.113.9",
+            )
+            val saveGate = CompletableDeferred<Unit>()
+            val session = SettingsFakeSession(
+                saveGate = saveGate,
+            ) { input ->
+                when (input) {
+                    resultA.server.logicalBaseUrl ->
+                        AppResult.Success(resultA)
+
+                    resultB.server.logicalBaseUrl ->
+                        AppResult.Success(resultB)
+
+                    else -> error("unexpected input: $input")
+                }
+            }
+            val viewModel = SettingsViewModel(
+                SettingsFakeRepository(ServerConfig()),
+                SettingsFakeReaderPreferences(),
+                session,
+            )
+            advanceUntilIdle()
+            viewModel.onInputChanged(
+                resultA.server.logicalBaseUrl,
+            )
+            viewModel.testConnection()
+            advanceUntilIdle()
+            viewModel.save()
+            runCurrent()
+
+            viewModel.onInputChanged(
+                resultB.server.logicalBaseUrl,
+            )
+            viewModel.testConnection()
+            runCurrent()
+            assertEquals(
+                resultB.endpoint.ipv4,
+                viewModel.uiState.value.selectedIpv4,
+            )
+            assertTrue(viewModel.uiState.value.isSaving)
+            assertFalse(viewModel.uiState.value.canSave)
+
+            saveGate.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(resultA, session.savedResult)
+            assertEquals(
+                resultB.server.logicalBaseUrl,
+                viewModel.uiState.value.input,
+            )
+            assertEquals(
+                resultB.endpoint.ipv4,
+                viewModel.uiState.value.selectedIpv4,
+            )
+            assertTrue(viewModel.uiState.value.canSave)
+            assertTrue(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+        }
+
+    @Test
+    fun `failed A save preserves a successful B probe and enables B afterward`() =
+        runTest(dispatcher) {
+            val resultA = successfulResult()
+            val resultB = successfulResult(
+                logicalBaseUrl =
+                    "http://other.example:8080",
+                host = "other.example",
+                selectedIpv4 = "203.0.113.9",
+            )
+            val saveGate = CompletableDeferred<Unit>()
+            val session = SettingsFakeSession(
+                saveResults = ArrayDeque(
+                    listOf(
+                        Result.failure<Unit>(
+                            IOException("disk full"),
+                        ),
+                        Result.success(Unit),
+                    ),
+                ),
+                saveGate = saveGate,
+            ) { input ->
+                when (input) {
+                    resultA.server.logicalBaseUrl ->
+                        AppResult.Success(resultA)
+
+                    resultB.server.logicalBaseUrl ->
+                        AppResult.Success(resultB)
+
+                    else -> error("unexpected input: $input")
+                }
+            }
+            val viewModel = SettingsViewModel(
+                SettingsFakeRepository(ServerConfig()),
+                SettingsFakeReaderPreferences(),
+                session,
+            )
+            advanceUntilIdle()
+            viewModel.onInputChanged(
+                resultA.server.logicalBaseUrl,
+            )
+            viewModel.testConnection()
+            advanceUntilIdle()
+            viewModel.save()
+            runCurrent()
+
+            viewModel.onInputChanged(
+                resultB.server.logicalBaseUrl,
+            )
+            viewModel.testConnection()
+            runCurrent()
+            assertTrue(viewModel.uiState.value.isSaving)
+            assertFalse(viewModel.uiState.value.canSave)
+            assertEquals(
+                resultB.endpoint.ipv4,
+                viewModel.uiState.value.selectedIpv4,
+            )
+
+            saveGate.complete(Unit)
+            advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.isSaving)
+            assertEquals(
+                resultB.server.logicalBaseUrl,
+                viewModel.uiState.value.input,
+            )
+            assertEquals(
+                resultB.endpoint.ipv4,
+                viewModel.uiState.value.selectedIpv4,
+            )
+            assertTrue(viewModel.uiState.value.canSave)
+            assertEquals(
+                "保存失败，请重试",
+                viewModel.uiState.value.saveError,
+            )
+
+            viewModel.save()
+            advanceUntilIdle()
+            assertEquals(
+                listOf(resultA, resultB),
+                session.saveAttempts,
+            )
+            assertEquals(resultB, session.savedResult)
+        }
+
+    @Test
+    fun `failed A save does not restore its tested result after input changes to B`() =
+        runTest(dispatcher) {
+            val resultA = successfulResult()
+            val inputB = "http://other.example:8080"
+            val saveGate = CompletableDeferred<Unit>()
+            val session = SettingsFakeSession(
+                saveResults = ArrayDeque(
+                    listOf(
+                        Result.failure<Unit>(
+                            IOException("disk full"),
+                        ),
+                    ),
+                ),
+                saveGate = saveGate,
+            ) {
+                AppResult.Success(resultA)
+            }
+            val viewModel = SettingsViewModel(
+                SettingsFakeRepository(ServerConfig()),
+                SettingsFakeReaderPreferences(),
+                session,
+            )
+            advanceUntilIdle()
+            viewModel.onInputChanged(
+                resultA.server.logicalBaseUrl,
+            )
+            viewModel.testConnection()
+            advanceUntilIdle()
+            viewModel.save()
+            runCurrent()
+
+            viewModel.onInputChanged(inputB)
+            saveGate.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(inputB, viewModel.uiState.value.input)
+            assertFalse(viewModel.uiState.value.isSaving)
+            assertFalse(viewModel.uiState.value.canSave)
+            assertNull(viewModel.uiState.value.selectedIpv4)
+            assertEquals(
+                "保存失败，请重试",
+                viewModel.uiState.value.saveError,
+            )
+            assertTrue(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+        }
+
+    @Test
+    fun `only an unsaved server change asks for discard confirmation`() =
+        runTest(dispatcher) {
+            val savedInput = "http://saved.example:8080"
+            val viewModel = SettingsViewModel(
+                SettingsFakeRepository(
+                    ServerConfig(
+                        logicalBaseUrl = savedInput,
+                    ),
+                ),
+                SettingsFakeReaderPreferences(),
+                SettingsFakeSession {
+                    error("back decision must not probe")
+                },
+            )
+            advanceUntilIdle()
+
+            assertFalse(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+            assertEquals(
+                SettingsBackDecision.LEAVE,
+                viewModel.requestBack(),
+            )
+
+            viewModel.onDefaultImageModeChanged(
+                ImageReaderMode.SINGLE,
+            )
+            advanceUntilIdle()
+            assertEquals(
+                SettingsBackDecision.LEAVE,
+                viewModel.requestBack(),
+            )
+
+            viewModel.onInputChanged(
+                "http://other.example:8080",
+            )
+            assertTrue(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+            assertEquals(
+                SettingsBackDecision.CONFIRM_DISCARD,
+                viewModel.requestBack(),
+            )
+
+            viewModel.onInputChanged(savedInput)
+            assertFalse(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+            assertEquals(
+                SettingsBackDecision.LEAVE,
+                viewModel.requestBack(),
+            )
+        }
+
+    @Test
+    fun `successful normalization recomputes dirty against the saved server`() =
+        runTest(dispatcher) {
+            val successful = successfulResult()
+            val viewModel = SettingsViewModel(
+                SettingsFakeRepository(
+                    ServerConfig(
+                        logicalBaseUrl =
+                            successful.server.logicalBaseUrl,
+                    ),
+                ),
+                SettingsFakeReaderPreferences(),
+                SettingsFakeSession {
+                    AppResult.Success(successful)
+                },
+            )
+            advanceUntilIdle()
+
+            viewModel.onInputChanged(
+                "HTTP://MEDIA.EXAMPLE:8080/",
+            )
+            assertTrue(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+            viewModel.testConnection()
+            advanceUntilIdle()
+
+            assertEquals(
+                successful.server.logicalBaseUrl,
+                viewModel.uiState.value.input,
+            )
+            assertFalse(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+            assertTrue(viewModel.uiState.value.canSave)
+        }
+
+    @Test
+    fun `late initial load establishes the baseline without overwriting a newer input`() =
+        runTest(dispatcher) {
+            val savedInput = "http://saved.example:8080"
+            val editedInput = "http://edited.example:8080"
+            val currentGate = CompletableDeferred<Unit>()
+            val viewModel = SettingsViewModel(
+                SettingsFakeRepository(
+                    initial = ServerConfig(
+                        logicalBaseUrl = savedInput,
+                    ),
+                    currentGate = currentGate,
+                ),
+                SettingsFakeReaderPreferences(),
+                SettingsFakeSession {
+                    error("initialization must not probe")
+                },
+            )
+            runCurrent()
+
+            viewModel.onInputChanged(editedInput)
+            currentGate.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(
+                editedInput,
+                viewModel.uiState.value.input,
+            )
+            assertTrue(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+            assertEquals(
+                SettingsBackDecision.CONFIRM_DISCARD,
+                viewModel.requestBack(),
+            )
+        }
 
     @Test
     fun `阅读方式立即独立保存且不调用服务器`() =
@@ -247,27 +791,37 @@ class SettingsViewModelTest {
         }
 }
 
-private fun successfulResult() = ConnectionTestResult(
+private fun successfulResult(
+    logicalBaseUrl: String = "http://media.example:8080",
+    host: String = "media.example",
+    selectedIpv4: String = "203.0.113.7",
+) = ConnectionTestResult(
     server = ValidatedServerUrl(
-        "http://media.example:8080",
-        "media.example",
+        logicalBaseUrl,
+        host,
         8080,
         false,
     ),
-    resolvedIpv4s = listOf("10.0.0.8", "203.0.113.7"),
+    resolvedIpv4s = listOf("10.0.0.8", selectedIpv4),
     endpoint = SessionEndpoint(
-        "http://media.example:8080",
-        "http://203.0.113.7:8080",
-        "203.0.113.7",
+        logicalBaseUrl,
+        "http://$selectedIpv4:8080",
+        selectedIpv4,
     ),
 )
 
-private class SettingsFakeRepository(initial: ServerConfig) :
+private class SettingsFakeRepository(
+    initial: ServerConfig,
+    private val currentGate: CompletableDeferred<Unit>? = null,
+) :
     ServerSettingsRepository {
     private val mutable = MutableStateFlow(initial)
     override val config: Flow<ServerConfig> = mutable
 
-    override suspend fun current(): ServerConfig = mutable.value
+    override suspend fun current(): ServerConfig {
+        currentGate?.await()
+        return mutable.value
+    }
 
     override suspend fun save(config: ServerConfig) {
         mutable.value = config
@@ -300,6 +854,9 @@ private fun interface CandidateTestBlock {
 }
 
 private class SettingsFakeSession(
+    private val saveResults: ArrayDeque<Result<Unit>> =
+        ArrayDeque(),
+    private val saveGate: CompletableDeferred<Unit>? = null,
     private val testBlock: CandidateTestBlock,
 ) : ServerSessionManager {
     private val mutable = MutableStateFlow<ServerSessionState>(
@@ -312,6 +869,7 @@ private class SettingsFakeSession(
         private set
     var savedResult: ConnectionTestResult? = null
         private set
+    val saveAttempts = mutableListOf<ConnectionTestResult>()
 
     override suspend fun connectSaved() = Unit
 
@@ -324,6 +882,11 @@ private class SettingsFakeSession(
 
     override suspend fun saveCandidate(result: ConnectionTestResult) {
         saveCalls += 1
+        saveAttempts += result
+        saveGate?.await()
+        if (saveResults.isNotEmpty()) {
+            saveResults.removeFirst().getOrThrow()
+        }
         savedResult = result
     }
 

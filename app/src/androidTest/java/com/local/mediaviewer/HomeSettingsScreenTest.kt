@@ -6,6 +6,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -23,10 +28,12 @@ import com.local.mediaviewer.home.HomeUiState
 import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.model.ServerShare
 import com.local.mediaviewer.model.ShareAuthenticationMode
+import com.local.mediaviewer.settings.SettingsBackDecision
 import com.local.mediaviewer.settings.SettingsUiState
 import com.local.mediaviewer.ui.home.HomeScreen
 import com.local.mediaviewer.ui.settings.SettingsScreen
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
+import androidx.test.espresso.Espresso.pressBack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -319,6 +326,89 @@ class HomeSettingsScreenTest {
             selectedReaderMode,
         )
         rule.onNodeWithTag("save_server").assertIsNotEnabled()
+    }
+
+    @Test
+    fun back_with_unsaved_server_change_requires_an_explicit_discard() {
+        var backCalls = 0
+        var discardCalls = 0
+        rule.setContent {
+            MediaViewerTheme {
+                SettingsScreen(
+                    state = SettingsUiState(
+                        input = "http://edited.example:8080",
+                        hasUnsavedServerChange = true,
+                    ),
+                    onInputChanged = {},
+                    onTest = {},
+                    onSave = {},
+                    onDefaultImageModeChanged = {},
+                    onBack = { backCalls += 1 },
+                    onBackRequest = {
+                        SettingsBackDecision.CONFIRM_DISCARD
+                    },
+                    onDiscardConfirmed = {
+                        discardCalls += 1
+                    },
+                )
+            }
+        }
+
+        pressBack()
+        rule.onNodeWithText("放弃未保存的服务器更改？")
+            .assertIsDisplayed()
+        rule.onNodeWithText("继续编辑")
+            .assertHasClickAction()
+            .performClick()
+        rule.onNodeWithText("放弃未保存的服务器更改？")
+            .assertDoesNotExist()
+        rule.runOnIdle {
+            assertEquals(0, backCalls)
+            assertEquals(0, discardCalls)
+        }
+
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithText("放弃更改")
+            .assertHasClickAction()
+            .performClick()
+        rule.runOnIdle {
+            assertEquals(0, backCalls)
+            assertEquals(1, discardCalls)
+        }
+    }
+
+    @Test
+    fun settings_save_stays_editable_while_loading_and_announces_failure() {
+        rule.setContent {
+            MediaViewerTheme {
+                SettingsScreen(
+                    state = SettingsUiState(
+                        input = "http://media.example:8080",
+                        selectedIpv4 = "203.0.113.7",
+                        canSave = true,
+                        isSaving = true,
+                        saveError = "保存失败，请重试",
+                        hasUnsavedServerChange = true,
+                    ),
+                    onInputChanged = {},
+                    onTest = {},
+                    onSave = {},
+                    onDefaultImageModeChanged = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithTag("server_url").assertIsEnabled()
+        rule.onNodeWithTag("save_server").assertIsNotEnabled()
+        rule.onNodeWithText("保存失败，请重试")
+            .assertIsDisplayed()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
     }
 }
 

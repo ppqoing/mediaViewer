@@ -7,6 +7,7 @@ import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.image.ReaderPreferencesRepository
 import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.session.ServerSessionManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +28,15 @@ data class SettingsUiState(
         ImageReaderMode = ImageReaderMode.COMIC,
     val isSavingImageMode: Boolean = false,
     val imageModeError: String? = null,
+    val isSaving: Boolean = false,
+    val saveError: String? = null,
+    val hasUnsavedServerChange: Boolean = false,
 )
+
+enum class SettingsBackDecision {
+    LEAVE,
+    CONFIRM_DISCARD,
+}
 
 class SettingsViewModel(
     private val settings: ServerSettingsRepository,
@@ -40,6 +49,7 @@ class SettingsViewModel(
     private val mutableSaved = MutableSharedFlow<Unit>()
     val saved: SharedFlow<Unit> = mutableSaved.asSharedFlow()
 
+    private var savedServerInput = ""
     private var successfulResult: ConnectionTestResult? = null
     private var candidateVersion = 0L
     private var testJob: Job? = null
@@ -48,9 +58,17 @@ class SettingsViewModel(
         val initialVersion = candidateVersion
         viewModelScope.launch {
             val logicalBaseUrl = settings.current().logicalBaseUrl
+            savedServerInput = logicalBaseUrl
+            val currentState = mutableUiState.value
             if (candidateVersion == initialVersion) {
-                mutableUiState.value = mutableUiState.value.copy(
+                mutableUiState.value = currentState.copy(
                     input = logicalBaseUrl,
+                    hasUnsavedServerChange = false,
+                )
+            } else {
+                mutableUiState.value = currentState.copy(
+                    hasUnsavedServerChange =
+                        currentState.input != logicalBaseUrl,
                 )
             }
         }
@@ -74,6 +92,9 @@ class SettingsViewModel(
             selectedIpv4 = null,
             errorMessage = null,
             canSave = false,
+            saveError = null,
+            hasUnsavedServerChange =
+                value != savedServerInput,
         )
     }
 
@@ -96,13 +117,17 @@ class SettingsViewModel(
             when (result) {
                 is AppResult.Success -> {
                     successfulResult = result.value
-                    mutableUiState.value = mutableUiState.value.copy(
+                    val currentState = mutableUiState.value
+                    mutableUiState.value = currentState.copy(
                         input = result.value.server.logicalBaseUrl,
                         isTesting = false,
                         resolvedIpv4s = result.value.resolvedIpv4s,
                         selectedIpv4 = result.value.endpoint.ipv4,
                         errorMessage = null,
-                        canSave = true,
+                        canSave = !currentState.isSaving,
+                        hasUnsavedServerChange =
+                            result.value.server.logicalBaseUrl !=
+                                savedServerInput,
                     )
                 }
 
@@ -119,14 +144,87 @@ class SettingsViewModel(
     }
 
     fun save() {
+        if (mutableUiState.value.isSaving) return
         val result = successfulResult ?: return
-        successfulResult = null
-        mutableUiState.value = mutableUiState.value.copy(canSave = false)
+        val persistedInput = result.server.logicalBaseUrl
+        mutableUiState.value = mutableUiState.value.copy(
+            isSaving = true,
+            saveError = null,
+            canSave = false,
+        )
         viewModelScope.launch {
-            session.saveCandidate(result)
-            mutableSaved.emit(Unit)
+            var saveSucceeded = false
+            var saveFailure: Exception? = null
+            var shouldEmitSaved = false
+            try {
+                session.saveCandidate(result)
+                saveSucceeded = true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                saveFailure = error
+            } finally {
+                if (saveSucceeded) {
+                    savedServerInput = persistedInput
+                    val currentState = mutableUiState.value
+                    val inputStillPersisted =
+                        currentState.input == persistedInput
+                    if (successfulResult === result) {
+                        successfulResult = null
+                    }
+                    val canSaveCurrentResult =
+                        successfulResult?.server?.logicalBaseUrl ==
+                            currentState.input
+                    mutableUiState.value = currentState.copy(
+                        isSaving = false,
+                        saveError = null,
+                        canSave = if (inputStillPersisted) {
+                            false
+                        } else {
+                            canSaveCurrentResult
+                        },
+                        hasUnsavedServerChange =
+                            currentState.input != persistedInput,
+                    )
+                    shouldEmitSaved = inputStillPersisted
+                } else if (saveFailure != null) {
+                    val currentState = mutableUiState.value
+                    val canRetrySameResult =
+                        successfulResult === result &&
+                            currentState.input == persistedInput
+                    val canSaveCurrentResult =
+                        successfulResult?.server?.logicalBaseUrl ==
+                            currentState.input
+                    mutableUiState.value = currentState.copy(
+                        isSaving = false,
+                        saveError = "保存失败，请重试",
+                        canSave = if (canRetrySameResult) {
+                            true
+                        } else {
+                            canSaveCurrentResult
+                        },
+                        hasUnsavedServerChange =
+                            currentState.input != savedServerInput,
+                    )
+                } else {
+                    mutableUiState.value =
+                        mutableUiState.value.copy(
+                            isSaving = false,
+                        )
+                }
+            }
+            if (shouldEmitSaved) {
+                mutableSaved.emit(Unit)
+            }
         }
     }
+
+    fun requestBack(): SettingsBackDecision =
+        if (mutableUiState.value.hasUnsavedServerChange) {
+            SettingsBackDecision.CONFIRM_DISCARD
+        } else {
+            SettingsBackDecision.LEAVE
+        }
 
     fun onDefaultImageModeChanged(mode: ImageReaderMode) {
         if (
