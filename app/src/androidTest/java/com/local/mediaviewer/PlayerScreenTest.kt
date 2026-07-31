@@ -9,6 +9,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -260,7 +263,7 @@ class PlayerScreenTest {
     }
 
     @Test
-    fun videoScaleMenuWorksInNormalAndFullscreen() {
+    fun lowFrequencyOptionsWorkInNormalAndFullscreen() {
         var selectedMode: VideoScaleMode? = null
         val fullscreenController =
             ScreenFakeFullscreenController()
@@ -321,8 +324,24 @@ class PlayerScreenTest {
         rule.onNodeWithContentDescription("全屏")
             .performClick()
         rule.onNodeWithTag("video_scale_menu")
+            .assertDoesNotExist()
+        rule.onNodeWithContentDescription("更多播放设置")
+            .performClick()
+        rule.onNodeWithText("播放速度")
             .assertIsDisplayed()
-        rule.onNodeWithTag("seek").assertDoesNotExist()
+        rule.onNodeWithText("播放模式")
+            .assertIsDisplayed()
+        rule.onNodeWithText("画面比例")
+            .assertIsDisplayed()
+            .performClick()
+        rule.onNodeWithText("强制拉伸")
+            .performClick()
+        rule.runOnIdle {
+            assertEquals(
+                VideoScaleMode.STRETCH,
+                selectedMode,
+            )
+        }
     }
 
     @Test
@@ -401,6 +420,7 @@ class PlayerScreenTest {
 
     @Test
     fun fullscreenBufferingKeepsCentralSpinnerClearOfTransportControls() {
+        rule.mainClock.autoAdvance = false
         rule.setContent {
             MaterialTheme {
                 VideoPlayerScreen(
@@ -435,6 +455,7 @@ class PlayerScreenTest {
         }
 
         rule.onNodeWithContentDescription("全屏").performClick()
+        rule.mainClock.advanceTimeByFrame()
 
         rule.onNodeWithTag("video_buffering_spinner").assertIsDisplayed()
         rule.onNodeWithTag("video_controls").assertIsDisplayed()
@@ -453,6 +474,66 @@ class PlayerScreenTest {
         assertFalse(
             "全屏缓冲 spinner 不应与中央暂停按钮重叠",
             spinnerBounds.overlaps(pauseBounds),
+        )
+    }
+
+    @Test
+    fun fullscreenBufferingHasOneFeedbackOwnerAndDoesNotOverlapPrimary() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            MaterialTheme {
+                VideoPlayerScreen(
+                    state = PlayerUiState(
+                        name = "视频.mp4",
+                        kind = MediaKind.VIDEO,
+                        status = PlaybackStatus.BUFFERING,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                    ),
+                    controller = ScreenFakePlaybackController(),
+                    fullscreenController = ScreenFakeFullscreenController(),
+                    preferences = ScreenPlayerPreferencesRepository(),
+                    volumeController = ScreenFakeVolumeController(),
+                    brightnessController = ScreenFakeBrightnessController(),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    onRetry = {},
+                    onVideoScaleModeChanged = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("全屏").performClick()
+        rule.mainClock.advanceTimeByFrame()
+
+        rule.onNodeWithTag("video_buffering_spinner").assertIsDisplayed()
+        rule.onAllNodes(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.ProgressBarRangeInfo,
+                ProgressBarRangeInfo.Indeterminate,
+            ),
+        ).assertCountEquals(1)
+        val spinnerBounds = rule
+            .onNodeWithTag("video_buffering_spinner")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val primaryBounds = rule
+            .onNodeWithContentDescription("暂停")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        assertFalse(
+            "唯一的缓冲反馈不应与固定居中的主动作重叠",
+            spinnerBounds.overlaps(primaryBounds),
         )
     }
 

@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material3.AlertDialog
@@ -72,6 +74,7 @@ fun VideoPlayerScreen(
     onResumeHintShown: () -> Unit = {},
     onVideoScaleModeChanged: (VideoScaleMode) -> Unit,
     onBack: () -> Unit,
+    safeDrawingInsets: WindowInsets = WindowInsets.safeDrawing,
 ) {
     val fullscreen by fullscreenController.isFullscreen.collectAsStateWithLifecycle()
     val hasShownVideoGestures by preferences.hasShownVideoGestures
@@ -81,6 +84,15 @@ fun VideoPlayerScreen(
     var interaction by remember { mutableStateOf(VideoInteractionState()) }
     var gestureHintDismissed by remember { mutableStateOf(false) }
     var volumeExpanded by remember { mutableStateOf(false) }
+
+    val gestureHintVisible = fullscreen &&
+        !hasShownVideoGestures &&
+        !gestureHintDismissed
+
+    fun dismissGestureHint() {
+        gestureHintDismissed = true
+        scope.launch { preferences.markVideoGesturesShown() }
+    }
 
     fun revealControls() {
         interaction = VideoInteractionReducer.revealControls(interaction)
@@ -120,7 +132,12 @@ fun VideoPlayerScreen(
     )
 
     BackHandler {
-        if (fullscreen) fullscreenController.exit() else onBack()
+        when {
+            gestureHintVisible -> dismissGestureHint()
+            fullscreen && volumeExpanded -> setVolumeExpanded(false)
+            fullscreen -> fullscreenController.exit()
+            else -> onBack()
+        }
     }
 
     Scaffold(
@@ -134,7 +151,9 @@ fun VideoPlayerScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (fullscreen) Modifier else Modifier.padding(padding)),
         ) {
             Box(
                 modifier = Modifier.fillMaxWidth().weight(1f),
@@ -153,7 +172,7 @@ fun VideoPlayerScreen(
                     PlaybackStatus.BUFFERING -> Box(
                         modifier = Modifier
                             .align(Alignment.Center)
-                            .offset(y = 24.dp)
+                            .offset(y = 120.dp)
                             .testTag("video_buffering_spinner"),
                     ) {
                         PlayerStateOverlay(
@@ -209,7 +228,10 @@ fun VideoPlayerScreen(
                         VideoControlsOverlay(
                             state = state,
                             locked = interaction.controlsLocked,
-                            onLock = { interaction = VideoInteractionReducer.lock(interaction) },
+                            onLock = {
+                                volumeExpanded = false
+                                interaction = VideoInteractionReducer.lock(interaction)
+                            },
                             onUnlock = { interaction = VideoInteractionReducer.unlock(interaction) },
                             onPlay = { revealControls(); onPlay() },
                             onPause = { revealControls(); onPause() },
@@ -229,10 +251,15 @@ fun VideoPlayerScreen(
                             onPrevious = { revealControls(); onPrevious() },
                             onNext = { revealControls(); onNext() },
                             onSpeedChanged = { speed -> revealControls(); onSpeedChanged(speed) },
+                            onPlaybackModeChanged = { mode ->
+                                revealControls()
+                                onPlaybackModeChanged(mode)
+                            },
                             onVideoScaleModeChanged = {
                                 revealControls()
                                 onVideoScaleModeChanged(it)
                             },
+                            onOpenQueue = { onOpenQueue?.invoke() },
                             volumeState = volumeState,
                             volumeExpanded = volumeExpanded,
                             onVolumeExpandedChanged = ::setVolumeExpanded,
@@ -244,6 +271,7 @@ fun VideoPlayerScreen(
                                 interaction = interaction.copy(menuExpanded = expanded)
                             },
                             onBack = fullscreenController::exit,
+                            safeDrawingInsets = safeDrawingInsets,
                         )
                     }
                 }
@@ -314,9 +342,9 @@ fun VideoPlayerScreen(
         }
     }
 
-    if (fullscreen && !hasShownVideoGestures && !gestureHintDismissed) {
+    if (gestureHintVisible) {
         AlertDialog(
-            onDismissRequest = fullscreenController::exit,
+            onDismissRequest = ::dismissGestureHint,
             title = { Text("视频手势") },
             text = {
                 Column {
@@ -327,12 +355,7 @@ fun VideoPlayerScreen(
                 }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        gestureHintDismissed = true
-                        scope.launch { preferences.markVideoGesturesShown() }
-                    },
-                ) { Text("知道了") }
+                TextButton(onClick = ::dismissGestureHint) { Text("知道了") }
             },
         )
     }

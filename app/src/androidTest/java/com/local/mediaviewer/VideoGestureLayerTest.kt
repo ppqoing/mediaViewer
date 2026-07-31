@@ -23,7 +23,6 @@ import com.local.mediaviewer.player.PlayerGestureFeedback
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -124,7 +123,7 @@ class VideoGestureLayerTest {
         rule.onNodeWithTag("video_gesture_layer").performTouchInput {
             up()
         }
-        rule.onNodeWithTag("gesture_brightness_rail").assertDoesNotExist()
+        rule.onNodeWithTag("gesture_brightness_rail").assertIsDisplayed()
         rule.runOnIdle { assertTrue(brightness.fraction.value > 0.5f) }
 
         rule.onNodeWithTag("video_gesture_layer").performTouchInput {
@@ -148,12 +147,12 @@ class VideoGestureLayerTest {
         rule.onNodeWithTag("video_gesture_layer").performTouchInput {
             up()
         }
-        rule.onNodeWithTag("gesture_volume_rail").assertDoesNotExist()
+        rule.onNodeWithTag("gesture_volume_rail").assertIsDisplayed()
         rule.runOnIdle { assertTrue(volume.state.value.current > 5) }
     }
 
     @Test
-    fun verticalDragReleaseClearsRailAndDoesNotScheduleSingleTap() {
+    fun normalVerticalGestureReleaseLeavesFeedbackForScreenOwner() {
         rule.mainClock.autoAdvance = false
         var singleTapCalls = 0
         val feedbackEvents = mutableListOf<PlayerGestureFeedback?>()
@@ -168,13 +167,15 @@ class VideoGestureLayerTest {
             up()
         }
 
-        rule.onNodeWithTag("gesture_volume_rail").assertDoesNotExist()
+        rule.mainClock.advanceTimeByFrame()
+        rule.onNodeWithTag("gesture_volume_rail").assertIsDisplayed()
         rule.mainClock.advanceTimeBy(1_000L)
         rule.runOnIdle {
             assertTrue(feedbackEvents.any { it is PlayerGestureFeedback.Volume })
-            assertNull(feedbackEvents.last())
+            assertTrue(feedbackEvents.last() is PlayerGestureFeedback.Volume)
             assertEquals(0, singleTapCalls)
         }
+        rule.onNodeWithTag("gesture_volume_rail").assertIsDisplayed()
     }
 
     private fun setGestureLayer(

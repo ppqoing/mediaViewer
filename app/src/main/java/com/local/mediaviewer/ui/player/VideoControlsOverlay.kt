@@ -1,30 +1,49 @@
 package com.local.mediaviewer.ui.player
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerUiState
-import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.playback.PlaybackSpeeds
+import com.local.mediaviewer.playback.VideoScaleMode
+import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.ui.components.MediaOption
+import com.local.mediaviewer.ui.components.MediaOptionMenu
 import com.local.mediaviewer.ui.components.PlayerIconButton
+import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.theme.MediaTheme
+
+private val FullscreenTopScrimColor = Color(0xB3000000)
+private val FullscreenBottomScrimColor = Color(0xCC000000)
 
 @Composable
 fun VideoControlsOverlay(
@@ -43,7 +62,9 @@ fun VideoControlsOverlay(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSpeedChanged: (Float) -> Unit,
-    onVideoScaleModeChanged: (com.local.mediaviewer.playback.VideoScaleMode) -> Unit,
+    onPlaybackModeChanged: (PlaybackMode) -> Unit,
+    onVideoScaleModeChanged: (VideoScaleMode) -> Unit,
+    onOpenQueue: () -> Unit,
     volumeState: VolumeState,
     volumeExpanded: Boolean,
     onVolumeExpandedChanged: (Boolean) -> Unit,
@@ -53,103 +74,116 @@ fun VideoControlsOverlay(
     onMenuExpandedChanged: (Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    safeDrawingInsets: WindowInsets = WindowInsets.safeDrawing,
 ) {
     Box(
         modifier = modifier
             .fillMaxSize()
             .testTag("video_controls"),
     ) {
-        if (locked) {
-            IconButton(
-                onClick = onUnlock,
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(16.dp),
-            ) {
-                NeonPlayerIcon(PlayerIcons.Unlock, "解锁控制", active = true)
-            }
-            return@Box
-        }
-
-        Surface(
-            color = Color.Black.copy(alpha = 0.58f),
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter),
+                .fillMaxSize()
+                .testTag("fullscreen_root"),
         ) {
+            if (locked) {
+                PlayerIconButton(
+                    icon = PlayerIcons.Unlock,
+                    contentDescription = "解锁控制",
+                    stateDescription = "控制已锁定",
+                    onClick = onUnlock,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(16.dp)
+                        .semantics {
+                            toggleableState = ToggleableState.On
+                        },
+                )
+                return@Box
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(FullscreenTopScrimColor, Color.Transparent),
+                        ),
+                    )
+                    .windowInsetsPadding(
+                        safeDrawingInsets.only(
+                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                        ),
+                    )
+                    .testTag("fullscreen_top_controls")
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Default.ArrowBack, "返回")
-                }
+                PlayerIconButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    onClick = onBack,
+                )
                 Text(
                     text = state.name,
                     color = Color.White,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                IconButton(onClick = {}, enabled = false) {
-                    NeonPlayerIcon(
-                        PlayerIcons.Queue,
-                        "播放列表（即将支持）",
-                        enabled = false,
+                PlayerIconButton(
+                    icon = PlayerIcons.Queue,
+                    contentDescription = "打开播放队列",
+                    onClick = onOpenQueue,
+                    modifier = Modifier.testTag("queue_entry_fullscreen"),
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .testTag("fullscreen_center_controls"),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PlayerIconButton(
+                    icon = PlayerIcons.Back10,
+                    contentDescription = "快退 10 秒",
+                    onClick = onSeekBack,
+                    enabled = state.isSeekable && state.durationMs > 0L,
+                )
+                PrimaryVideoControl(
+                    state = state,
+                    onPlay = onPlay,
+                    onPause = onPause,
+                    onReplay = onReplay,
+                )
+                PlayerIconButton(
+                    icon = PlayerIcons.Forward10,
+                    contentDescription = "快进 10 秒",
+                    onClick = onSeekForward,
+                    enabled = state.isSeekable && state.durationMs > 0L,
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, FullscreenBottomScrimColor),
+                        ),
                     )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .offset(
-                    y = if (state.status == PlaybackStatus.BUFFERING) {
-                        (-72).dp
-                    } else {
-                        0.dp
-                    },
-                ),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(
-                onClick = onSeekBack,
-                enabled = state.isSeekable && state.durationMs > 0L,
+                    .windowInsetsPadding(
+                        safeDrawingInsets.only(
+                            WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal,
+                        ),
+                    )
+                    .testTag("fullscreen_bottom_controls")
+                    .padding(12.dp),
             ) {
-                NeonPlayerIcon(
-                    PlayerIcons.Back10,
-                    "快退 10 秒",
-                    enabled = state.isSeekable && state.durationMs > 0L,
-                )
-            }
-            PrimaryVideoControl(
-                state = state,
-                onPlay = onPlay,
-                onPause = onPause,
-                onReplay = onReplay,
-            )
-            IconButton(
-                onClick = onSeekForward,
-                enabled = state.isSeekable && state.durationMs > 0L,
-            ) {
-                NeonPlayerIcon(
-                    PlayerIcons.Forward10,
-                    "快进 10 秒",
-                    enabled = state.isSeekable && state.durationMs > 0L,
-                )
-            }
-        }
-
-        Surface(
-            color = Color.Black.copy(alpha = 0.58f),
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter),
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
                 PlaybackTimeline(
                     state = state,
                     onBeginScrub = onBeginScrub,
@@ -160,28 +194,23 @@ fun VideoControlsOverlay(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onPrevious, enabled = state.canSkipPrevious) {
-                        NeonPlayerIcon(
-                            PlayerIcons.Previous,
-                            "上一项",
-                            enabled = state.canSkipPrevious,
-                        )
-                    }
-                    IconButton(onClick = onNext, enabled = state.canSkipNext) {
-                        NeonPlayerIcon(
-                            PlayerIcons.Next,
-                            "下一项",
-                            enabled = state.canSkipNext,
-                        )
-                    }
-                    PlaybackSpeedMenu(
-                        current = state.playbackSpeed,
-                        onSpeedChanged = onSpeedChanged,
-                        onExpandedChanged = onMenuExpandedChanged,
+                    PlayerIconButton(
+                        icon = PlayerIcons.Previous,
+                        contentDescription = "上一项",
+                        onClick = onPrevious,
+                        enabled = state.canSkipPrevious,
                     )
-                    VideoScaleMenu(
-                        current = state.videoScaleMode,
-                        onSelected = onVideoScaleModeChanged,
+                    PlayerIconButton(
+                        icon = PlayerIcons.Next,
+                        contentDescription = "下一项",
+                        onClick = onNext,
+                        enabled = state.canSkipNext,
+                    )
+                    FullscreenPlaybackSettingsMenu(
+                        state = state,
+                        onSpeedChanged = onSpeedChanged,
+                        onPlaybackModeChanged = onPlaybackModeChanged,
+                        onVideoScaleModeChanged = onVideoScaleModeChanged,
                         onExpandedChanged = onMenuExpandedChanged,
                     )
                     PlaybackVolumeControl(
@@ -192,12 +221,20 @@ fun VideoControlsOverlay(
                         onToggleMute = onToggleMute,
                         onVolumeChanged = onVolumeChanged,
                     )
-                    IconButton(onClick = onLock) {
-                        NeonPlayerIcon(PlayerIcons.Lock, "锁定控制")
-                    }
-                    IconButton(onClick = onBack) {
-                        NeonPlayerIcon(PlayerIcons.FullscreenExit, "退出全屏")
-                    }
+                    PlayerIconButton(
+                        icon = PlayerIcons.Lock,
+                        contentDescription = "锁定控制",
+                        stateDescription = "控制未锁定",
+                        onClick = onLock,
+                        modifier = Modifier.semantics {
+                            toggleableState = ToggleableState.Off
+                        },
+                    )
+                    PlayerIconButton(
+                        icon = PlayerIcons.FullscreenExit,
+                        contentDescription = "退出全屏",
+                        onClick = onBack,
+                    )
                 }
             }
         }
@@ -212,25 +249,122 @@ private fun PrimaryVideoControl(
     onReplay: () -> Unit,
 ) {
     val action = playbackPrimaryAction(state.status)
-    Box(contentAlignment = Alignment.Center) {
+    PlayerIconButton(
+        icon = action.icon,
+        contentDescription = action.contentDescription,
+        stateDescription = action.stateDescription,
+        enabled = action.enabled,
+        loading = action.loading,
+        onClick = {
+            action.command.invoke(onPlay, onPause, onReplay)
+        },
+        modifier = Modifier.size(MediaTheme.sizing.fullscreenPrimaryButton),
+    )
+}
+
+private enum class FullscreenSettingsPage {
+    ROOT,
+    SPEED,
+    MODE,
+    SCALE,
+}
+
+@Composable
+private fun FullscreenPlaybackSettingsMenu(
+    state: PlayerUiState,
+    onSpeedChanged: (Float) -> Unit,
+    onPlaybackModeChanged: (PlaybackMode) -> Unit,
+    onVideoScaleModeChanged: (VideoScaleMode) -> Unit,
+    onExpandedChanged: (Boolean) -> Unit,
+) {
+    var page by remember { mutableStateOf<FullscreenSettingsPage?>(null) }
+
+    fun closeMenu() {
+        page = null
+        onExpandedChanged(false)
+    }
+
+    Box {
         PlayerIconButton(
-            icon = action.icon,
-            contentDescription = action.contentDescription,
-            stateDescription = action.stateDescription,
-            enabled = action.enabled,
-            loading = action.loading,
+            icon = MediaIcons.More,
+            contentDescription = "更多播放设置",
             onClick = {
-                action.command.invoke(onPlay, onPause, onReplay)
+                page = FullscreenSettingsPage.ROOT
+                onExpandedChanged(true)
             },
+            modifier = Modifier.testTag("fullscreen_options_menu"),
         )
-        if (state.status == PlaybackStatus.BUFFERING) {
-            CircularProgressIndicator(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 2.dp, y = (-2).dp)
-                    .size(18.dp),
-                strokeWidth = 2.dp,
-            )
-        }
+
+        MediaOptionMenu(
+            expanded = page == FullscreenSettingsPage.ROOT,
+            options = listOf(
+                MediaOption(
+                    key = FullscreenSettingsPage.SPEED,
+                    label = "播放速度",
+                    icon = PlayerIcons.Speed,
+                ),
+                MediaOption(
+                    key = FullscreenSettingsPage.MODE,
+                    label = "播放模式",
+                    icon = PlayerIcons.Sequential,
+                ),
+                MediaOption(
+                    key = FullscreenSettingsPage.SCALE,
+                    label = "画面比例",
+                    icon = PlayerIcons.Scale,
+                ),
+            ),
+            selectedKey = null,
+            onSelect = { selected -> page = selected },
+            onDismissRequest = ::closeMenu,
+        )
+
+        MediaOptionMenu(
+            expanded = page == FullscreenSettingsPage.SPEED,
+            options = PlaybackSpeeds.supported.map { speed ->
+                MediaOption(
+                    key = speed,
+                    label = "${formatPlaybackSpeed(speed)} 倍",
+                )
+            },
+            selectedKey = state.playbackSpeed,
+            onSelect = { speed ->
+                onSpeedChanged(speed)
+                closeMenu()
+            },
+            onDismissRequest = ::closeMenu,
+        )
+
+        MediaOptionMenu(
+            expanded = page == FullscreenSettingsPage.MODE,
+            options = PlaybackMode.entries.map { mode ->
+                MediaOption(
+                    key = mode,
+                    label = mode.label(),
+                )
+            },
+            selectedKey = state.playbackMode,
+            onSelect = { mode ->
+                onPlaybackModeChanged(mode)
+                closeMenu()
+            },
+            onDismissRequest = ::closeMenu,
+        )
+
+        MediaOptionMenu(
+            expanded = page == FullscreenSettingsPage.SCALE,
+            options = VideoScaleMode.entries.map { mode ->
+                MediaOption(
+                    key = mode,
+                    label = videoScaleLabel(mode),
+                )
+            },
+            selectedKey = state.videoScaleMode,
+            onSelect = { mode ->
+                onVideoScaleModeChanged(mode)
+                closeMenu()
+            },
+            onDismissRequest = ::closeMenu,
+        )
     }
 }

@@ -36,6 +36,38 @@ class VideoInteractionReducerTest {
     }
 
     @Test
+    fun `缓冲中且没有交互时允许自动隐藏`() {
+        assertTrue(
+            VideoInteractionReducer.canAutoHide(
+                PlaybackStatus.BUFFERING,
+                VideoInteractionState(),
+            ),
+        )
+    }
+
+    @Test
+    fun `播放和缓冲要求未锁定可见且无菜单拖动反馈`() {
+        val feedback = PlayerGestureFeedback.Volume(50, false)
+        listOf(PlaybackStatus.PLAYING, PlaybackStatus.BUFFERING).forEach { status ->
+            assertTrue(
+                VideoInteractionReducer.canAutoHide(status, VideoInteractionState()),
+            )
+            listOf(
+                VideoInteractionState(controlsLocked = true),
+                VideoInteractionState(controlsVisible = false),
+                VideoInteractionState(menuExpanded = true),
+                VideoInteractionState(scrubbing = true),
+                VideoInteractionState(feedback = feedback),
+            ).forEach { interaction ->
+                assertFalse(
+                    "status=$status interaction=$interaction 不应自动隐藏",
+                    VideoInteractionReducer.canAutoHide(status, interaction),
+                )
+            }
+        }
+    }
+
+    @Test
     fun `重复显示控制层会产生新的自动隐藏计时标识`() {
         val visible = VideoInteractionState(controlsVisible = true)
 

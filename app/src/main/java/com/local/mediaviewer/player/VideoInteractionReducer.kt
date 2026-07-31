@@ -7,8 +7,10 @@ object VideoInteractionReducer {
         playbackStatus: PlaybackStatus,
         interaction: VideoInteractionState,
     ): Boolean =
-        playbackStatus == PlaybackStatus.PLAYING &&
+        (playbackStatus == PlaybackStatus.PLAYING ||
+            playbackStatus == PlaybackStatus.BUFFERING) &&
             interaction.controlsVisible &&
+            !interaction.controlsLocked &&
             !interaction.menuExpanded &&
             !interaction.scrubbing &&
             interaction.feedback == null

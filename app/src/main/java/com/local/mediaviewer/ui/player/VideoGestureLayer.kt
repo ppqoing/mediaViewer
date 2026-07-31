@@ -139,7 +139,18 @@ fun VideoGestureLayer(
                                         }
                                     }
 
-                                    GestureCompletionAction.CLEAR_FEEDBACK -> emitFeedback(null)
+                                    GestureCompletionAction.CLEAR_FEEDBACK -> {
+                                        // 正常 release 的亮度/音量反馈交给 Screen 的
+                                        // 800ms 生命周期统一清除；取消或中断仍由
+                                        // 本层立即清除。
+                                        if (shouldClearVerticalFeedback(
+                                                terminalEventType,
+                                                endedWithUp,
+                                            )
+                                        ) {
+                                            emitFeedback(null)
+                                        }
+                                    }
                                     GestureCompletionAction.HANDLE_TAP -> {
                                         val upChange = requireNotNull(changed)
                                         val previous = pendingTap
@@ -243,6 +254,11 @@ internal fun seekGestureCompletion(
     } else {
         SeekGestureCompletion.RESTORE_PREVIEW
     }
+
+internal fun shouldClearVerticalFeedback(
+    eventType: PointerEventType,
+    endedWithUp: Boolean,
+): Boolean = eventType != PointerEventType.Release || !endedWithUp
 
 private fun previewTarget(
     positionMs: Long,
