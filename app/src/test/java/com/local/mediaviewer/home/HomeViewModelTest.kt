@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -33,13 +34,14 @@ class HomeViewModelTest {
     fun after() = Dispatchers.resetMain()
 
     @Test
-    fun `创建时连接并映射选中 IPv4`() = runTest(dispatcher) {
+    fun `creating home does not connect and still maps session state`() = runTest(dispatcher) {
         val session = HomeFakeSession()
         val viewModel = HomeViewModel(session)
-
         advanceUntilIdle()
+        assertEquals(0, session.connectCalls)
 
-        assertEquals(1, session.connectCalls)
+        session.emit(connected("192.168.1.17"))
+        runCurrent()
         assertEquals(
             HomeUiState.Connected("192.168.1.17", listOf(HOME_SHARE)),
             viewModel.uiState.value,
@@ -47,30 +49,16 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `失败状态显示中文错误且重试再次连接`() = runTest(dispatcher) {
-        val session = HomeFakeSession(failFirst = true)
+    fun `explicit home retry connects exactly once`() = runTest(dispatcher) {
+        val session = HomeFakeSession()
         val viewModel = HomeViewModel(session)
-        advanceUntilIdle()
-
-        assertEquals(
-            HomeUiState.Error("网络连接失败：timeout"),
-            viewModel.uiState.value,
-        )
-
         viewModel.retry()
         advanceUntilIdle()
-
-        assertEquals(2, session.connectCalls)
-        assertEquals(
-            HomeUiState.Connected("192.168.1.17", listOf(HOME_SHARE)),
-            viewModel.uiState.value,
-        )
+        assertEquals(1, session.connectCalls)
     }
 }
 
-private class HomeFakeSession(
-    private val failFirst: Boolean = false,
-) : ServerSessionManager {
+private class HomeFakeSession : ServerSessionManager {
     private val mutable = MutableStateFlow<ServerSessionState>(
         ServerSessionState.Connecting,
     )
@@ -80,22 +68,10 @@ private class HomeFakeSession(
 
     override suspend fun connectSaved() {
         connectCalls += 1
-        mutable.value = if (failFirst && connectCalls == 1) {
-            ServerSessionState.Failed(
-                AppError.NetworkFailure("timeout"),
-                emptyList(),
-            )
-        } else {
-            ServerSessionState.Connected(
-                SessionEndpoint(
-                    "http://media.example:8080",
-                    "http://192.168.1.17:8080",
-                    "192.168.1.17",
-                ),
-                listOf("192.168.1.17"),
-                listOf(HOME_SHARE),
-            )
-        }
+    }
+
+    fun emit(state: ServerSessionState) {
+        mutable.value = state
     }
 
     override suspend fun testCandidate(
@@ -107,6 +83,16 @@ private class HomeFakeSession(
     override suspend fun refreshAfterRequestFailure(): AppResult<SessionEndpoint> =
         AppResult.Failure(AppError.NetworkFailure("not used"))
 }
+
+private fun connected(ipv4: String) = ServerSessionState.Connected(
+    endpoint = SessionEndpoint(
+        logicalBaseUrl = "http://media.example:8080",
+        requestBaseUrl = "http://$ipv4:8080",
+        ipv4 = ipv4,
+    ),
+    resolvedIpv4s = listOf(ipv4),
+    shares = listOf(HOME_SHARE),
+)
 
 private val HOME_SHARE = ServerShare(
     id = "4f01061d-9b75-4f7d-96db-49c801e96188",

@@ -44,12 +44,6 @@ class HomeViewModel(
             initialValue = HomeUiState.Connecting,
         )
 
-    init {
-        viewModelScope.launch {
-            session.connectSaved()
-        }
-    }
-
     fun retry() {
         viewModelScope.launch {
             session.connectSaved()
