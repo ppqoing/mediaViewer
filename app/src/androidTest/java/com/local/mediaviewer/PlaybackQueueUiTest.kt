@@ -1,6 +1,7 @@
 package com.local.mediaviewer
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
@@ -22,9 +23,9 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertRangeInfoEquals
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getBoundsInRoot
-import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -47,6 +48,7 @@ import com.local.mediaviewer.ui.player.PlaybackModeButton
 import com.local.mediaviewer.ui.player.PlaybackQueueSheet
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -156,26 +158,161 @@ class PlaybackQueueUiTest {
             }
         }
 
-        rule.onNode(hasScrollAction()).performTouchInput { swipeUp() }
+        // 自适应高列表 + 半展开 Sheet：首刷的 fling 大半被 Sheet 展开/嵌套滚动消费，
+        // 列表只前进约一屏余量；断言滚过后才进入可视区的项，而不是列底最后一项
+        rule.onNodeWithTag("queue_list").performTouchInput {
+            swipeUp()
+            swipeUp()
+        }
 
         rule.runOnIdle { assertTrue(moves.isEmpty()) }
-        rule.onNodeWithContentDescription("队列项 第12首").assertIsDisplayed()
+        rule.onNodeWithContentDescription("队列项 第7首").assertIsDisplayed()
     }
 
     @Test
-    fun longPressThenDraggingWholeQueueRowDownMovesItemOnce() {
+    fun handleDragAcrossThreeRowsCommitsOneFinalMoveAndNeverSelects() {
+        val moves = mutableListOf<Pair<String, Int>>()
+        var selected: String? = null
+        val queue = PlaybackQueue(
+            items = (0..5).map { index ->
+                item("$index", "第${index + 1}首")
+            },
+            currentMediaKey = "0",
+        )
+        showQueue(
+            queue = queue,
+            onSelect = { selected = it },
+            onMove = { key, index -> moves += key to index },
+        )
+        val rowExtent = rule.onNodeWithTag("queue_row:0")
+            .fetchSemanticsNode().boundsInRoot.height
+
+        rule.onNodeWithContentDescription("拖动排序 第1首")
+            .performTouchInput {
+                down(center)
+                advanceEventTime(1_000L)
+                moveBy(Offset(0f, rowExtent * 3.2f), delayMillis = 300L)
+                up()
+            }
+
+        rule.runOnIdle {
+            assertEquals(listOf("0" to 3), moves)
+            assertNull(selected)
+        }
+    }
+
+    @Test
+    fun handleOvershootThenReverseCommitsTheNetIndexExactlyOnce() {
         val moves = mutableListOf<Pair<String, Int>>()
         val queue = PlaybackQueue(
-            items = listOf(item("a", "第一首"), item("b", "第二首")),
-            currentMediaKey = "a",
+            items = (0..5).map { index ->
+                item("$index", "第${index + 1}首")
+            },
+            currentMediaKey = "0",
         )
+        showQueue(
+            queue = queue,
+            onMove = { key, index -> moves += key to index },
+        )
+        val rowExtent = rule.onNodeWithTag("queue_row:2")
+            .fetchSemanticsNode().boundsInRoot.height
 
+        rule.onNodeWithContentDescription("拖动排序 第3首")
+            .performTouchInput {
+                down(center)
+                advanceEventTime(1_000L)
+                moveBy(
+                    Offset(0f, rowExtent * 2.8f),
+                    delayMillis = 200L,
+                )
+                moveBy(
+                    Offset(0f, -rowExtent),
+                    delayMillis = 200L,
+                )
+                up()
+            }
+
+        rule.runOnIdle {
+            assertEquals(listOf("2" to 3), moves)
+        }
+    }
+
+    @Test
+    fun longQueueUsesAvailableHeightAndStaysAboveInjectedNavigationInset() {
+        var keys by mutableStateOf((0 until 30).toList())
         rule.setContent {
-            MaterialTheme {
+            CompositionLocalProvider(LocalDensity provides Density(1f)) {
+                MediaViewerTheme {
+                    PlaybackQueueSheet(
+                        queue = PlaybackQueue(
+                            items = keys.map { item("$it", "第${it + 1}首") },
+                            currentMediaKey = "0",
+                        ),
+                        onSelect = {},
+                        onMove = { _, _ -> },
+                        onRemove = {},
+                        onRemoveRequest = { _, _ -> },
+                        onClearExceptCurrent = {},
+                        onStopAndClear = {},
+                        onDismiss = {},
+                        navigationBarsInsets = WindowInsets(bottom = 32.dp),
+                    )
+                }
+            }
+        }
+        val sheet = rule.onNodeWithTag("queue_sheet")
+            .fetchSemanticsNode().boundsInRoot
+        val list = rule.onNodeWithTag("queue_list")
+            .fetchSemanticsNode().boundsInRoot
+        // 自适应：超过旧固定 480dp；受可用高度约束（30 项内容高 1920px，列表被截断）
+        assertTrue(sheet.height > 480f)
+        assertTrue(list.height > 480f)
+        assertTrue(list.height < 30 * 64f)
+
+        // 注入的导航栏 inset 被列表消费一次：短队列无需滚动，
+        // 末项底部必须精确停在列表底边上 32px 处（少消费/重复消费都会失败）
+        rule.runOnIdle { keys = (0 until 6).toList() }
+        // 对话框使用真实密度：从 12dp 水平内边距实测密度，
+        // inset 期望 = 32dp×density + 行标签之外的纵向边距（实测，随行结构自适应）
+        val listBounds = rule.onNodeWithTag("queue_list")
+            .fetchSemanticsNode().boundsInRoot
+        val firstRow = rule.onNodeWithTag("queue_row:0")
+            .fetchSemanticsNode().boundsInRoot
+        val secondRow = rule.onNodeWithTag("queue_row:1")
+            .fetchSemanticsNode().boundsInRoot
+        val lastRow = rule.onNodeWithTag("queue_row:5")
+            .fetchSemanticsNode().boundsInRoot
+        val density = firstRow.height / 64f
+        // 行标签之外的纵向边距对称分布（上/下各半），末项下方只计一半
+        val rowMargin = (secondRow.top - firstRow.top) - firstRow.height
+        val expectedGap = 32f * density + rowMargin / 2f
+        assertEquals(
+            expectedGap.toDouble(),
+            (listBounds.bottom - lastRow.bottom).toDouble(),
+            1.5,
+        )
+    }
+
+    @Test
+    fun draggingNearViewportEdgeAutoScrollsButStillCommitsOnce() {
+        val moves = mutableListOf<Pair<String, Int>>()
+        // 与生产一致的动态 fixture：onMove 真正应用移动，
+        // 落点后列表滚动锚点才能保持（静态队列会按 key 锚回顶部）
+        var keys by mutableStateOf((0 until 40).toList())
+        rule.setContent {
+            MediaViewerTheme {
                 PlaybackQueueSheet(
-                    queue = queue,
+                    queue = PlaybackQueue(
+                        items = keys.map { item("$it", "第${it + 1}首") },
+                        currentMediaKey = "0",
+                    ),
                     onSelect = {},
-                    onMove = { key, index -> moves += key to index },
+                    onMove = { key, index ->
+                        moves += key to index
+                        keys = keys.toMutableList().apply {
+                            add(index, removeAt(indexOf(key.toInt())))
+                        }
+                    },
                     onRemove = {},
                     onClearExceptCurrent = {},
                     onStopAndClear = {},
@@ -183,16 +320,90 @@ class PlaybackQueueUiTest {
                 )
             }
         }
-
-        rule.onNodeWithContentDescription("队列项 第一首，正在播放")
+        rule.onNodeWithContentDescription("拖动排序 第1首")
             .performTouchInput {
-                val start = Offset(center.x, height * 0.2f)
-                down(start)
+                down(center)
                 advanceEventTime(1_000L)
-                moveTo(Offset(center.x, height * 0.9f))
+                moveTo(Offset(center.x, height + 420f), delayMillis = 100L)
+                advanceEventTime(1_500L)
                 up()
             }
-        rule.runOnIdle { assertEquals(listOf("a" to 1), moves) }
+        // 落点把首项钉在视口底部（first≈dropIndex），第11首必在可见窗口内
+        rule.onNodeWithText("第11首").assertIsDisplayed()
+        rule.runOnIdle {
+            assertEquals(1, moves.size)
+            assertTrue(moves.single().second >= 8)
+        }
+    }
+
+    @Test
+    fun queueStatesCustomActionsAndRemovalContractsAreExplicit() {
+        val current = item("a", "第一首")
+        val next = item("b", "第二首")
+        val later = item("c", "第三首")
+        val fourth = item("d", "第四首")
+        val accessibilityMoves = mutableListOf<Pair<String, Int>>()
+        var ordinaryRemoval: Pair<QueueMediaItem, Int>? = null
+        var currentRemoval: String? = null
+        showQueue(
+            queue = PlaybackQueue(
+                items = listOf(current, next, later, fourth),
+                currentMediaKey = current.mediaKey,
+            ),
+            onMove = { key, index -> accessibilityMoves += key to index },
+            onRemove = { currentRemoval = it },
+            onRemoveRequest = { item, index ->
+                ordinaryRemoval = item to index
+            },
+        )
+
+        rule.onNodeWithContentDescription("队列项 第一首，正在播放")
+            .assertIsSelected()
+        rule.onNodeWithContentDescription("队列项 第二首，即将播放")
+            .assertIsDisplayed()
+        val actions = rule.onNodeWithContentDescription(
+            "队列项 第三首",
+        ).fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        assertEquals(listOf("上移", "下移", "删除"), actions.map { it.label })
+        actions.first { it.label == "上移" }.action()
+        rule.runOnIdle {
+            assertEquals(listOf("c" to 1), accessibilityMoves)
+        }
+        rule.onNodeWithTag("queue_move_announcement")
+            .assertTextEquals("已移动到第 2 项")
+
+        rule.onNodeWithContentDescription("删除 第三首").performClick()
+        rule.runOnIdle {
+            assertEquals(later to 2, ordinaryRemoval)
+            assertNull(currentRemoval)
+        }
+        rule.onNodeWithContentDescription("删除 第一首").performClick()
+        rule.onNodeWithText("删除正在播放的项目？").assertIsDisplayed()
+        rule.onNodeWithText("删除").performClick()
+        rule.runOnIdle { assertEquals("a", currentRemoval) }
+    }
+
+    @Test
+    fun oneItemDisablesClearOtherAndEmptyQueueHasAState() {
+        showQueue(
+            PlaybackQueue(
+                items = listOf(item("a", "第一首")),
+                currentMediaKey = "a",
+            ),
+        )
+        rule.onNodeWithText("清空其他").assertIsNotEnabled()
+    }
+
+    @Test
+    fun emptyQueueShowsExplicitStateAndCanClose() {
+        var dismissCalls = 0
+        showQueue(
+            queue = PlaybackQueue(),
+            onDismiss = { dismissCalls++ },
+        )
+        rule.onNodeWithText("播放队列为空").assertIsDisplayed()
+        rule.onNodeWithContentDescription("关闭播放队列").performClick()
+        rule.runOnIdle { assertEquals(1, dismissCalls) }
     }
 
     @Test
@@ -720,6 +931,30 @@ class PlaybackQueueUiTest {
                     "正在缓冲，可暂停",
                 ),
             )
+    }
+
+    private fun showQueue(
+        queue: PlaybackQueue,
+        onSelect: (String) -> Unit = {},
+        onMove: (String, Int) -> Unit = { _, _ -> },
+        onRemove: (String) -> Unit = {},
+        onRemoveRequest: ((QueueMediaItem, Int) -> Unit)? = null,
+        onDismiss: () -> Unit = {},
+    ) {
+        rule.setContent {
+            MediaViewerTheme {
+                PlaybackQueueSheet(
+                    queue = queue,
+                    onSelect = onSelect,
+                    onMove = onMove,
+                    onRemove = onRemove,
+                    onRemoveRequest = onRemoveRequest,
+                    onClearExceptCurrent = {},
+                    onStopAndClear = {},
+                    onDismiss = onDismiss,
+                )
+            }
+        }
     }
 
     private fun miniSession(
