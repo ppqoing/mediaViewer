@@ -11,11 +11,20 @@ import androidx.media3.session.SessionCommand
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.player.Media3PlaybackController
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.queue.PlaybackNoticeKind
 import com.local.mediaviewer.service.ACTION_STOP_AND_RELEASE
 import com.local.mediaviewer.testing.BackgroundPlaybackTestHarness
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -88,6 +97,7 @@ class MediaSessionControlsTest {
             val first = harness.connectController()
             first.run {
                 setMediaItems(harness.mediaQueue())
+                repeatMode = Player.REPEAT_MODE_ONE
                 prepare()
                 play()
             }
@@ -108,21 +118,25 @@ class MediaSessionControlsTest {
                 appController.sessionState.value.playback.positionMs
             val currentMediaKey =
                 harness.mediaQueue().first().mediaId
-            val stopResult = first.read {
+            first.read {
                 it.sendCustomCommand(
                     SessionCommand(ACTION_STOP_AND_RELEASE, android.os.Bundle.EMPTY),
                     android.os.Bundle.EMPTY,
                 )
             }
-            stopResult.get()
-            first.close()
-
             harness.waitUntil("service releases its only engine") {
                 harness.container.playbackEngineCloseCount == 1
             }
+            first.close()
             assertEquals(1, harness.container.playbackEngineCloseCount)
+            val persistedPosition =
+                harness.container.persistedPosition(currentMediaKey)
             assertTrue(
-                harness.container.persistedPosition(currentMediaKey) >= 10_000L,
+                "expected persisted position >= 10000, got " +
+                    "$persistedPosition (captured=$savedPosition, " +
+                    "recordCalls=${harness.snapshotSaveCalls}, " +
+                    "last=${harness.lastSnapshotSave})",
+                persistedPosition >= 10_000L,
             )
 
             harness.connectControllerAfterRelease().use { restored ->
@@ -162,6 +176,82 @@ class MediaSessionControlsTest {
             }
         }
     }
+
+    @Test
+    fun persistenceNoticeReachesControllerOnceAndRetryKeepsPlaybackState() =
+        runBlocking {
+            BackgroundPlaybackTestHarness().use { harness ->
+                val controller =
+                    harness.container.playbackController as Media3PlaybackController
+                harness.connectController().use { systemController ->
+                    systemController.run {
+                        setMediaItems(harness.mediaQueue())
+                        prepare()
+                        play()
+                    }
+                    harness.waitUntil("current item is visible to app controller") {
+                        controller.sessionState.value.currentItem != null
+                    }
+                    val tickerBaseline = harness.snapshotSaveCalls
+                    harness.waitUntil(
+                        diagnostic = "an idle ticker snapshot completes",
+                        timeoutMs = 7_000L,
+                    ) {
+                        harness.snapshotSaveCalls > tickerBaseline
+                    }
+                    val callsAfterTicker = harness.snapshotSaveCalls
+                    val before = controller.sessionState.value
+                    val notice = async(start = CoroutineStart.UNDISPATCHED) {
+                        // Must finish well before the 5-second ticker can
+                        // consume the armed failure.
+                        withTimeout(2_000L) {
+                            controller.notices.first()
+                        }
+                    }
+
+                    harness.failNextSnapshotSave()
+                    harness.retryPersistence()
+                    val received = notice.await()
+
+                    assertEquals(
+                        callsAfterTicker + 1,
+                        harness.snapshotSaveCalls,
+                    )
+                    assertEquals(
+                        PlaybackNoticeKind.POSITION_SAVE_FAILED,
+                        received.kind,
+                    )
+                    assertEquals(
+                        before.currentItem?.mediaKey,
+                        controller.sessionState.value.currentItem?.mediaKey,
+                    )
+                    assertEquals(
+                        before.playWhenReady,
+                        controller.sessionState.value.playWhenReady,
+                    )
+
+                    val callsBeforeRetry = harness.snapshotSaveCalls
+                    harness.retryPersistence()
+                    withTimeout(2_000L) {
+                        while (
+                            harness.snapshotSaveCalls <
+                            callsBeforeRetry + 1
+                        ) {
+                            delay(25L)
+                        }
+                    }
+                    assertEquals(
+                        callsBeforeRetry + 1,
+                        harness.snapshotSaveCalls,
+                    )
+                    assertNull(
+                        withTimeoutOrNull(500L) {
+                            controller.notices.first()
+                        },
+                    )
+                }
+            }
+        }
 
     private fun BackgroundPlaybackTestHarness.waitForMediaNotification():
         Notification {

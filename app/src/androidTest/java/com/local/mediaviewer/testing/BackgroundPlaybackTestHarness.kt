@@ -39,10 +39,12 @@ import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import com.local.mediaviewer.settings.ServerSettingsRepository
 import java.io.Closeable
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -150,6 +152,22 @@ class BackgroundPlaybackTestHarness : Closeable {
         error("Timed out waiting for $diagnostic")
     }
 
+    fun failNextSnapshotSave() {
+        container.testPositionStore.failNextRecord = true
+    }
+
+    fun retryPersistence() {
+        onMain {
+            container.playbackController.retryPersistence()
+        }
+    }
+
+    val snapshotSaveCalls: Int
+        get() = container.testPositionStore.recordCalls
+
+    val lastSnapshotSave: String?
+        get() = container.testPositionStore.lastRecordSummary
+
     override fun close() {
         if (closed) return
         closed = true
@@ -244,8 +262,11 @@ class BackgroundPlaybackAppContainer(
     ).build()
     private val queueRepository: PlaybackQueueRepository =
         RoomPlaybackQueueRepository(database.playbackQueueDao())
-    private val positionStore: PlaybackPositionStore =
+    private val roomPositionStore: PlaybackPositionStore =
         RoomPlaybackPositionStore(database.playbackPositionDao())
+    internal val testPositionStore =
+        FailOncePositionStore(roomPositionStore)
+    private val positionStore: PlaybackPositionStore = testPositionStore
     private val endpoint = SessionEndpoint(
         logicalBaseUrl = "http://media.test:8080",
         requestBaseUrl = requestBaseUrl,
@@ -309,6 +330,57 @@ class BackgroundPlaybackAppContainer(
         playbackScope.cancel()
         database.close()
         delegate.close()
+    }
+}
+
+internal class FailOncePositionStore(
+    private val delegate: PlaybackPositionStore,
+) : PlaybackPositionStore {
+    private val mutableFailNextRecord = AtomicBoolean(false)
+    private val mutableRecordCalls = AtomicInteger(0)
+    @Volatile
+    private var mutableLastRecordSummary: String? = null
+
+    var failNextRecord: Boolean
+        get() = mutableFailNextRecord.get()
+        set(value) {
+            mutableFailNextRecord.set(value)
+        }
+
+    val recordCalls: Int
+        get() = mutableRecordCalls.get()
+
+    val lastRecordSummary: String?
+        get() = mutableLastRecordSummary
+
+    override suspend fun resumePosition(mediaKey: String): Long? =
+        delegate.resumePosition(mediaKey)
+
+    override suspend fun record(
+        mediaKey: String,
+        positionMs: Long,
+        durationMs: Long,
+        updatedAtEpochMs: Long,
+        ended: Boolean,
+    ) {
+        mutableRecordCalls.incrementAndGet()
+        mutableLastRecordSummary =
+            "mediaKey=$mediaKey, positionMs=$positionMs, " +
+                "durationMs=$durationMs, ended=$ended"
+        if (mutableFailNextRecord.compareAndSet(true, false)) {
+            throw IOException("position save fixture failure")
+        }
+        delegate.record(
+            mediaKey = mediaKey,
+            positionMs = positionMs,
+            durationMs = durationMs,
+            updatedAtEpochMs = updatedAtEpochMs,
+            ended = ended,
+        )
+    }
+
+    override suspend fun clear(mediaKey: String) {
+        delegate.clear(mediaKey)
     }
 }
 

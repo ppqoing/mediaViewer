@@ -10,11 +10,16 @@ import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -60,6 +65,10 @@ class PlaybackCoordinator(
     private val mutableSessionState = MutableStateFlow(
         PlaybackSessionState(playback = engine.state.value),
     )
+    private val mutableNotices = MutableSharedFlow<PlaybackNotice>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
     private var queue = PlaybackQueue()
     private var pendingResumeMediaKey: String? = null
     private var pendingResumeMs: Long? = null
@@ -73,6 +82,8 @@ class PlaybackCoordinator(
     override val state: StateFlow<PlaybackState> = engine.state
     override val sessionState: StateFlow<PlaybackSessionState> =
         mutableSessionState.asStateFlow()
+    override val notices: SharedFlow<PlaybackNotice> =
+        mutableNotices.asSharedFlow()
 
     init {
         engineObserver = coordinatorScope.launch {
@@ -158,10 +169,35 @@ class PlaybackCoordinator(
     }
 
     suspend fun saveCurrentSnapshot() = mutate {
-        runCatching {
-            persistSnapshot(captureCurrentSnapshot())
-        }.onFailure {
-            setError(it.message ?: "播放状态保存失败")
+        val snapshot = captureCurrentSnapshot()
+        try {
+            queueRepository.save(snapshot.queue)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            notifyPersistenceFailure(
+                PlaybackNoticeKind.QUEUE_SAVE_FAILED,
+                "播放队列保存失败",
+                failure,
+            )
+            return@mutate
+        }
+        val mediaKey = snapshot.currentMediaKey ?: return@mutate
+        try {
+            positionStore.record(
+                mediaKey = mediaKey,
+                positionMs = snapshot.positionMs,
+                durationMs = snapshot.durationMs,
+                updatedAtEpochMs = snapshot.updatedAtEpochMs,
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            notifyPersistenceFailure(
+                PlaybackNoticeKind.POSITION_SAVE_FAILED,
+                "播放状态保存失败",
+                failure,
+            )
         }
     }
 
@@ -552,8 +588,17 @@ class PlaybackCoordinator(
             updateSession()
         }
         if (!persist) return
-        runCatching { queueRepository.save(next) }
-            .onFailure { setError(it.message ?: "播放队列保存失败") }
+        try {
+            queueRepository.save(next)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            notifyPersistenceFailure(
+                PlaybackNoticeKind.QUEUE_SAVE_FAILED,
+                "播放队列保存失败",
+                failure,
+            )
+        }
     }
 
     private suspend fun persistCurrentPositionLocked(
@@ -562,7 +607,7 @@ class PlaybackCoordinator(
     ) {
         val mediaKey = queue.currentMediaKey ?: return
         val playback = mutableSessionState.value.playback
-        runCatching {
+        try {
             positionStore.record(
                 mediaKey = mediaKey,
                 positionMs = playback.positionMs,
@@ -570,9 +615,32 @@ class PlaybackCoordinator(
                 updatedAtEpochMs = System.currentTimeMillis(),
                 ended = ended,
             )
-        }.onFailure {
-            setError(it.message ?: "播放状态保存失败")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            notifyPersistenceFailure(
+                PlaybackNoticeKind.POSITION_SAVE_FAILED,
+                "播放状态保存失败",
+                failure,
+            )
         }
+    }
+
+    private fun notifyPersistenceFailure(
+        kind: PlaybackNoticeKind,
+        fallbackMessage: String,
+        failure: Throwable,
+    ) {
+        mutableNotices.tryEmit(
+            PlaybackNotice(
+                id = nextPlaybackNoticeId(),
+                kind = kind,
+                message = failure.message
+                    ?.takeIf(String::isNotBlank)
+                    ?: fallbackMessage,
+                action = PlaybackNoticeAction.RETRY_PERSISTENCE,
+            ),
+        )
     }
 
     private fun updatePlayback(playback: PlaybackState) {

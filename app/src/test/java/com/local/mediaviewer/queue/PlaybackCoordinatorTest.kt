@@ -12,10 +12,14 @@ import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -214,15 +218,88 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
-    fun `保存队列失败仍保留内存队列并显示非阻塞错误`() = runTest {
-        val repository = FakeQueueRepository(saveFailure = IllegalStateException("disk full"))
+    fun `queue save failure emits a notice and keeps the in-memory queue`() = runTest {
+        val repository = FakeQueueRepository(
+            saveFailure = IOException("queue disk full"),
+        )
         val coordinator = coordinator(FakeEngine(), repository, scope = this)
+        val notice = async(start = CoroutineStart.UNDISPATCHED) {
+            coordinator.notices.first()
+        }
 
         coordinator.append(item("a"))
         advanceUntilIdle()
 
-        assertEquals("a", coordinator.sessionState.value.queue.items.single().mediaKey)
-        assertEquals("disk full", coordinator.sessionState.value.errorMessage)
+        assertEquals(
+            listOf("a"),
+            coordinator.sessionState.value.queue.items.map { it.mediaKey },
+        )
+        assertEquals(PlaybackNoticeKind.QUEUE_SAVE_FAILED, notice.await().kind)
+        assertNull(coordinator.sessionState.value.errorMessage)
+        coordinator.close()
+    }
+
+    @Test
+    fun `position save failure emits once and retry persists the current snapshot`() =
+        runTest {
+            val repository = FakeQueueRepository()
+            val positions = FakePositionStore()
+            val coordinator = coordinator(
+                FakeEngine(),
+                repository = repository,
+                positions = positions,
+                scope = this,
+            )
+            coordinator.replaceQueue(listOf(item("a")), "a")
+            advanceUntilIdle()
+            positions.recordFailure = IOException("position disk full")
+            val notice = async(start = CoroutineStart.UNDISPATCHED) {
+                coordinator.notices.first()
+            }
+
+            coordinator.saveCurrentSnapshot()
+            advanceUntilIdle()
+
+            assertEquals(
+                PlaybackNoticeKind.POSITION_SAVE_FAILED,
+                notice.await().kind,
+            )
+            assertEquals(1, positions.recordCalls)
+            assertEquals("a", coordinator.sessionState.value.currentItem?.mediaKey)
+            assertNull(coordinator.sessionState.value.errorMessage)
+
+            positions.recordFailure = null
+            coordinator.saveCurrentSnapshot()
+            advanceUntilIdle()
+
+            assertEquals(2, positions.recordCalls)
+            coordinator.close()
+        }
+
+    @Test
+    fun `notice emitted without a collector is not replayed`() = runTest {
+        val repository = FakeQueueRepository(
+            saveFailure = IOException("first failure"),
+        )
+        val coordinator = coordinator(
+            FakeEngine(),
+            repository = repository,
+            scope = this,
+        )
+
+        coordinator.append(item("a"))
+        advanceUntilIdle()
+
+        repository.saveFailure = IOException("second failure")
+        val notice = async(start = CoroutineStart.UNDISPATCHED) {
+            coordinator.notices.first()
+        }
+        coordinator.append(item("b"))
+        advanceUntilIdle()
+        val received = notice.await()
+
+        assertEquals(PlaybackNoticeKind.QUEUE_SAVE_FAILED, received.kind)
+        assertEquals("second failure", received.message)
         coordinator.close()
     }
 
@@ -462,14 +539,17 @@ private class FakeEngine : PlaybackEngine {
 
 private class FakeQueueRepository(
     initial: PlaybackQueue = PlaybackQueue(),
-    private val saveFailure: Throwable? = null,
+    var saveFailure: Throwable? = null,
 ) : PlaybackQueueRepository {
     private val mutableQueue = MutableStateFlow(initial)
     override val queue: StateFlow<PlaybackQueue> = mutableQueue
+    var saveCalls = 0
+        private set
 
     override suspend fun restore(): PlaybackQueue = mutableQueue.value
 
     override suspend fun save(queue: PlaybackQueue) {
+        saveCalls += 1
         saveFailure?.let { throw it }
         mutableQueue.value = queue
     }
@@ -477,12 +557,20 @@ private class FakeQueueRepository(
 
 private class FakePositionStore(
     private val positions: Map<String, Long> = emptyMap(),
+    var recordFailure: Throwable? = null,
 ) : PlaybackPositionStore {
     val records = mutableListOf<PositionRecord>()
+    var recordCalls = 0
+        private set
+
     override suspend fun resumePosition(mediaKey: String): Long? = positions[mediaKey]
+
     override suspend fun record(mediaKey: String, positionMs: Long, durationMs: Long, updatedAtEpochMs: Long, ended: Boolean) {
+        recordCalls += 1
+        recordFailure?.let { throw it }
         records += PositionRecord(mediaKey, positionMs, durationMs, ended)
     }
+
     override suspend fun clear(mediaKey: String) = Unit
 }
 

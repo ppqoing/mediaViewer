@@ -13,26 +13,37 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionError
+import androidx.media3.session.SessionResult
 import androidx.media3.session.SessionToken
+import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.queue.PlaybackNotice
 import com.local.mediaviewer.queue.PlaybackSessionState
 import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.service.ACTION_LOCAL_VIDEO_OUTPUT
+import com.local.mediaviewer.service.ACTION_PLAYBACK_NOTICE
 import com.local.mediaviewer.service.ACTION_RELOAD_CURRENT
+import com.local.mediaviewer.service.ACTION_RETRY_PERSISTENCE
 import com.local.mediaviewer.service.LocalVideoOutputBinder
 import com.local.mediaviewer.service.MediaItemMapper
+import com.local.mediaviewer.service.PlaybackNoticeCodec
 import com.local.mediaviewer.service.PlaybackService
 import com.local.mediaviewer.service.toMedia3Item
 import java.util.IdentityHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
@@ -57,6 +68,12 @@ class Media3PlaybackController(
     )
     override val sessionState: StateFlow<PlaybackSessionState> =
         mutableSessionState.asStateFlow()
+    private val mutableNotices = MutableSharedFlow<PlaybackNotice>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    override val notices: SharedFlow<PlaybackNotice> =
+        mutableNotices.asSharedFlow()
     private val mutableState = MutableStateFlow(mutableSessionState.value.playback)
     override val state: StateFlow<PlaybackState> = mutableState.asStateFlow()
     private val mutableVideoOutputState =
@@ -101,6 +118,25 @@ class Media3PlaybackController(
     }
 
     private val sessionListener = object : MediaController.Listener {
+        override fun onCustomCommand(
+            controller: MediaController,
+            command: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            if (command.customAction != ACTION_PLAYBACK_NOTICE) {
+                return Futures.immediateFuture(
+                    SessionResult(SessionError.ERROR_NOT_SUPPORTED),
+                )
+            }
+            val handle = controllerHandles[controller]
+            if (handle != null && connectionMachine.isCurrent(handle)) {
+                PlaybackNoticeCodec.decode(args)?.let(mutableNotices::tryEmit)
+            }
+            return Futures.immediateFuture(
+                SessionResult(SessionResult.RESULT_SUCCESS),
+            )
+        }
+
         override fun onDisconnected(controller: MediaController) {
             scope.launch {
                 controllerHandles[controller]?.let(
@@ -227,6 +263,13 @@ class Media3PlaybackController(
     override fun reloadCurrent() = withController { controller ->
         controller.sendCustomCommand(
             SessionCommand(ACTION_RELOAD_CURRENT, Bundle.EMPTY),
+            Bundle.EMPTY,
+        )
+    }
+
+    override fun retryPersistence() = withController { controller ->
+        controller.sendCustomCommand(
+            SessionCommand(ACTION_RETRY_PERSISTENCE, Bundle.EMPTY),
             Bundle.EMPTY,
         )
     }

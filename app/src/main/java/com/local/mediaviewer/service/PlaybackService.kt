@@ -2,6 +2,7 @@ package com.local.mediaviewer.service
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -10,6 +11,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
 import com.local.mediaviewer.MainActivity
 import com.local.mediaviewer.MediaViewerApplication
 import com.local.mediaviewer.navigation.ACTION_OPEN_CURRENT_PLAYER
@@ -26,6 +28,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -150,6 +153,7 @@ class PlaybackService : MediaSessionService() {
     private lateinit var localVideoBinder: LocalVideoOutputBinder
     private lateinit var localVideoBindingChannel: LocalVideoOutputBindingChannel
     private lateinit var snapshotTicker: PlaybackSnapshotTicker
+    private lateinit var noticeJob: Job
     private lateinit var releaseSequence:
         PlaybackReleaseSequence<PlaybackPersistenceSnapshot>
 
@@ -199,6 +203,18 @@ class PlaybackService : MediaSessionService() {
             )
             .setMediaButtonPreferences(mediaButtonPreferences())
             .build()
+        noticeJob = serviceScope.launch {
+            coordinator.notices.collect { notice ->
+                val args = PlaybackNoticeCodec.encode(notice)
+                session.connectedControllers.forEach { controller ->
+                    session.sendCustomCommand(
+                        controller,
+                        SessionCommand(ACTION_PLAYBACK_NOTICE, Bundle.EMPTY),
+                        args,
+                    )
+                }
+            }
+        }
         localVideoBinder = LocalVideoOutputBinder(coordinator)
         localVideoBindingChannel = LocalVideoOutputBindingChannel(localVideoBinder)
         snapshotTicker = PlaybackSnapshotTicker(
@@ -217,6 +233,7 @@ class PlaybackService : MediaSessionService() {
                 }
             },
             releaseResources = {
+                noticeJob.cancel()
                 snapshotTicker.close()
                 localVideoBindingChannel.invalidate()
                 session.release()
@@ -263,6 +280,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        if (::noticeJob.isInitialized) {
+            noticeJob.cancel()
+        }
         releaseSequence.releaseFromDestroy()
         serviceScope.cancel()
         super.onDestroy()

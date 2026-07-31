@@ -89,6 +89,8 @@ internal class ServiceTestQueueRepository(
 ) : PlaybackQueueRepository {
     private val mutableQueue = MutableStateFlow(initial)
     override val queue: StateFlow<PlaybackQueue> = mutableQueue
+    var saveCalls = 0
+        private set
 
     override suspend fun restore(): PlaybackQueue {
         restoreFailure?.let { throw it }
@@ -96,6 +98,7 @@ internal class ServiceTestQueueRepository(
     }
 
     override suspend fun save(queue: PlaybackQueue) {
+        saveCalls += 1
         mutableQueue.value = queue
     }
 }
@@ -103,6 +106,9 @@ internal class ServiceTestQueueRepository(
 internal class ServiceTestPositionStore(
     private val positions: Map<String, Long> = emptyMap(),
 ) : PlaybackPositionStore {
+    var recordCalls = 0
+        private set
+
     override suspend fun resumePosition(mediaKey: String): Long? = positions[mediaKey]
 
     override suspend fun record(
@@ -111,7 +117,9 @@ internal class ServiceTestPositionStore(
         durationMs: Long,
         updatedAtEpochMs: Long,
         ended: Boolean,
-    ) = Unit
+    ) {
+        recordCalls += 1
+    }
 
     override suspend fun clear(mediaKey: String) = Unit
 }

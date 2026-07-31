@@ -242,6 +242,57 @@ class PlaybackSessionCallbackTest {
         coordinator.close()
     }
 
+    @Test
+    fun `retry persistence command saves the current snapshot once`() = runTest {
+        val repository = ServiceTestQueueRepository(
+            PlaybackQueue(
+                items = listOf(serviceTestItem("a")),
+                currentMediaKey = "a",
+            ),
+        )
+        val positions = ServiceTestPositionStore()
+        val coordinator = serviceTestCoordinator(
+            scope = this,
+            repository = repository,
+            positions = positions,
+        )
+        coordinator.restore()
+        advanceUntilIdle()
+        val callback = PlaybackSessionCallback(coordinator, scope = this)
+        val fixture = mediaSession(coordinator, this)
+        val command = SessionCommand(ACTION_RETRY_PERSISTENCE, Bundle.EMPTY)
+        val controller = controllerInfo()
+
+        try {
+            assertTrue(
+                callback.onConnect(
+                    fixture.session,
+                    controller,
+                ).availableSessionCommands.contains(command),
+            )
+            val result = callback.onCustomCommand(
+                fixture.session,
+                controller,
+                command,
+                Bundle.EMPTY,
+            )
+            advanceUntilIdle()
+
+            assertEquals(SessionResult.RESULT_SUCCESS, result.get().resultCode)
+            assertEquals(1, repository.saveCalls)
+            assertEquals(1, positions.recordCalls)
+            assertEquals(
+                listOf("a"),
+                repository.queue.value.items.map { it.mediaKey },
+            )
+            assertEquals("a", repository.queue.value.currentMediaKey)
+        } finally {
+            fixture.session.release()
+            fixture.player.release()
+            coordinator.close()
+        }
+    }
+
     private fun mediaSession(
         coordinator: com.local.mediaviewer.queue.PlaybackCoordinator,
         scope: CoroutineScope,

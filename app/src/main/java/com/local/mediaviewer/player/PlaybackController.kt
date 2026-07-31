@@ -4,10 +4,13 @@ import android.view.ViewGroup
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.queue.PlaybackNotice
 import com.local.mediaviewer.queue.PlaybackSessionState
 import com.local.mediaviewer.queue.QueueMediaItem
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 sealed interface ControllerConnectionState {
     data object Connecting : ControllerConnectionState
@@ -69,6 +72,8 @@ private val detachedVideoOutputState = MutableStateFlow<VideoOutputConnectionSta
 
 interface QueuePlaybackController : PlaybackController {
     val sessionState: StateFlow<PlaybackSessionState>
+    val notices: SharedFlow<PlaybackNotice>
+        get() = noPlaybackNotices
 
     fun replaceQueue(items: List<QueueMediaItem>, startMediaKey: String)
 
@@ -94,9 +99,16 @@ interface QueuePlaybackController : PlaybackController {
 
     fun setPlaybackMode(mode: PlaybackMode)
 
+    fun retryPersistence() = Unit
+
     fun reconnect() = onAppStarted()
 
     fun onAppStarted() = Unit
 
     fun onAppStopped() = Unit
 }
+
+private val noPlaybackNotices: SharedFlow<PlaybackNotice> =
+    kotlinx.coroutines.flow.MutableSharedFlow<PlaybackNotice>(
+        replay = 0,
+    ).asSharedFlow()

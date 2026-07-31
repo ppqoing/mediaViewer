@@ -34,6 +34,10 @@ class PlaybackSessionCallback(
         ACTION_RELOAD_CURRENT,
         Bundle.EMPTY,
     )
+    private val retryPersistenceCommand = SessionCommand(
+        ACTION_RETRY_PERSISTENCE,
+        Bundle.EMPTY,
+    )
 
     override fun onConnect(
         mediaSession: MediaSession,
@@ -45,6 +49,7 @@ class PlaybackSessionCallback(
                     .buildUpon()
                     .add(stopAndReleaseCommand)
                     .add(reloadCurrentCommand)
+                    .add(retryPersistenceCommand)
                     .build(),
             )
             .build()
@@ -82,6 +87,11 @@ class PlaybackSessionCallback(
 
             ACTION_RELOAD_CURRENT -> scope.future {
                 coordinator.reloadCurrentFromSession()
+                SessionResult(SessionResult.RESULT_SUCCESS)
+            }
+
+            ACTION_RETRY_PERSISTENCE -> scope.future {
+                coordinator.saveCurrentSnapshot()
                 SessionResult(SessionResult.RESULT_SUCCESS)
             }
 
