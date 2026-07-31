@@ -2,21 +2,20 @@ package com.local.mediaviewer.ui.player
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.QueueMusic
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.ui.components.MediaIconButton
+import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.theme.MediaTheme
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlayerControls(
     state: PlayerUiState,
@@ -34,13 +33,14 @@ fun PlayerControls(
     playbackMode: PlaybackMode? = null,
     onPlaybackModeChanged: (PlaybackMode) -> Unit = {},
     onOpenQueue: (() -> Unit)? = null,
-    secondaryControls: @Composable RowScope.() -> Unit = {},
+    showLowFrequencyControls: Boolean = true,
+    secondaryControls: @Composable () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(MediaTheme.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(MediaTheme.spacing.xs),
     ) {
         state.resumedFromMs?.let { resumedFromMs ->
             Text("已从 ${formatPlaybackTime(resumedFromMs)} 继续播放")
@@ -61,20 +61,28 @@ fun PlayerControls(
             onPrevious = onPrevious,
             onNext = onNext,
         )
-        Row(modifier = Modifier.fillMaxWidth()) {
-            PlaybackSpeedMenu(
-                current = state.playbackSpeed,
-                onSpeedChanged = onSpeedChanged,
-            )
-            playbackMode?.let { mode ->
-                PlaybackModeButton(
-                    mode = mode,
-                    onModeChanged = onPlaybackModeChanged,
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MediaTheme.spacing.xs),
+            verticalArrangement = Arrangement.spacedBy(MediaTheme.spacing.xxs),
+        ) {
+            if (showLowFrequencyControls) {
+                PlaybackSpeedMenu(
+                    current = state.playbackSpeed,
+                    onSpeedChanged = onSpeedChanged,
                 )
-            }
-            onOpenQueue?.let { openQueue ->
-                IconButton(onClick = openQueue) {
-                    Icon(Icons.Default.QueueMusic, contentDescription = "打开队列")
+                playbackMode?.let { mode ->
+                    PlaybackModeButton(
+                        mode = mode,
+                        onModeChanged = onPlaybackModeChanged,
+                    )
+                }
+                onOpenQueue?.let { openQueue ->
+                    MediaIconButton(
+                        icon = MediaIcons.Queue,
+                        contentDescription = "打开队列",
+                        onClick = openQueue,
+                    )
                 }
             }
             secondaryControls()

@@ -7,16 +7,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.ui.components.PlayerIconButton
+import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
 fun PlaybackTransportControls(
@@ -37,13 +36,13 @@ fun PlaybackTransportControls(
     ) {
         ControlButton(
             description = "上一项",
-            icon = { enabled -> NeonPlayerIcon(PlayerIcons.Previous, null, enabled = enabled) },
+            icon = PlayerIcons.Previous,
             enabled = state.canSkipPrevious,
             onClick = onPrevious,
         )
         ControlButton(
             description = "快退 10 秒",
-            icon = { enabled -> NeonPlayerIcon(PlayerIcons.Back10, null, enabled = enabled) },
+            icon = PlayerIcons.Back10,
             enabled = seekEnabled,
             onClick = onSeekBack,
         )
@@ -55,13 +54,13 @@ fun PlaybackTransportControls(
         )
         ControlButton(
             description = "快进 10 秒",
-            icon = { enabled -> NeonPlayerIcon(PlayerIcons.Forward10, null, enabled = enabled) },
+            icon = PlayerIcons.Forward10,
             enabled = seekEnabled,
             onClick = onSeekForward,
         )
         ControlButton(
             description = "下一项",
-            icon = { enabled -> NeonPlayerIcon(PlayerIcons.Next, null, enabled = enabled) },
+            icon = PlayerIcons.Next,
             enabled = state.canSkipNext,
             onClick = onNext,
         )
@@ -71,23 +70,17 @@ fun PlaybackTransportControls(
 @Composable
 private fun ControlButton(
     description: String,
-    icon: @Composable (Boolean) -> Unit,
+    icon: ImageVector,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    IconButton(
+    PlayerIconButton(
+        icon = icon,
+        contentDescription = description,
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(48.dp),
-    ) {
-        androidx.compose.foundation.layout.Box(
-            modifier = Modifier.semantics {
-                contentDescription = description
-            },
-        ) {
-            icon(enabled)
-        }
-    }
+        modifier = Modifier.size(MediaTheme.sizing.minimumTouchTarget),
+    )
 }
 
 @Composable
@@ -100,7 +93,7 @@ private fun PrimaryControlButton(
     val action = playbackPrimaryAction(state.status)
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier.size(64.dp),
+        modifier = Modifier.size(MediaTheme.sizing.playerPrimaryButton),
     ) {
         PlayerIconButton(
             icon = action.icon,
@@ -111,7 +104,7 @@ private fun PrimaryControlButton(
             onClick = {
                 action.command.invoke(onPlay, onPause, onReplay)
             },
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier.size(MediaTheme.sizing.playerPrimaryButton),
         )
         if (state.status == PlaybackStatus.BUFFERING) {
             CircularProgressIndicator(

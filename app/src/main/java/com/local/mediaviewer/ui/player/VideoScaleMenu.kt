@@ -1,10 +1,6 @@
 package com.local.mediaviewer.ui.player
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,6 +9,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.local.mediaviewer.playback.VideoScaleMode
+import com.local.mediaviewer.ui.components.MediaOption
+import com.local.mediaviewer.ui.components.MediaOptionMenu
+import com.local.mediaviewer.ui.components.PlayerIconButton
 
 fun videoScaleLabel(mode: VideoScaleMode): String =
     when (mode) {
@@ -32,47 +31,34 @@ fun VideoScaleMenu(
     var expanded by remember { mutableStateOf(false) }
 
     Box(modifier) {
-        IconButton(
+        PlayerIconButton(
+            icon = PlayerIcons.Scale,
+            contentDescription = "画面比例",
             onClick = {
                 expanded = true
                 onExpandedChanged(true)
             },
             modifier = Modifier.testTag("video_scale_menu"),
-        ) {
-            NeonPlayerIcon(
-                icon = PlayerIcons.Scale,
-                contentDescription =
-                    "画面模式：${videoScaleLabel(current)}",
-            )
-        }
-        DropdownMenu(
+            stateDescription = "当前${videoScaleLabel(current)}",
+        )
+        MediaOptionMenu(
             expanded = expanded,
+            options = VideoScaleMode.entries.map { mode ->
+                MediaOption(
+                    key = mode,
+                    label = videoScaleLabel(mode),
+                )
+            },
+            selectedKey = current,
+            onSelect = { mode ->
+                expanded = false
+                onExpandedChanged(false)
+                onSelected(mode)
+            },
             onDismissRequest = {
                 expanded = false
                 onExpandedChanged(false)
             },
-        ) {
-            VideoScaleMode.entries.forEach { mode ->
-                DropdownMenuItem(
-                    text = { Text(videoScaleLabel(mode)) },
-                    onClick = {
-                        expanded = false
-                        onExpandedChanged(false)
-                        onSelected(mode)
-                    },
-                    leadingIcon = if (mode == current) {
-                        {
-                            NeonPlayerIcon(
-                                icon = PlayerIcons.Playing,
-                                contentDescription = null,
-                                active = true,
-                            )
-                        }
-                    } else {
-                        null
-                    },
-                )
-            }
-        }
+        )
     }
 }

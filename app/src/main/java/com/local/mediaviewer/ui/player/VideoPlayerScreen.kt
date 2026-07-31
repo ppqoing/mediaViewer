@@ -2,24 +2,20 @@ package com.local.mediaviewer.ui.player
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,9 +33,15 @@ import com.local.mediaviewer.player.PlaybackController
 import com.local.mediaviewer.player.VideoInteractionReducer
 import com.local.mediaviewer.player.VideoInteractionState
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.playback.PlaybackSpeeds
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.settings.PlayerPreferencesRepository
+import com.local.mediaviewer.ui.components.MediaIconButton
+import com.local.mediaviewer.ui.components.MediaOption
+import com.local.mediaviewer.ui.components.MediaOptionMenu
+import com.local.mediaviewer.ui.components.MediaTopAppBar
+import com.local.mediaviewer.ui.icons.MediaIcons
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -124,13 +126,9 @@ fun VideoPlayerScreen(
     Scaffold(
         topBar = {
             if (!fullscreen) {
-                TopAppBar(
-                    title = { Text(state.name) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Default.ArrowBack, "返回")
-                        }
-                    },
+                MediaTopAppBar(
+                    title = state.name,
+                    onBack = onBack,
                 )
             }
         },
@@ -147,17 +145,24 @@ fun VideoPlayerScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
                 when (state.status) {
-                    PlaybackStatus.OPENING -> CircularProgressIndicator(
+                    PlaybackStatus.OPENING -> PlayerStateOverlay(
+                        kind = PlayerOverlayKind.OPENING,
                         modifier = Modifier.align(Alignment.Center),
                     )
 
-                    PlaybackStatus.BUFFERING -> CircularProgressIndicator(
+                    PlaybackStatus.BUFFERING -> Box(
                         modifier = Modifier
                             .align(Alignment.Center)
+                            .offset(y = 24.dp)
                             .testTag("video_buffering_spinner"),
-                    )
+                    ) {
+                        PlayerStateOverlay(
+                            kind = PlayerOverlayKind.BUFFERING,
+                        )
+                    }
 
-                    PlaybackStatus.ERROR -> ErrorPlayerContent(
+                    PlaybackStatus.ERROR -> PlayerStateOverlay(
+                        kind = PlayerOverlayKind.ERROR,
                         message = state.errorMessage.orEmpty(),
                         onRetry = onRetry,
                         onBack = onBack,
@@ -244,24 +249,25 @@ fun VideoPlayerScreen(
                 }
             }
             if (!fullscreen) {
-                PlayerControls(
-                    state = state,
-                    onPlay = onPlay,
-                    onPause = onPause,
-                    onReplay = onReplay,
-                    onSeekBack = onSeekBack,
-                    onSeekForward = onSeekForward,
-                    onBeginScrub = onBeginScrub,
-                    onPreviewScrub = onPreviewScrub,
-                    onCommitScrub = onCommitScrub,
-                    onPrevious = onPrevious,
-                    onNext = onNext,
-                    onSpeedChanged = onSpeedChanged,
-                    playbackMode = playbackMode,
-                    onPlaybackModeChanged = onPlaybackModeChanged,
-                    onOpenQueue = onOpenQueue,
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val compact = maxWidth < 600.dp
+                    PlayerControls(
+                        state = state,
+                        onPlay = onPlay,
+                        onPause = onPause,
+                        onReplay = onReplay,
+                        onSeekBack = onSeekBack,
+                        onSeekForward = onSeekForward,
+                        onBeginScrub = onBeginScrub,
+                        onPreviewScrub = onPreviewScrub,
+                        onCommitScrub = onCommitScrub,
+                        onPrevious = onPrevious,
+                        onNext = onNext,
+                        onSpeedChanged = onSpeedChanged,
+                        playbackMode = playbackMode,
+                        onPlaybackModeChanged = onPlaybackModeChanged,
+                        showLowFrequencyControls = !compact,
+                    ) {
                         PlaybackVolumeControl(
                             state = volumeState,
                             expanded = volumeExpanded,
@@ -270,10 +276,38 @@ fun VideoPlayerScreen(
                             onToggleMute = volumeController::toggleMute,
                             onVolumeChanged = volumeController::setFraction,
                         )
-                        VideoScaleMenu(state.videoScaleMode, onVideoScaleModeChanged)
-                        IconButton(onClick = fullscreenController::enter) {
-                            Icon(Icons.Default.Fullscreen, "全屏")
+                        if (compact) {
+                            OrdinaryPlaybackSettingsMenu(
+                                state = state,
+                                playbackMode = playbackMode,
+                                onSpeedChanged = onSpeedChanged,
+                                onPlaybackModeChanged = onPlaybackModeChanged,
+                                onVideoScaleModeChanged = onVideoScaleModeChanged,
+                                onExpandedChanged = { expanded ->
+                                    interaction = interaction.copy(
+                                        menuExpanded = expanded,
+                                    )
+                                },
+                            )
+                        } else {
+                            VideoScaleMenu(
+                                current = state.videoScaleMode,
+                                onSelected = onVideoScaleModeChanged,
+                            )
                         }
+                        onOpenQueue?.let { openQueue ->
+                            MediaIconButton(
+                                icon = MediaIcons.Queue,
+                                contentDescription = "打开队列",
+                                onClick = openQueue,
+                                modifier = Modifier.testTag("queue_entry_ordinary"),
+                            )
+                        }
+                        MediaIconButton(
+                            icon = Icons.Default.Fullscreen,
+                            contentDescription = "全屏",
+                            onClick = fullscreenController::enter,
+                        )
                     }
                 }
             }
@@ -304,16 +338,119 @@ fun VideoPlayerScreen(
     }
 }
 
+private enum class OrdinarySettingsPage {
+    ROOT,
+    SPEED,
+    MODE,
+    SCALE,
+}
+
 @Composable
-private fun ErrorPlayerContent(
-    message: String,
-    onRetry: () -> Unit,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier,
+private fun OrdinaryPlaybackSettingsMenu(
+    state: PlayerUiState,
+    playbackMode: PlaybackMode?,
+    onSpeedChanged: (Float) -> Unit,
+    onPlaybackModeChanged: (PlaybackMode) -> Unit,
+    onVideoScaleModeChanged: (VideoScaleMode) -> Unit,
+    onExpandedChanged: (Boolean) -> Unit,
 ) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(message)
-        Button(onClick = onRetry) { Text("重试") }
-        TextButton(onClick = onBack) { Text("返回") }
+    var page by remember { mutableStateOf<OrdinarySettingsPage?>(null) }
+
+    fun closeMenu() {
+        page = null
+        onExpandedChanged(false)
+    }
+
+    Box {
+        MediaIconButton(
+            icon = MediaIcons.More,
+            contentDescription = "更多播放设置",
+            onClick = {
+                page = OrdinarySettingsPage.ROOT
+                onExpandedChanged(true)
+            },
+        )
+
+        MediaOptionMenu(
+            expanded = page == OrdinarySettingsPage.ROOT,
+            options = buildList<MediaOption<OrdinarySettingsPage>> {
+                add(
+                    MediaOption(
+                        key = OrdinarySettingsPage.SPEED,
+                        label = "播放速度",
+                        icon = PlayerIcons.Speed,
+                    ),
+                )
+                if (playbackMode != null) {
+                    add(
+                        MediaOption(
+                            key = OrdinarySettingsPage.MODE,
+                            label = "播放模式",
+                            icon = PlayerIcons.Sequential,
+                        ),
+                    )
+                }
+                add(
+                    MediaOption(
+                        key = OrdinarySettingsPage.SCALE,
+                        label = "画面比例",
+                        icon = PlayerIcons.Scale,
+                    ),
+                )
+            },
+            selectedKey = null,
+            onSelect = { selected -> page = selected },
+            onDismissRequest = ::closeMenu,
+        )
+
+        MediaOptionMenu(
+            expanded = page == OrdinarySettingsPage.SPEED,
+            options = PlaybackSpeeds.supported.map { speed ->
+                MediaOption(
+                    key = speed,
+                    label = "${formatPlaybackSpeed(speed)} 倍",
+                )
+            },
+            selectedKey = state.playbackSpeed,
+            onSelect = { speed ->
+                onSpeedChanged(speed)
+                closeMenu()
+            },
+            onDismissRequest = ::closeMenu,
+        )
+
+        playbackMode?.let { currentMode ->
+            MediaOptionMenu(
+                expanded = page == OrdinarySettingsPage.MODE,
+                options = PlaybackMode.entries.map { mode ->
+                    MediaOption(
+                        key = mode,
+                        label = mode.label(),
+                    )
+                },
+                selectedKey = currentMode,
+                onSelect = { mode ->
+                    onPlaybackModeChanged(mode)
+                    closeMenu()
+                },
+                onDismissRequest = ::closeMenu,
+            )
+        }
+
+        MediaOptionMenu(
+            expanded = page == OrdinarySettingsPage.SCALE,
+            options = VideoScaleMode.entries.map { mode ->
+                MediaOption(
+                    key = mode,
+                    label = videoScaleLabel(mode),
+                )
+            },
+            selectedKey = state.videoScaleMode,
+            onSelect = { mode ->
+                onVideoScaleModeChanged(mode)
+                closeMenu()
+            },
+            onDismissRequest = ::closeMenu,
+        )
     }
 }

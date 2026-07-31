@@ -1,7 +1,6 @@
 package com.local.mediaviewer.ui.player
 
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -13,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.local.mediaviewer.playback.PlaybackSpeeds
+import com.local.mediaviewer.ui.components.MediaOption
+import com.local.mediaviewer.ui.components.MediaOptionMenu
 import java.util.Locale
 
 @Composable
@@ -24,44 +25,38 @@ fun PlaybackSpeedMenu(
     var expanded by remember { mutableStateOf(false) }
     val description = "播放速度，当前 ${formatPlaybackSpeed(current)} 倍"
 
-    TextButton(
-        onClick = {
-            expanded = true
-            onExpandedChanged(true)
-        },
-        modifier = Modifier.semantics {
-            contentDescription = description
-        },
-    ) {
-        NeonPlayerIcon(PlayerIcons.Speed, contentDescription = null)
-        Text("${formatPlaybackSpeed(current)} 倍")
-    }
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = {
-            expanded = false
-            onExpandedChanged(false)
-        },
-    ) {
-        PlaybackSpeeds.supported.forEach { speed ->
-            DropdownMenuItem(
-                text = { Text("${formatPlaybackSpeed(speed)} 倍") },
-                onClick = {
-                    onSpeedChanged(speed)
-                    expanded = false
-                    onExpandedChanged(false)
-                },
-                trailingIcon = {
-                    if (speed == current) {
-                        NeonPlayerIcon(
-                            icon = PlayerIcons.Playing,
-                            contentDescription = "已选择",
-                            active = true,
-                        )
-                    }
-                },
-            )
+    Box {
+        TextButton(
+            onClick = {
+                expanded = true
+                onExpandedChanged(true)
+            },
+            modifier = Modifier.semantics {
+                contentDescription = description
+            },
+        ) {
+            NeonPlayerIcon(PlayerIcons.Speed, contentDescription = null)
+            Text("${formatPlaybackSpeed(current)} 倍")
         }
+        MediaOptionMenu(
+            expanded = expanded,
+            options = PlaybackSpeeds.supported.map { speed ->
+                MediaOption(
+                    key = speed,
+                    label = "${formatPlaybackSpeed(speed)} 倍",
+                )
+            },
+            selectedKey = current,
+            onSelect = { speed ->
+                onSpeedChanged(speed)
+                expanded = false
+                onExpandedChanged(false)
+            },
+            onDismissRequest = {
+                expanded = false
+                onExpandedChanged(false)
+            },
+        )
     }
 }
 

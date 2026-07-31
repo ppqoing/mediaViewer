@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
 fun PlaybackModeButton(
@@ -41,7 +42,10 @@ fun PlaybackModeButton(
                 contentDescription = null,
                 active = true,
             )
-            Text(label, modifier = Modifier.padding(start = 4.dp))
+            Text(
+                label,
+                modifier = Modifier.padding(start = MediaTheme.spacing.xxs),
+            )
         }
     }
 }

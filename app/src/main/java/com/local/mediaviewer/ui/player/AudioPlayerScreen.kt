@@ -2,22 +2,15 @@ package com.local.mediaviewer.ui.player
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AudioFile
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,13 +19,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.ui.components.MediaScreenScaffold
+import com.local.mediaviewer.ui.theme.MediaTheme
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioPlayerScreen(
     state: PlayerUiState,
@@ -56,6 +49,7 @@ fun AudioPlayerScreen(
     onBack: () -> Unit,
 ) {
     val volumeState by volumeController.state.collectAsStateWithLifecycle()
+    val scrollState = rememberScrollState()
     var volumeExpanded by remember { mutableStateOf(false) }
     BackHandler(onBack = onBack)
     ResumeHintDismissEffect(
@@ -63,37 +57,58 @@ fun AudioPlayerScreen(
         onResumeHintShown = onResumeHintShown,
     )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(state.name) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector =
-                                Icons.AutoMirrored.Default.ArrowBack,
-                            contentDescription = "返回",
-                        )
-                    }
-                },
-            )
-        },
+    MediaScreenScaffold(
+        title = "音频播放",
+        onBack = onBack,
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .verticalScroll(scrollState)
+                .padding(
+                    horizontal = MediaTheme.spacing.md,
+                    vertical = MediaTheme.spacing.sm,
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.spacedBy(MediaTheme.spacing.xs),
         ) {
-            Icon(
-                imageVector = Icons.Default.AudioFile,
-                contentDescription = "音频",
-                modifier = Modifier.size(96.dp),
-            )
-            if (state.status == PlaybackStatus.OPENING) {
-                CircularProgressIndicator()
+            Box(contentAlignment = Alignment.Center) {
+                AudioArtworkPlaceholder()
+                when (state.status) {
+                    PlaybackStatus.OPENING -> PlayerStateOverlay(
+                        kind = PlayerOverlayKind.OPENING,
+                    )
+
+                    PlaybackStatus.BUFFERING -> Box(
+                        modifier = Modifier.testTag("audio_buffering_spinner"),
+                    ) {
+                        PlayerStateOverlay(
+                            kind = PlayerOverlayKind.BUFFERING,
+                        )
+                    }
+
+                    PlaybackStatus.ERROR -> PlayerStateOverlay(
+                        kind = PlayerOverlayKind.ERROR,
+                        message = state.errorMessage,
+                        onRetry = onRetry,
+                        onBack = onBack,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    else -> Unit
+                }
             }
+            Text(
+                text = state.name,
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+            )
+            Text(
+                text = "音频文件",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             PlayerControls(
                 state = state,
                 onPlay = onPlay,
@@ -122,18 +137,6 @@ fun AudioPlayerScreen(
                     onToggleMute = volumeController::toggleMute,
                     onVolumeChanged = volumeController::setFraction,
                 )
-            }
-            if (state.status == PlaybackStatus.BUFFERING) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .testTag("audio_buffering_spinner"),
-                )
-            }
-            if (state.status == PlaybackStatus.ERROR) {
-                Text(state.errorMessage.orEmpty())
-                Button(onClick = onRetry) { Text("重试") }
-                TextButton(onClick = onBack) { Text("返回") }
             }
         }
     }

@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.local.mediaviewer.ui.theme.MediaTheme
 
 internal val NeonCyan = Color(0xFF48E7FF)
 internal val NeonPurple = Color(0xFF9B6CFF)
@@ -38,13 +39,18 @@ fun NeonPlayerIcon(
     modifier: Modifier = Modifier.size(24.dp),
 ) {
     val visualState = neonPlayerIconVisualState(active, enabled)
-    val foreground = if (enabled) NeonCyan else NeonCyan.copy(alpha = 0.38f)
+    val colors = MediaTheme.playerColors
+    val foreground = when {
+        !enabled -> colors.disabled
+        active -> colors.active
+        else -> colors.control
+    }
     Box(modifier = modifier) {
         if (visualState.showActiveAccent) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = NeonPurple.copy(alpha = 0.55f),
+                tint = colors.accent.copy(alpha = 0.55f),
                 modifier = Modifier.matchParentSize().offset(1.dp, 1.dp),
             )
         }
@@ -57,7 +63,7 @@ fun NeonPlayerIcon(
         if (visualState.showDisabledMark) {
             Canvas(modifier = Modifier.matchParentSize()) {
                 drawLine(
-                    color = Color.White.copy(alpha = 0.78f),
+                    color = colors.disabled,
                     start = Offset(size.width * 0.18f, size.height * 0.18f),
                     end = Offset(size.width * 0.82f, size.height * 0.82f),
                     strokeWidth = 2.dp.toPx(),

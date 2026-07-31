@@ -1,20 +1,34 @@
 package com.local.mediaviewer
 
 import android.view.ViewGroup
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.player.PlaybackController
+import com.local.mediaviewer.queue.PlaybackMode
+import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import com.local.mediaviewer.ui.player.AudioPlayerScreen
 import com.local.mediaviewer.ui.player.FullscreenStateController
 import com.local.mediaviewer.ui.player.VideoPlayerScreen
@@ -29,6 +43,124 @@ import org.junit.Test
 class PlayerScreenTest {
     @get:Rule
     val rule = createComposeRule()
+
+    @Test
+    fun audioPlayerHasLocalArtworkAndNoVideoOnlyControls() {
+        showAudio(playerState(name = "song.flac", kind = MediaKind.AUDIO))
+
+        rule.onNodeWithTag("audio_artwork").assertIsDisplayed()
+        rule.onNodeWithText("song.flac").assertIsDisplayed()
+        rule.onNodeWithContentDescription("画面比例").assertDoesNotExist()
+        rule.onNodeWithContentDescription("全屏").assertDoesNotExist()
+        rule.onNodeWithContentDescription("调节亮度").assertDoesNotExist()
+    }
+
+    @Test
+    fun ordinaryVideoKeepsOneStableSurfaceAndMovesLowFrequencyOptionsToMenu() {
+        showVideo(playerState(name = "movie.mp4", kind = MediaKind.VIDEO))
+
+        rule.onAllNodesWithTag("vlc_surface").assertCountEquals(1)
+        rule.onNodeWithContentDescription("更多播放设置").performClick()
+        rule.onNodeWithText("播放速度").assertIsDisplayed()
+        rule.onNodeWithText("画面比例").assertIsDisplayed()
+    }
+
+    @Test
+    fun openingBufferingAndErrorKeepNavigationAndSingleTimeline() {
+        var state by mutableStateOf(
+            playerState(
+                name = "movie.mp4",
+                kind = MediaKind.VIDEO,
+                status = PlaybackStatus.OPENING,
+            ),
+        )
+        showVideo(stateProvider = { state })
+
+        rule.onNodeWithContentDescription("返回").assertIsDisplayed()
+        rule.onAllNodesWithTag("playback_timeline").assertCountEquals(1)
+        rule.onNodeWithTag("player_state_opening").assertIsDisplayed()
+
+        rule.runOnIdle {
+            state = state.copy(status = PlaybackStatus.BUFFERING)
+        }
+        rule.onNodeWithTag("player_state_buffering").assertIsDisplayed()
+        rule.onNodeWithContentDescription("返回").assertIsDisplayed()
+        rule.onAllNodesWithTag("playback_timeline").assertCountEquals(1)
+
+        rule.runOnIdle {
+            state = state.copy(
+                status = PlaybackStatus.ERROR,
+                errorMessage = "无法播放该媒体",
+            )
+        }
+        rule.onNodeWithTag("player_state_error").assertIsDisplayed()
+        rule.onNodeWithText("无法播放该媒体").assertIsDisplayed()
+        rule.onNodeWithContentDescription("返回").assertIsDisplayed()
+        rule.onAllNodesWithTag("playback_timeline").assertCountEquals(1)
+    }
+
+    @Test
+    fun audioErrorActionsRemainReachableAt320DpAndTwoXFont() {
+        var retries = 0
+        var backs = 0
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(
+                    density = 1f,
+                    fontScale = 2f,
+                ),
+            ) {
+                MediaViewerTheme {
+                    Box(
+                        modifier = androidx.compose.ui.Modifier.size(
+                            width = 320.dp,
+                            height = 568.dp,
+                        ),
+                    ) {
+                        AudioPlayerScreen(
+                            state = PlayerUiState(
+                                name = "一首文件名很长的无损音乐文件.flac",
+                                kind = MediaKind.AUDIO,
+                                status = PlaybackStatus.ERROR,
+                                durationMs = 60_000L,
+                                isSeekable = true,
+                                errorMessage =
+                                    "无法播放该媒体，请检查网络连接后重试",
+                            ),
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onSeekBack = {},
+                            onSeekForward = {},
+                            onBeginScrub = {},
+                            onPreviewScrub = {},
+                            onCommitScrub = {},
+                            onPrevious = {},
+                            onNext = {},
+                            onSpeedChanged = {},
+                            playbackMode = PlaybackMode.SEQUENTIAL,
+                            onPlaybackModeChanged = {},
+                            onOpenQueue = {},
+                            onRetry = { retries++ },
+                            volumeController = ScreenFakeVolumeController(),
+                            onBack = { backs++ },
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithContentDescription("返回").assertIsDisplayed()
+        rule.onNodeWithText("重试")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        rule.runOnIdle { assertEquals(1, retries) }
+        rule.onNodeWithContentDescription("返回")
+            .assertIsDisplayed()
+            .performClick()
+        rule.runOnIdle { assertEquals(1, backs) }
+    }
 
     @Test
     fun audioScreenShowsControlsWithoutVideoSurface() {
@@ -113,9 +245,10 @@ class PlayerScreenTest {
 
         rule.onNodeWithContentDescription("音量，当前 50%，未静音").assertIsDisplayed()
         rule.onNodeWithContentDescription("音量，当前 50%，未静音").performClick()
+        rule.onNodeWithContentDescription("静音").performClick()
         rule.onNodeWithContentDescription("音量，当前 0%，已静音").assertIsDisplayed()
         rule.onNodeWithContentDescription("取消静音").assertIsDisplayed()
-        rule.onNodeWithTag("volume_slider").assertIsDisplayed()
+        rule.onNodeWithTag("volume_slider_vertical").assertIsDisplayed()
         rule.onNodeWithContentDescription("亮度").assertDoesNotExist()
         rule.onNodeWithContentDescription("锁定控制").assertDoesNotExist()
         rule.onNodeWithContentDescription("画面比例").assertDoesNotExist()
@@ -163,12 +296,13 @@ class PlayerScreenTest {
             }
         }
 
-        rule.onNodeWithTag("video_scale_menu")
-            .performClick()
-        rule.onNodeWithContentDescription("画面比例")
-            .assertIsDisplayed()
         rule.onNodeWithContentDescription("全屏")
             .assertIsDisplayed()
+        rule.onNodeWithContentDescription("更多播放设置")
+            .performClick()
+        rule.onNodeWithText("画面比例")
+            .assertIsDisplayed()
+            .performClick()
         rule.onNodeWithText("等比适应")
             .assertIsDisplayed()
         rule.onNodeWithText("裁剪铺满")
@@ -350,6 +484,80 @@ class PlayerScreenTest {
 
         rule.onNodeWithTag("audio_buffering_spinner").assertIsDisplayed()
     }
+
+    private fun playerState(
+        name: String,
+        kind: MediaKind,
+        status: PlaybackStatus = PlaybackStatus.PAUSED,
+    ) = PlayerUiState(
+        name = name,
+        kind = kind,
+        status = status,
+        durationMs = 60_000L,
+        isSeekable = true,
+    )
+
+    private fun showAudio(state: PlayerUiState) {
+        rule.setContent {
+            MediaViewerTheme {
+                AudioPlayerScreen(
+                    state = state,
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    onRetry = {},
+                    volumeController = ScreenFakeVolumeController(),
+                    onBack = {},
+                )
+            }
+        }
+    }
+
+    private fun showVideo(
+        stateProvider: () -> PlayerUiState,
+    ) {
+        rule.setContent {
+            MediaViewerTheme {
+                VideoPlayerScreen(
+                    state = stateProvider(),
+                    controller = ScreenFakePlaybackController(),
+                    fullscreenController = ScreenFakeFullscreenController(),
+                    preferences = ScreenPlayerPreferencesRepository(
+                        initiallyShown = true,
+                    ),
+                    volumeController = ScreenFakeVolumeController(),
+                    brightnessController = ScreenFakeBrightnessController(),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    playbackMode = PlaybackMode.SEQUENTIAL,
+                    onPlaybackModeChanged = {},
+                    onOpenQueue = {},
+                    onRetry = {},
+                    onVideoScaleModeChanged = {},
+                    onBack = {},
+                )
+            }
+        }
+    }
+
+    private fun showVideo(state: PlayerUiState) = showVideo { state }
 }
 
 private class ScreenFakeFullscreenController :
@@ -370,8 +578,10 @@ private class ScreenFakeFullscreenController :
     }
 }
 
-private class ScreenPlayerPreferencesRepository : PlayerPreferencesRepository {
-    private val mutable = MutableStateFlow(true)
+private class ScreenPlayerPreferencesRepository(
+    initiallyShown: Boolean = true,
+) : PlayerPreferencesRepository {
+    private val mutable = MutableStateFlow(initiallyShown)
     override val hasShownVideoGestures: StateFlow<Boolean> = mutable
 
     override suspend fun markVideoGesturesShown() {
