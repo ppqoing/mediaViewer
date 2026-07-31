@@ -277,6 +277,10 @@ class Media3PlaybackController(
         }
     }
 
+    override fun reconnect() {
+        connectionMachine.demandConnection()
+    }
+
     override fun onAppStarted() {
         connectionMachine.demandConnection()
     }

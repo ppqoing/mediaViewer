@@ -23,6 +23,17 @@ class Media3StateMapperTest {
     }
 
     @Test
+    fun `连接失败且无快照时保留顶层错误并保持正在打开`() {
+        val mapped = Media3StateMapper.map(
+            connectionState = ControllerConnectionState.Failed("服务未响应"),
+            snapshot = null,
+        )
+
+        assertEquals("服务未响应", mapped.errorMessage)
+        assertEquals(PlaybackStatus.OPENING, mapped.playback.status)
+    }
+
+    @Test
     fun `缓冲状态保留当前项队列命令循环随机和倍速`() {
         val first = item("first", MediaKind.VIDEO)
         val second = item("second", MediaKind.AUDIO)

@@ -30,45 +30,51 @@ class CurrentPlayerNavigationTest {
     }
 
     @Test
-    fun `播放器路由在连接窗口等待而在已连接空队列时退出`() {
+    fun `connection failure wins over the initial waiting state`() {
+        val state = resolvePlayerEntryState(
+            session = session(currentItem = null, errorMessage = "播放器连接失败"),
+            hasPresentedItem = false,
+            waitExpired = false,
+        )
+
         assertEquals(
-            PlayerRouteContent.Waiting,
-            resolvePlayerRouteContent(
-                PlaybackSessionState(
-                    playback = PlaybackState(status = PlaybackStatus.OPENING),
-                ),
+            PlayerEntryState.Failed("播放器连接失败"),
+            state,
+        )
+    }
+
+    @Test
+    fun `initial idle becomes empty only after the finite wait`() {
+        val idle = session(currentItem = null, status = PlaybackStatus.IDLE)
+
+        assertEquals(
+            PlayerEntryState.Connecting,
+            resolvePlayerEntryState(
+                idle,
                 hasPresentedItem = false,
+                waitExpired = false,
             ),
         )
         assertEquals(
-            PlayerRouteContent.Waiting,
-            resolvePlayerRouteContent(
-                PlaybackSessionState(
-                    playback = PlaybackState(status = PlaybackStatus.IDLE),
-                ),
+            PlayerEntryState.Empty,
+            resolvePlayerEntryState(
+                idle,
                 hasPresentedItem = false,
+                waitExpired = true,
             ),
         )
+    }
+
+    @Test
+    fun `a current item always produces ready`() {
+        val item = item("video-a")
+
         assertEquals(
-            PlayerRouteContent.Empty,
-            resolvePlayerRouteContent(
-                PlaybackSessionState(
-                    playback = PlaybackState(status = PlaybackStatus.IDLE),
-                ),
-                hasPresentedItem = true,
-            ),
-        )
-        assertEquals(
-            PlayerRouteContent.Ready(item("b")),
-            resolvePlayerRouteContent(
-                PlaybackSessionState(
-                    queue = PlaybackQueue(
-                        items = listOf(item("b")),
-                        currentMediaKey = "b",
-                    ),
-                    currentItem = item("b"),
-                ),
+            PlayerEntryState.Ready(item),
+            resolvePlayerEntryState(
+                session(currentItem = item, errorMessage = "stale error"),
                 hasPresentedItem = false,
+                waitExpired = true,
             ),
         )
     }
@@ -97,6 +103,20 @@ class CurrentPlayerNavigationTest {
             ),
         )
     }
+
+    private fun session(
+        currentItem: QueueMediaItem? = null,
+        status: PlaybackStatus = PlaybackStatus.IDLE,
+        errorMessage: String? = null,
+    ) = PlaybackSessionState(
+        playback = PlaybackState(status = status),
+        queue = PlaybackQueue(
+            items = listOfNotNull(currentItem),
+            currentMediaKey = currentItem?.mediaKey,
+        ),
+        currentItem = currentItem,
+        errorMessage = errorMessage,
+    )
 
     private fun item(key: String) = QueueMediaItem(
         mediaKey = key,

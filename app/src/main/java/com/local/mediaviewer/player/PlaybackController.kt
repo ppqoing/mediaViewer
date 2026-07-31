@@ -94,6 +94,8 @@ interface QueuePlaybackController : PlaybackController {
 
     fun setPlaybackMode(mode: PlaybackMode)
 
+    fun reconnect() = onAppStarted()
+
     fun onAppStarted() = Unit
 
     fun onAppStopped() = Unit

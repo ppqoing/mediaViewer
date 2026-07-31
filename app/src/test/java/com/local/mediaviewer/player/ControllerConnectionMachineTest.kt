@@ -7,6 +7,33 @@ import org.junit.Test
 
 class ControllerConnectionMachineTest {
     @Test
+    fun `explicit reconnect after failure creates a new generation without dropping commands`() {
+        val requestedGenerations = mutableListOf<Long>()
+        val executedWith = mutableListOf<String>()
+        val machine = ControllerConnectionMachine<String>(
+            maxPendingCommands = 8,
+            onStateChanged = {},
+            requestConnection = requestedGenerations::add,
+            release = {},
+        )
+        machine.start()
+        val firstGeneration = requestedGenerations.single()
+        machine.submit { executedWith += it }
+        machine.onConnectionFailed(
+            generation = firstGeneration,
+            message = "offline",
+            shouldReconnect = false,
+        )
+
+        machine.demandConnection()
+        val secondGeneration = requestedGenerations.last()
+        machine.onConnected(secondGeneration, "second connection")
+
+        assertTrue(secondGeneration > firstGeneration)
+        assertEquals(listOf("second connection"), executedWith)
+    }
+
+    @Test
     fun `连接失败进入新代次且旧代次成功不能覆盖新连接`() {
         val requested = mutableListOf<Long>()
         val released = mutableListOf<String>()
