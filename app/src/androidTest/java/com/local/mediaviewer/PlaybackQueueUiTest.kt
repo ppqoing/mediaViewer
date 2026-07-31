@@ -1,17 +1,29 @@
 package com.local.mediaviewer
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertRangeInfoEquals
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -20,6 +32,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.playback.PlaybackState
@@ -259,6 +273,475 @@ class PlaybackQueueUiTest {
         rule.onNodeWithContentDescription("重新播放").performClick()
         rule.runOnIdle { assertEquals(1, replays) }
     }
+
+    @Test
+    fun miniPlayerShowsRealProgressAndDisablesUnavailableNext() {
+        val current = item("video", "movie.mp4", MediaKind.VIDEO)
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = 1f),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(600.dp)) {
+                        NowPlayingBar(
+                            state = PlaybackSessionState(
+                                playback = PlaybackState(
+                                    status = PlaybackStatus.BUFFERING,
+                                    positionMs = 25_000L,
+                                    durationMs = 100_000L,
+                                ),
+                                queue = PlaybackQueue(
+                                    items = listOf(current),
+                                    currentMediaKey = current.mediaKey,
+                                ),
+                                currentItem = current,
+                                canSkipNext = false,
+                            ),
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onNext = {},
+                            onOpenQueue = {},
+                            onOpenPlayer = {},
+                        )
+                    }
+                }
+            }
+        }
+        rule.onNodeWithTag("mini_player_progress")
+            .assertIsDisplayed()
+            .assertRangeInfoEquals(ProgressBarRangeInfo(0.25f, 0f..1f))
+        rule.onNodeWithContentDescription("暂停")
+            .assertIsEnabled()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "正在缓冲，可暂停",
+                ),
+            )
+        rule.onNodeWithContentDescription("下一项").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("调节音量").assertDoesNotExist()
+    }
+
+    @Test
+    fun compactMiniKeepsPrimaryAndQueueWithoutNextOrVolume() {
+        val current = item("audio", "long song name.flac", MediaKind.AUDIO)
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = 2f),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(320.dp)) {
+                        NowPlayingBar(
+                            state = PlaybackSessionState(
+                                playback = PlaybackState(
+                                    status = PlaybackStatus.PAUSED,
+                                    positionMs = 10_000L,
+                                    durationMs = 100_000L,
+                                ),
+                                queue = PlaybackQueue(
+                                    items = listOf(
+                                        current,
+                                        item("next", "next.flac", MediaKind.AUDIO),
+                                    ),
+                                    currentMediaKey = current.mediaKey,
+                                ),
+                                currentItem = current,
+                                canSkipNext = true,
+                            ),
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onNext = {},
+                            onOpenQueue = {},
+                            onOpenPlayer = {},
+                        )
+                    }
+                }
+            }
+        }
+        rule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        rule.onNodeWithTag("queue_entry_mini").assertIsDisplayed()
+        rule.onNodeWithContentDescription("下一项").assertDoesNotExist()
+        rule.onNodeWithContentDescription("调节音量").assertDoesNotExist()
+    }
+
+    @Test
+    fun miniProgressUsesClampedActualPosition() {
+        val current = item("prog", "clip.mp4", MediaKind.VIDEO)
+        var session by mutableStateOf(
+            miniSession(
+                current,
+                status = PlaybackStatus.PLAYING,
+                positionMs = 25_000L,
+                durationMs = 100_000L,
+                bufferedPercent = 0.9f,
+            ),
+        )
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = 1f),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(600.dp)) {
+                        NowPlayingBar(
+                            state = session,
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onNext = {},
+                            onOpenQueue = {},
+                            onOpenPlayer = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithTag("mini_player_progress")
+            .assertRangeInfoEquals(ProgressBarRangeInfo(0.25f, 0f..1f))
+        rule.runOnIdle {
+            session = session.copy(
+                playback = session.playback.copy(positionMs = 150_000L),
+            )
+        }
+        rule.onNodeWithTag("mini_player_progress")
+            .assertRangeInfoEquals(ProgressBarRangeInfo(1f, 0f..1f))
+        rule.runOnIdle {
+            session = session.copy(
+                playback = session.playback.copy(positionMs = 5_000L, durationMs = 0L),
+            )
+        }
+        rule.onNodeWithTag("mini_player_progress")
+            .assertRangeInfoEquals(ProgressBarRangeInfo(0f, 0f..1f))
+    }
+
+    @Test
+    fun unavailableNextIsDisabledAndCannotInvokeCallback() {
+        val current = item("last", "last.flac", MediaKind.AUDIO)
+        var nextCalls = 0
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = 1f),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(600.dp)) {
+                        NowPlayingBar(
+                            state = miniSession(
+                                current,
+                                items = listOf(
+                                    current,
+                                    item("other", "other.flac", MediaKind.AUDIO),
+                                ),
+                                canSkipNext = false,
+                            ),
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onNext = { nextCalls++ },
+                            onOpenQueue = {},
+                            onOpenPlayer = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithContentDescription("下一项").assertIsNotEnabled()
+        rule.onNodeWithContentDescription("下一项").performTouchInput { click(center) }
+        rule.runOnIdle { assertEquals(0, nextCalls) }
+    }
+
+    @Test
+    fun responsiveThresholdTreatsOnlyWidthsBelow360AsCompact() {
+        val current = item("edge", "edge.flac", MediaKind.AUDIO)
+        var width by mutableStateOf(359.dp)
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = 1f),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(width)) {
+                        NowPlayingBar(
+                            state = miniSession(current),
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onNext = {},
+                            onOpenQueue = {},
+                            onOpenPlayer = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithContentDescription("下一项").assertDoesNotExist()
+        rule.runOnIdle { width = 360.dp }
+        rule.onNodeWithContentDescription("下一项").assertIsDisplayed()
+    }
+
+    @Test
+    fun twoXFontUsesCompactActionsEvenAtWideWidth() {
+        val current = item("wide", "wide.flac", MediaKind.AUDIO)
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = 2f),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(600.dp)) {
+                        NowPlayingBar(
+                            state = miniSession(current),
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onNext = {},
+                            onOpenQueue = {},
+                            onOpenPlayer = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        rule.onNodeWithTag("queue_entry_mini").assertIsDisplayed()
+        rule.onNodeWithContentDescription("下一项").assertDoesNotExist()
+    }
+
+    @Test
+    fun mediaIdentityOpensPlayerWithoutStealingControlClicks() {
+        val current = item("identity", "song.flac", MediaKind.AUDIO)
+        var opens = 0
+        var plays = 0
+        var queueCalls = 0
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = 1f),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(600.dp)) {
+                        NowPlayingBar(
+                            state = miniSession(current),
+                            onPlay = { plays++ },
+                            onPause = {},
+                            onReplay = {},
+                            onNext = {},
+                            onOpenQueue = { queueCalls++ },
+                            onOpenPlayer = { opens++ },
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithContentDescription("打开播放器：song.flac").performClick()
+        rule.runOnIdle {
+            assertEquals(1, opens)
+            assertEquals(0, plays)
+            assertEquals(0, queueCalls)
+        }
+        rule.onNodeWithContentDescription("播放").performClick()
+        rule.runOnIdle {
+            assertEquals(1, plays)
+            assertEquals(1, opens)
+        }
+        val identityBounds = rule.onNodeWithContentDescription("打开播放器：song.flac")
+            .getBoundsInRoot()
+        assertTrue(identityBounds.bottom - identityBounds.top >= 48.dp)
+        rule.onNodeWithTag("queue_entry_mini").performClick()
+        rule.runOnIdle {
+            assertEquals(1, queueCalls)
+            assertEquals(1, opens)
+        }
+    }
+
+    @Test
+    fun miniQueueEntryUsesStableTagDescriptionAndCallback() {
+        val current = item("queue", "queued.flac", MediaKind.AUDIO)
+        var queueCalls = 0
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = 1f),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(600.dp)) {
+                        NowPlayingBar(
+                            state = miniSession(current),
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onNext = {},
+                            onOpenQueue = { queueCalls++ },
+                            onOpenPlayer = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithTag("queue_entry_mini")
+            .assertIsDisplayed()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.ContentDescription,
+                    listOf("打开播放队列"),
+                ),
+            )
+            .performClick()
+        rule.runOnIdle { assertEquals(1, queueCalls) }
+    }
+
+    @Test
+    fun emptyQueueDoesNotRenderMiniPlayer() {
+        val stale = item("stale", "stale.flac", MediaKind.AUDIO)
+        var session by mutableStateOf(
+            PlaybackSessionState(
+                playback = PlaybackState(
+                    status = PlaybackStatus.PAUSED,
+                    positionMs = 10_000L,
+                    durationMs = 100_000L,
+                ),
+            ),
+        )
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = 1f),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(600.dp)) {
+                        NowPlayingBar(
+                            state = session,
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onNext = {},
+                            onOpenQueue = {},
+                            onOpenPlayer = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithContentDescription("下一项").assertDoesNotExist()
+        rule.onNodeWithTag("mini_player_progress").assertDoesNotExist()
+        rule.runOnIdle { session = session.copy(currentItem = stale) }
+        rule.onNodeWithContentDescription("下一项").assertDoesNotExist()
+        rule.onNodeWithTag("mini_player_progress").assertDoesNotExist()
+    }
+
+    @Test
+    fun miniDockIsSeventyTwoDpAndActionsDoNotOverlapTextAtLargeFont() {
+        val current = item("dock", "dock song.flac", MediaKind.AUDIO)
+        var width by mutableStateOf(600.dp)
+        var fontScale by mutableStateOf(2f)
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = fontScale),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(width)) {
+                        NowPlayingBar(
+                            state = miniSession(current),
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onNext = {},
+                            onOpenQueue = {},
+                            onOpenPlayer = {},
+                            modifier = Modifier.testTag("mini_dock"),
+                        )
+                    }
+                }
+            }
+        }
+
+        fun assertDockLayout() {
+            val dock = rule.onNodeWithTag("mini_dock").getBoundsInRoot()
+            assertEquals(72.0, (dock.bottom - dock.top).value.toDouble(), 0.5)
+            val identity = rule.onNodeWithContentDescription("打开播放器：${current.name}")
+                .getBoundsInRoot()
+            val primary = rule.onNodeWithContentDescription("播放").getBoundsInRoot()
+            val queue = rule.onNodeWithTag("queue_entry_mini").getBoundsInRoot()
+            assertTrue(identity.right <= primary.left + 0.5.dp)
+            assertTrue(primary.right <= queue.left + 0.5.dp)
+            assertTrue(primary.right - primary.left >= 48.dp)
+            assertTrue(primary.bottom - primary.top >= 48.dp)
+            assertTrue(queue.right - queue.left >= 48.dp)
+            assertTrue(queue.bottom - queue.top >= 48.dp)
+        }
+
+        assertDockLayout()
+        rule.runOnIdle {
+            width = 320.dp
+            fontScale = 1f
+        }
+        assertDockLayout()
+    }
+
+    @Test
+    fun bufferingRingIsVisibleButDecorative() {
+        val current = item("ring", "ring.flac", MediaKind.AUDIO)
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = 1f),
+            ) {
+                MediaViewerTheme {
+                    Box(Modifier.width(600.dp)) {
+                        NowPlayingBar(
+                            state = miniSession(
+                                current,
+                                status = PlaybackStatus.BUFFERING,
+                            ),
+                            onPlay = {},
+                            onPause = {},
+                            onReplay = {},
+                            onNext = {},
+                            onOpenQueue = {},
+                            onOpenPlayer = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithTag("mini_buffering_ring").assertIsDisplayed()
+        rule.onAllNodes(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.ProgressBarRangeInfo,
+                ProgressBarRangeInfo.Indeterminate,
+            ),
+        ).assertCountEquals(0)
+        rule.onNodeWithContentDescription("暂停")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "正在缓冲，可暂停",
+                ),
+            )
+    }
+
+    private fun miniSession(
+        current: QueueMediaItem,
+        status: PlaybackStatus = PlaybackStatus.PAUSED,
+        positionMs: Long = 10_000L,
+        durationMs: Long = 100_000L,
+        bufferedPercent: Float = 0f,
+        items: List<QueueMediaItem> = listOf(current),
+        currentItem: QueueMediaItem? = current,
+        canSkipNext: Boolean = true,
+    ) = PlaybackSessionState(
+        playback = PlaybackState(
+            status = status,
+            positionMs = positionMs,
+            durationMs = durationMs,
+            bufferedPercent = bufferedPercent,
+        ),
+        queue = PlaybackQueue(items = items, currentMediaKey = current.mediaKey),
+        currentItem = currentItem,
+        canSkipNext = canSkipNext,
+    )
 
     private fun item(
         key: String,
