@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import com.local.mediaviewer.app.MediaViewerApp
 import com.local.mediaviewer.navigation.CurrentPlayerNavigationRequests
 import com.local.mediaviewer.navigation.EXTRA_OPEN_CURRENT_PLAYER
@@ -16,6 +17,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         handleNavigationIntent(intent)
         val container = (application as MediaViewerApplication).container
         setContent {
