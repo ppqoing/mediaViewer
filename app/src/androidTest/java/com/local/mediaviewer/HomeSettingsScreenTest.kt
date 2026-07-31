@@ -1,27 +1,35 @@
 package com.local.mediaviewer
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.home.HomeUiState
@@ -34,6 +42,7 @@ import com.local.mediaviewer.ui.home.HomeScreen
 import com.local.mediaviewer.ui.settings.SettingsScreen
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import androidx.test.espresso.Espresso.pressBack
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -314,8 +323,11 @@ class HomeSettingsScreenTest {
         rule.onNodeWithTag("server_url").assertIsDisplayed()
         rule.onNodeWithTag("test_connection").assertIsEnabled()
         rule.onNodeWithTag("save_server").assertIsNotEnabled()
-        rule.onNodeWithText("10.0.0.8").assertIsDisplayed()
-        rule.onNodeWithText("已选择：203.0.113.7").assertIsDisplayed()
+        rule.onNodeWithText("将连接到 203.0.113.7")
+            .assertIsDisplayed()
+        rule.onNodeWithText("10.0.0.8").assertDoesNotExist()
+        rule.onNodeWithText("已选择：203.0.113.7")
+            .assertDoesNotExist()
         rule.onNodeWithText("图片阅读").assertIsDisplayed()
         rule.onNodeWithTag("default_reader_comic")
             .assertIsSelected()
@@ -326,6 +338,211 @@ class HomeSettingsScreenTest {
             selectedReaderMode,
         )
         rule.onNodeWithTag("save_server").assertIsNotEnabled()
+    }
+
+    @Test
+    fun settingsKeepsSaveReachableAtLargeFontAndShowsActionHierarchy() {
+        var saves = 0
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(
+                    density = 1f,
+                    fontScale = 2f,
+                ),
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 320.dp, height = 568.dp)
+                        .testTag("settings_window"),
+                ) {
+                    MediaViewerTheme {
+                        SettingsScreen(
+                            state = SettingsUiState(
+                                input =
+                                    "http://media.example:8080",
+                                resolvedIpv4s =
+                                    listOf("192.0.2.8"),
+                                selectedIpv4 = "192.0.2.8",
+                                canSave = true,
+                                hasUnsavedServerChange = true,
+                            ),
+                            onInputChanged = {},
+                            onTest = {},
+                            onSave = { saves += 1 },
+                            onDefaultImageModeChanged = {},
+                            onBack = {},
+                            onBackRequest = {
+                                SettingsBackDecision.LEAVE
+                            },
+                            onDiscardConfirmed = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithTag("settings_list")
+            .performScrollToNode(hasTestTag("save_server"))
+        rule.onNodeWithText("将连接到 192.0.2.8")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("save_server").performClick()
+        rule.runOnIdle {
+            assertEquals(1, saves)
+        }
+        val window =
+            rule.onNodeWithTag("settings_window")
+                .fetchSemanticsNode().boundsInRoot
+        val save = rule.onNodeWithTag("save_server")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(save.left >= window.left)
+        assertTrue(save.right <= window.right)
+        assertTrue(save.bottom <= window.bottom)
+    }
+
+    @Test
+    fun settingsUses24DpPageGutterAt600Dp() {
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(1f, 1f),
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 600.dp, height = 500.dp)
+                        .testTag("wide_settings_window"),
+                ) {
+                    MediaViewerTheme {
+                        SettingsScreen(
+                            state = SettingsUiState(
+                                input =
+                                    "http://media.example:8080",
+                            ),
+                            onInputChanged = {},
+                            onTest = {},
+                            onSave = {},
+                            onDefaultImageModeChanged = {},
+                            onBack = {},
+                            onBackRequest = {
+                                SettingsBackDecision.LEAVE
+                            },
+                            onDiscardConfirmed = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        val window =
+            rule.onNodeWithTag("wide_settings_window")
+                .fetchSemanticsNode().boundsInRoot
+        val field = rule.onNodeWithTag("server_url")
+            .fetchSemanticsNode().boundsInRoot
+        assertEquals(24f, field.left - window.left, 0.01f)
+        assertEquals(24f, window.right - field.right, 0.01f)
+    }
+
+    @Test
+    fun settingsKeepsSaveAboveVisibleImeAfterUrlFocus() {
+        val imeBottomPx = AtomicInteger()
+        rule.setContent {
+            imeBottomPx.set(
+                WindowInsets.ime.getBottom(
+                    LocalDensity.current,
+                ),
+            )
+            MediaViewerTheme {
+                SettingsScreen(
+                    state = SettingsUiState(
+                        input = "http://media.example:8080",
+                        selectedIpv4 = "192.0.2.8",
+                        canSave = true,
+                        hasUnsavedServerChange = true,
+                    ),
+                    onInputChanged = {},
+                    onTest = {},
+                    onSave = {},
+                    onDefaultImageModeChanged = {},
+                    onBack = {},
+                    onBackRequest = {
+                        SettingsBackDecision.LEAVE
+                    },
+                    onDiscardConfirmed = {},
+                )
+            }
+        }
+
+        rule.onNodeWithTag("settings_list").assertIsDisplayed()
+        rule.onNodeWithTag("server_url")
+            .performClick()
+            .performTextInput("/focused")
+        rule.waitUntil(timeoutMillis = 5_000) {
+            imeBottomPx.get() > 0
+        }
+        rule.onNodeWithTag("settings_list")
+            .performScrollToNode(hasTestTag("save_server"))
+        val root = rule.onRoot()
+            .fetchSemanticsNode().boundsInRoot
+        val save = rule.onNodeWithTag("save_server")
+            .fetchSemanticsNode().boundsInRoot
+        val imeBottom = imeBottomPx.get()
+        assertTrue(
+            "Expected a visible IME but bottom inset was $imeBottom",
+            imeBottom > 0,
+        )
+        assertTrue(
+            "Save bounds $save were outside the visible root $root " +
+                "with IME bottom inset $imeBottom",
+            save.bottom <= root.bottom - imeBottom,
+        )
+    }
+
+    @Test
+    fun settingsExposesSecondaryProgressPrimarySaveErrorAndReaderSelection() {
+        rule.setContent {
+            MediaViewerTheme {
+                SettingsScreen(
+                    state = SettingsUiState(
+                        input = "http://media.example:8080",
+                        isTesting = true,
+                        defaultImageMode =
+                            ImageReaderMode.COMIC,
+                        saveError = "保存失败，请重试",
+                    ),
+                    onInputChanged = {},
+                    onTest = {},
+                    onSave = {},
+                    onDefaultImageModeChanged = {},
+                    onBack = {},
+                    onBackRequest = {
+                        SettingsBackDecision.LEAVE
+                    },
+                    onDiscardConfirmed = {},
+                )
+            }
+        }
+
+        rule.onAllNodesWithTag("settings_secondary_action")
+            .assertCountEquals(1)
+        rule.onNodeWithTag("settings_secondary_action")
+            .assertIsNotEnabled()
+        rule.onNodeWithText("正在测试连接")
+            .assertIsDisplayed()
+        rule.onAllNodesWithTag("settings_primary_action")
+            .assertCountEquals(1)
+        rule.onNodeWithTag("settings_save_error")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
+        rule.onNodeWithTag("default_reader_comic")
+            .assertIsSelected()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.Role,
+                    Role.RadioButton,
+                ),
+            )
     }
 
     @Test
