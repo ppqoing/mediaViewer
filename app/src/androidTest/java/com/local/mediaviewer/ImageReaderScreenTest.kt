@@ -1,27 +1,40 @@
 package com.local.mediaviewer
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import coil3.ImageLoader
 import com.local.mediaviewer.image.ImageItemFailure
@@ -33,8 +46,9 @@ import com.local.mediaviewer.image.ImageSortOrder
 import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.ui.image.ComicHorizontalOffsetSemanticsKey
 import com.local.mediaviewer.ui.image.ComicScaleSemanticsKey
-import com.local.mediaviewer.ui.image.ImageReaderScreen
 import com.local.mediaviewer.ui.image.ImageItemErrorPanel
+import com.local.mediaviewer.ui.image.ImageReaderScreen
+import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import java.time.Instant
 import kotlin.math.abs
 import org.junit.After
@@ -74,6 +88,12 @@ class ImageReaderScreenTest {
 
         rule.onNodeWithText("b.png").assertIsDisplayed()
         rule.onNodeWithTag("reader_mode_toggle")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    "条漫",
+                ),
+            )
             .performClick()
         rule.runOnIdle {
             assertEquals(
@@ -85,7 +105,7 @@ class ImageReaderScreenTest {
         rule.onNodeWithTag("image_sort_menu")
             .performClick()
         rule.onNodeWithText("文件名升序")
-            .assertIsDisplayed()
+            .assertIsSelected()
         rule.onNodeWithText("修改时间降序")
             .assertIsDisplayed()
         rule.onNodeWithText("文件大小降序")
@@ -103,12 +123,23 @@ class ImageReaderScreenTest {
         setScreen(ImageReaderUiState.Loading)
         rule.onNodeWithText("正在加载图片…")
             .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_state_loading")
+            .assertIsDisplayed()
+        val pixels = rule.onNodeWithTag("image_reader_canvas")
+            .captureToImage()
+            .toPixelMap()
+        assertEquals(
+            Color.Black,
+            pixels[2, pixels.height - 3],
+        )
     }
 
     @Test
     fun emptyStateUsesChineseText() {
         setScreen(ImageReaderUiState.Empty)
         rule.onNodeWithText("此目录没有图片")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_state_empty")
             .assertIsDisplayed()
     }
 
@@ -122,6 +153,8 @@ class ImageReaderScreenTest {
             onRetryDirectory = { retries += 1 },
         )
         rule.onNodeWithText("服务器返回 HTTP 503")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_state_error")
             .assertIsDisplayed()
         rule.onNodeWithText("重试").performClick()
         rule.runOnIdle {
@@ -167,7 +200,7 @@ class ImageReaderScreenTest {
             var state by remember {
                 mutableStateOf(contentState())
             }
-            MaterialTheme {
+            MediaViewerTheme(darkTheme = true) {
                 ImageReaderScreen(
                     state = state,
                     imageLoader = loader,
@@ -245,6 +278,186 @@ class ImageReaderScreenTest {
     }
 
     @Test
+    fun readerUsesImmersiveToolbarAndKeepsNetworkRetryExplicit() {
+        val base = contentState()
+        val failedLogicalUrl = base.anchorLogicalUrl
+        var retriedLogicalUrl: String? = null
+        setScreen(
+            state = base.copy(
+                itemFailures = mapOf(
+                    failedLogicalUrl to
+                        ImageItemFailure(
+                            message = "连接已失效",
+                            kind =
+                                ImageLoadFailureKind.NETWORK,
+                        ),
+                ),
+            ),
+            onRetryImage = {
+                retriedLogicalUrl = it
+            },
+        )
+
+        rule.onNodeWithTag("image_reader_scrim")
+            .assertIsDisplayed()
+        rule.onNodeWithText("2 / 3")
+            .assertIsDisplayed()
+        rule.onNodeWithText("重新连接并重试")
+            .performClick()
+        rule.runOnIdle {
+            assertEquals(
+                failedLogicalUrl,
+                retriedLogicalUrl,
+            )
+        }
+    }
+
+    @Test
+    fun immersiveToolbarKeepsControlsInsideA320DpTwoXFontWindow() {
+        val base = contentState()
+        val longTitle =
+            "这是一个非常非常长但不能挤出操作按钮的图片文件名.png"
+        val state = base.copy(
+            images = base.images.map { item ->
+                if (
+                    item.logicalUrl ==
+                    base.anchorLogicalUrl
+                ) {
+                    item.copy(name = longTitle)
+                } else {
+                    item
+                }
+            },
+        )
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(
+                    density = 1f,
+                    fontScale = 2f,
+                ),
+            ) {
+                Box(
+                    Modifier
+                        .size(
+                            width = 320.dp,
+                            height = 568.dp,
+                        )
+                        .testTag("reader_window"),
+                ) {
+                    MediaViewerTheme(darkTheme = true) {
+                        ImageReaderScreen(
+                            state = state,
+                            imageLoader = loader,
+                            onModeChanged = {},
+                            onSortChanged = {},
+                            onAnchorChanged = {},
+                            onRetryDirectory = {},
+                            onImageLoadError = { _, _ -> },
+                            onImageLoadSuccess = {},
+                            onRetryImage = {},
+                            onBack = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithText(longTitle)
+            .assertIsDisplayed()
+        rule.onNodeWithText("2 / 3")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("comic_reader")
+            .assertIsDisplayed()
+        val window = rule.onNodeWithTag("reader_window")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        listOf(
+            rule.onNodeWithContentDescription("返回")
+                .fetchSemanticsNode()
+                .boundsInRoot,
+            rule.onNodeWithTag("reader_mode_toggle")
+                .fetchSemanticsNode()
+                .boundsInRoot,
+            rule.onNodeWithTag("image_sort_menu")
+                .fetchSemanticsNode()
+                .boundsInRoot,
+            rule.onNodeWithTag("image_reader_scrim")
+                .fetchSemanticsNode()
+                .boundsInRoot,
+        ).forEach { bounds ->
+            assertTrue(bounds.left >= window.left)
+            assertTrue(bounds.right <= window.right)
+            assertTrue(bounds.top >= window.top)
+            assertTrue(bounds.bottom <= window.bottom)
+        }
+    }
+
+    @Test
+    fun immersiveCanvasRemainsFullWidthAt600Dp() {
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(1f, 1f),
+            ) {
+                Box(
+                    Modifier
+                        .size(
+                            width = 600.dp,
+                            height = 568.dp,
+                        )
+                        .testTag("wide_reader_window"),
+                ) {
+                    MediaViewerTheme(darkTheme = true) {
+                        ImageReaderScreen(
+                            state = contentState(
+                                ImageReaderMode.SINGLE,
+                            ),
+                            imageLoader = loader,
+                            onModeChanged = {},
+                            onSortChanged = {},
+                            onAnchorChanged = {},
+                            onRetryDirectory = {},
+                            onImageLoadError = { _, _ -> },
+                            onImageLoadSuccess = {},
+                            onRetryImage = {},
+                            onBack = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        rule.onNodeWithText("2 / 3")
+            .assertIsDisplayed()
+        val window =
+            rule.onNodeWithTag("wide_reader_window")
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val canvas =
+            rule.onNodeWithTag("image_reader_canvas")
+                .fetchSemanticsNode()
+                .boundsInRoot
+        val reader = rule.onNodeWithTag("media_image")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val scrim =
+            rule.onNodeWithTag("image_reader_scrim")
+                .fetchSemanticsNode()
+                .boundsInRoot
+        listOf(canvas, reader, scrim).forEach { bounds ->
+            assertEquals(
+                window.left,
+                bounds.left,
+                0.001f,
+            )
+            assertEquals(
+                window.right,
+                bounds.right,
+                0.001f,
+            )
+        }
+    }
+
+    @Test
     fun network_error_offers_reconnect_but_decode_error_only_retries_the_item() {
         val networkItem = ImageReaderItem(
             name = "network.jpg",
@@ -259,23 +472,27 @@ class ImageReaderScreenTest {
             requestUrl = "http://192.0.2.1/decode.jpg",
         )
         rule.setContent {
-            Column {
-                ImageItemErrorPanel(
-                    item = networkItem,
-                    failure = ImageItemFailure(
-                        message = "图片网络加载失败",
-                        kind = ImageLoadFailureKind.NETWORK,
-                    ),
-                    onRetry = {},
-                )
-                ImageItemErrorPanel(
-                    item = decodeItem,
-                    failure = ImageItemFailure(
-                        message = "图片解码失败",
-                        kind = ImageLoadFailureKind.DECODE,
-                    ),
-                    onRetry = {},
-                )
+            MediaViewerTheme(darkTheme = true) {
+                Column {
+                    ImageItemErrorPanel(
+                        item = networkItem,
+                        failure = ImageItemFailure(
+                            message = "图片网络加载失败",
+                            kind =
+                                ImageLoadFailureKind.NETWORK,
+                        ),
+                        onRetry = {},
+                    )
+                    ImageItemErrorPanel(
+                        item = decodeItem,
+                        failure = ImageItemFailure(
+                            message = "图片解码失败",
+                            kind =
+                                ImageLoadFailureKind.DECODE,
+                        ),
+                        onRetry = {},
+                    )
+                }
             }
         }
 
@@ -334,6 +551,10 @@ class ImageReaderScreenTest {
             .assertIsNotDisplayed()
         rule.onNodeWithTag("comic_reader")
             .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_refresh_chip")
+            .assertIsDisplayed()
+        rule.onNodeWithText("正在重新连接")
+            .assertIsDisplayed()
         assertIndeterminateProgressCount(1)
     }
 
@@ -372,6 +593,8 @@ class ImageReaderScreenTest {
                     current.logicalUrl.hashCode(),
                 useUnmergedTree = true,
             )
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_refresh_chip")
             .assertIsDisplayed()
         assertIndeterminateProgressCount(1)
     }
@@ -415,6 +638,8 @@ class ImageReaderScreenTest {
                 useUnmergedTree = true,
             )
             .assertIsNotDisplayed()
+        rule.onNodeWithTag("image_reader_refresh_chip")
+            .assertIsDisplayed()
         assertIndeterminateProgressCount(0)
     }
 
@@ -444,7 +669,7 @@ class ImageReaderScreenTest {
         onRetryImage: (String) -> Unit = {},
     ) {
         rule.setContent {
-            MaterialTheme {
+            MediaViewerTheme(darkTheme = true) {
                 ImageReaderScreen(
                     state = state,
                     imageLoader = loader,

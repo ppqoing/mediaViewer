@@ -16,8 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -391,21 +389,12 @@ private fun ComicImage(
 private fun ComicPlaceholder(
     message: String? = null,
 ) {
-    Box(
+    ImageItemLoadingPanel(
         modifier = Modifier
             .fillMaxWidth()
             .height(160.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (message == null) {
-            CircularProgressIndicator()
-        } else {
-            Text(
-                text = message,
-                color = Color.White,
-            )
-        }
-    }
+        errorMessage = message,
+    )
 }
 
 internal data class VisibleImageBounds(

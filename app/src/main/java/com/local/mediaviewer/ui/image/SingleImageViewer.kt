@@ -3,18 +3,14 @@ package com.local.mediaviewer.ui.image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -145,12 +141,9 @@ fun SingleImageViewer(
                     translationY = zoom.offset.y
                 },
             loading = {
-                Box(
+                ImageItemLoadingPanel(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
+                )
             },
             error = { state ->
                 LaunchedEffect(state.result) {
@@ -161,16 +154,10 @@ fun SingleImageViewer(
                         ),
                     )
                 }
-                Box(
+                ImageItemLoadingPanel(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center,
-                ) {
-                    Text(
-                        text = "图片加载失败",
-                        color = Color.White,
-                    )
-                }
+                    errorMessage = "图片加载失败",
+                )
             },
             success = { state ->
                 LaunchedEffect(

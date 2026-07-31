@@ -5,17 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,16 +18,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import coil3.ImageLoader
 import com.local.mediaviewer.image.ComicTransform
+import com.local.mediaviewer.image.ImageLoadFailureKind
+import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.image.ImageReaderUiState
-import com.local.mediaviewer.image.ImageLoadFailureKind
 import com.local.mediaviewer.image.ImageSortOrder
-import com.local.mediaviewer.ui.components.AppErrorPanel
+import com.local.mediaviewer.ui.components.MediaAction
+import com.local.mediaviewer.ui.components.MediaStateKind
+import com.local.mediaviewer.ui.components.MediaStatePanel
+import com.local.mediaviewer.ui.components.MediaTopAppBar
+import com.local.mediaviewer.ui.theme.MediaTheme
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImageReaderScreen(
     state: ImageReaderUiState,
@@ -64,104 +65,73 @@ fun ImageReaderScreen(
         }
         ?: content?.images?.firstOrNull()
 
-    Scaffold(
-        containerColor = Color.Black,
-        contentColor = Color.White,
-        topBar = {
-            if (content != null && current != null) {
-                ImageReaderToolbar(
-                    title = current.name,
-                    mode = content.mode,
-                    sortOrder = content.sortOrder,
-                    onModeChanged = onModeChanged,
-                    onSortChanged = onSortChanged,
-                    onBack = onBack,
-                )
-            } else {
-                TopAppBar(
-                    title = { Text("图片阅读") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector =
-                                    Icons.AutoMirrored
-                                        .Default
-                                        .ArrowBack,
-                                contentDescription = "返回",
-                            )
-                        }
-                    },
-                    colors =
-                        TopAppBarDefaults
-                            .topAppBarColors(
-                                containerColor =
-                                    Color.Black,
-                                titleContentColor =
-                                    Color.White,
-                                navigationIconContentColor =
-                                    Color.White,
-                            ),
-                )
-            }
-        },
-    ) { padding ->
+    ReaderPlayerTheme {
+        val playerColors = MediaTheme.playerColors
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .background(Color.Black),
-            contentAlignment = Alignment.Center,
+                .background(playerColors.canvas)
+                .testTag("image_reader_canvas"),
         ) {
             when (state) {
                 ImageReaderUiState.Loading -> {
-                    Column(
-                        horizontalAlignment =
-                            Alignment.CenterHorizontally,
-                    ) {
-                        CircularProgressIndicator()
-                        Text("正在加载图片…")
-                    }
+                    ImageReaderDirectoryState(
+                        kind = MediaStateKind.LOADING,
+                        title = "正在加载图片…",
+                        panelTag =
+                            "image_reader_state_loading",
+                        onBack = onBack,
+                    )
                 }
 
                 ImageReaderUiState.Empty -> {
-                    Text("此目录没有图片")
+                    ImageReaderDirectoryState(
+                        kind = MediaStateKind.EMPTY,
+                        title = "此目录没有图片",
+                        panelTag =
+                            "image_reader_state_empty",
+                        onBack = onBack,
+                    )
                 }
 
                 is ImageReaderUiState.Error -> {
-                    AppErrorPanel(
+                    ImageReaderDirectoryState(
+                        kind = MediaStateKind.ERROR,
+                        title = "无法加载图片目录",
                         message = state.message,
-                        onRetry = onRetryDirectory,
+                        primaryAction = MediaAction(
+                            label = "重试",
+                            onClick = onRetryDirectory,
+                        ),
+                        panelTag =
+                            "image_reader_state_error",
+                        onBack = onBack,
                     )
                 }
 
                 is ImageReaderUiState.Content -> {
                     if (current == null) {
-                        Text("此目录没有图片")
-                    } else if (
-                        state.mode ==
-                        ImageReaderMode.COMIC
-                    ) {
-                        ComicReader(
-                            images = state.images,
-                            anchorLogicalUrl =
-                                state.anchorLogicalUrl,
-                            sortOrder = state.sortOrder,
+                        ImageReaderDirectoryState(
+                            kind = MediaStateKind.EMPTY,
+                            title = "此目录没有图片",
+                            panelTag =
+                                "image_reader_state_empty",
+                            onBack = onBack,
+                        )
+                    } else {
+                        ImageReaderContent(
+                            state = state,
+                            current = current,
                             imageLoader = imageLoader,
-                            requestGeneration =
-                                state.requestGeneration,
-                            itemFailures =
-                                state.itemFailures,
-                            itemRequestGenerations =
-                                state
-                                    .itemRequestGenerations,
-                            refreshingImageLogicalUrl =
-                                state
-                                    .refreshingImageLogicalUrl,
-                            transform =
+                            comicTransform =
                                 comicTransform,
-                            onTransformChanged = {
+                            onComicTransformChanged = {
                                 comicTransform = it
                             },
+                            onModeChanged =
+                                onModeChanged,
+                            onSortChanged =
+                                onSortChanged,
                             onAnchorChanged =
                                 onAnchorChanged,
                             onImageLoadError =
@@ -170,46 +140,205 @@ fun ImageReaderScreen(
                                 onImageLoadSuccess,
                             onRetryImage =
                                 onRetryImage,
-                            modifier =
-                                Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        SingleImageViewer(
-                            item = current,
-                            imageLoader = imageLoader,
-                            requestGeneration =
-                                effectiveRequestGeneration(
-                                    requestGeneration =
-                                        state
-                                            .requestGeneration,
-                                    itemRequestGeneration =
-                                        state
-                                            .itemRequestGenerations[
-                                                current
-                                                    .logicalUrl
-                                            ] ?: 0,
-                                ),
-                            failure =
-                                state.itemFailures[
-                                    current.logicalUrl
-                                ],
-                            onImageLoadError =
-                                onImageLoadError,
-                            onImageLoadSuccess =
-                                onImageLoadSuccess,
-                            onRetryImage =
-                                onRetryImage,
-                            refreshingImageLogicalUrl =
-                                state
-                                    .refreshingImageLogicalUrl,
-                            modifier =
-                                Modifier.fillMaxSize(),
+                            onBack = onBack,
                         )
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ImageReaderContent(
+    state: ImageReaderUiState.Content,
+    current: ImageReaderItem,
+    imageLoader: ImageLoader,
+    comicTransform: ComicTransform,
+    onComicTransformChanged: (ComicTransform) -> Unit,
+    onModeChanged: (ImageReaderMode) -> Unit,
+    onSortChanged: (ImageSortOrder) -> Unit,
+    onAnchorChanged: (String) -> Unit,
+    onImageLoadError:
+        (String, ImageLoadFailureKind) -> Unit,
+    onImageLoadSuccess: (String) -> Unit,
+    onRetryImage: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (state.mode == ImageReaderMode.COMIC) {
+            ComicReader(
+                images = state.images,
+                anchorLogicalUrl =
+                    state.anchorLogicalUrl,
+                sortOrder = state.sortOrder,
+                imageLoader = imageLoader,
+                requestGeneration =
+                    state.requestGeneration,
+                itemFailures = state.itemFailures,
+                itemRequestGenerations =
+                    state.itemRequestGenerations,
+                refreshingImageLogicalUrl =
+                    state.refreshingImageLogicalUrl,
+                transform = comicTransform,
+                onTransformChanged =
+                    onComicTransformChanged,
+                onAnchorChanged = onAnchorChanged,
+                onImageLoadError = onImageLoadError,
+                onImageLoadSuccess =
+                    onImageLoadSuccess,
+                onRetryImage = onRetryImage,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            SingleImageViewer(
+                item = current,
+                imageLoader = imageLoader,
+                requestGeneration =
+                    effectiveRequestGeneration(
+                        requestGeneration =
+                            state.requestGeneration,
+                        itemRequestGeneration =
+                            state
+                                .itemRequestGenerations[
+                                    current.logicalUrl
+                                ] ?: 0,
+                    ),
+                failure =
+                    state.itemFailures[
+                        current.logicalUrl
+                    ],
+                onImageLoadError = onImageLoadError,
+                onImageLoadSuccess =
+                    onImageLoadSuccess,
+                onRetryImage = onRetryImage,
+                refreshingImageLogicalUrl =
+                    state.refreshingImageLogicalUrl,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth(),
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+        ) {
+            val currentIndex = state.images
+                .indexOfFirst {
+                    it.logicalUrl ==
+                        current.logicalUrl
+                }
+                .coerceAtLeast(0)
+            ImageReaderToolbar(
+                title = current.name,
+                currentIndex = currentIndex,
+                totalCount = state.images.size,
+                mode = state.mode,
+                sortOrder = state.sortOrder,
+                onModeChanged = onModeChanged,
+                onSortChanged = onSortChanged,
+                onBack = onBack,
+            )
+            if (state.isRefreshingEndpoint) {
+                EndpointRefreshChip()
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageReaderDirectoryState(
+    kind: MediaStateKind,
+    title: String,
+    panelTag: String,
+    onBack: () -> Unit,
+    message: String? = null,
+    primaryAction: MediaAction? = null,
+) {
+    val playerColors = MediaTheme.playerColors
+    Column(modifier = Modifier.fillMaxSize()) {
+        MediaTopAppBar(
+            title = "图片阅读",
+            onBack = onBack,
+            containerColor = playerColors.canvas,
+            contentColor = playerColors.control,
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentAlignment = Alignment.Center,
+        ) {
+            MediaStatePanel(
+                kind = kind,
+                title = title,
+                message = message,
+                primaryAction = primaryAction,
+                modifier = Modifier.testTag(panelTag),
+            )
+        }
+    }
+}
+
+@Composable
+private fun EndpointRefreshChip() {
+    val playerColors = MediaTheme.playerColors
+    Surface(
+        modifier = Modifier
+            .padding(top = MediaTheme.spacing.xs)
+            .semantics {
+                liveRegion = LiveRegionMode.Polite
+            }
+            .testTag("image_reader_refresh_chip"),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = playerColors.unplayedTrack,
+        contentColor = playerColors.control,
+    ) {
+        Text(
+            text = "正在重新连接",
+            modifier = Modifier.padding(
+                horizontal = MediaTheme.spacing.md,
+                vertical = MediaTheme.spacing.xs,
+            ),
+            style = MaterialTheme.typography.labelLarge,
+        )
+    }
+}
+
+@Composable
+private fun ReaderPlayerTheme(
+    content: @Composable () -> Unit,
+) {
+    val playerColors = MediaTheme.playerColors
+    val readerColorScheme =
+        MaterialTheme.colorScheme.copy(
+            primary = playerColors.active,
+            onPrimary = playerColors.canvas,
+            background = playerColors.canvas,
+            onBackground = playerColors.control,
+            surface = playerColors.canvas,
+            onSurface = playerColors.control,
+            surfaceVariant =
+                playerColors.unplayedTrack,
+            onSurfaceVariant =
+                playerColors.control,
+            surfaceContainerLowest =
+                playerColors.canvas,
+            surfaceContainerLow =
+                playerColors.canvas,
+            surfaceContainer =
+                playerColors.canvas,
+            surfaceContainerHigh =
+                playerColors.canvas,
+            surfaceContainerHighest =
+                playerColors.canvas,
+        )
+    MaterialTheme(
+        colorScheme = readerColorScheme,
+        content = content,
+    )
 }
 
 private val comicTransformSaver = listSaver(
