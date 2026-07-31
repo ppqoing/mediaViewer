@@ -9,12 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Folder
@@ -24,16 +24,14 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,9 +47,11 @@ import com.local.mediaviewer.browser.BrowserPlaybackAction
 import com.local.mediaviewer.browser.BrowserUiState
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.model.MediaKind
-import com.local.mediaviewer.ui.components.AppErrorPanel
+import com.local.mediaviewer.ui.components.MediaAction
+import com.local.mediaviewer.ui.components.MediaScreenScaffold
+import com.local.mediaviewer.ui.components.MediaStateKind
+import com.local.mediaviewer.ui.components.MediaStatePanel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowserScreen(
     state: BrowserUiState,
@@ -62,64 +62,69 @@ fun BrowserScreen(
     onRetry: () -> Unit,
     onBack: () -> Unit,
 ) {
-    Scaffold(
+    MediaScreenScaffold(
+        title = currentTitle(state),
+        onBack = onBack,
         snackbarHost = {
             snackbarHostState?.let { SnackbarHost(it) }
         },
-        topBar = {
-            TopAppBar(
-                title = { Text(currentTitle(state)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                            contentDescription = "返回",
-                        )
-                    }
-                },
-            )
-        },
     ) { padding ->
+        val visiblePage = visiblePage(state)
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            when (state) {
-                BrowserUiState.Loading -> {
-                    CircularProgressIndicator(
+            if (visiblePage == null) {
+                when (state) {
+                    is BrowserUiState.Loading -> MediaStatePanel(
+                        kind = MediaStateKind.LOADING,
+                        title = "正在加载目录",
                         modifier = Modifier.align(Alignment.Center),
                     )
-                }
 
-                is BrowserUiState.Error -> {
-                    Box(modifier = Modifier.align(Alignment.Center)) {
-                        AppErrorPanel(
-                            message = state.error.userMessage,
-                            onRetry = onRetry,
-                        )
-                    }
-                }
-
-                is BrowserUiState.Empty -> {
-                    BrowserPageContent(
-                        page = state.page,
-                        onEntryClick = onEntryClick,
-                        onBreadcrumbClick = onBreadcrumbClick,
-                        onPlaybackAction = onPlaybackAction,
+                    is BrowserUiState.Error -> MediaStatePanel(
+                        kind = MediaStateKind.ERROR,
+                        title = "目录加载失败",
+                        message = state.error.userMessage,
+                        primaryAction = MediaAction(
+                            label = "重试",
+                            onClick = onRetry,
+                        ),
+                        modifier = Modifier.align(Alignment.Center),
                     )
+
+                    is BrowserUiState.Content,
+                    is BrowserUiState.Empty -> Unit
+                }
+            } else {
+                BrowserPageContent(
+                    page = visiblePage,
+                    onEntryClick = onEntryClick,
+                    onBreadcrumbClick = onBreadcrumbClick,
+                    onPlaybackAction = onPlaybackAction,
+                    statusContent = when (state) {
+                        is BrowserUiState.Loading -> {
+                            { BrowserLoadingStatus() }
+                        }
+
+                        is BrowserUiState.Error -> {
+                            {
+                                BrowserErrorStatus(
+                                    message = state.error.userMessage,
+                                    onRetry = onRetry,
+                                )
+                            }
+                        }
+
+                        is BrowserUiState.Content,
+                        is BrowserUiState.Empty -> null
+                    },
+                )
+                if (state is BrowserUiState.Empty) {
                     Text(
                         text = "此目录为空",
                         modifier = Modifier.align(Alignment.Center),
-                    )
-                }
-
-                is BrowserUiState.Content -> {
-                    BrowserPageContent(
-                        page = state.page,
-                        onEntryClick = onEntryClick,
-                        onBreadcrumbClick = onBreadcrumbClick,
-                        onPlaybackAction = onPlaybackAction,
                     )
                 }
             }
@@ -133,6 +138,7 @@ private fun BrowserPageContent(
     onEntryClick: (DirectoryEntry) -> Unit,
     onBreadcrumbClick: (Int) -> Unit,
     onPlaybackAction: (BrowserPlaybackAction, DirectoryEntry) -> Unit,
+    statusContent: (@Composable () -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxSize()) {
         LazyRow(
@@ -151,7 +157,12 @@ private fun BrowserPageContent(
                 }
             }
         }
-        LazyColumn(Modifier.fillMaxSize()) {
+        statusContent?.invoke()
+        LazyColumn(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
             items(
                 items = page.entries,
                 key = DirectoryEntry::logicalUrl,
@@ -190,6 +201,59 @@ private fun BrowserPageContent(
 }
 
 @Composable
+private fun BrowserLoadingStatus() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+            strokeWidth = 2.dp,
+        )
+        Text(
+            text = "正在加载子目录",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun BrowserErrorStatus(
+    message: String,
+    onRetry: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "加载子目录失败",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            TextButton(onClick = onRetry) {
+                Text("重试")
+            }
+        }
+    }
+}
+
+@Composable
 private fun PlaybackActionsMenu(
     entry: DirectoryEntry,
     onPlaybackAction: (BrowserPlaybackAction, DirectoryEntry) -> Unit,
@@ -221,13 +285,20 @@ private fun PlaybackActionsMenu(
     }
 }
 
-private fun currentTitle(state: BrowserUiState): String =
+private fun visiblePage(state: BrowserUiState): BrowserPage? =
     when (state) {
-        BrowserUiState.Loading -> "目录"
-        is BrowserUiState.Error -> "目录"
-        is BrowserUiState.Content -> state.page.breadcrumbs.last().label
-        is BrowserUiState.Empty -> state.page.breadcrumbs.last().label
+        is BrowserUiState.Loading -> state.previous
+        is BrowserUiState.Error -> state.previous
+        is BrowserUiState.Content -> state.page
+        is BrowserUiState.Empty -> state.page
     }
+
+private fun currentTitle(state: BrowserUiState): String =
+    visiblePage(state)
+        ?.breadcrumbs
+        ?.lastOrNull()
+        ?.label
+        ?: "目录"
 
 private fun kindIcon(kind: MediaKind): ImageVector =
     when (kind) {

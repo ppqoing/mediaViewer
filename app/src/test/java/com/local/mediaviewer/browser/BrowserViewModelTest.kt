@@ -161,7 +161,97 @@ class BrowserViewModelTest {
     }
 
     @Test
-    fun `返回上级会取消尚未完成的更深目录加载`() = runTest(dispatcher) {
+    fun `failed child keeps the parent and back consumes the failed attempt`() =
+        runTest(dispatcher) {
+            val rootUrl = "http://media.example:8080/middle/"
+            val childUrl = "${rootUrl}child/"
+            val rootPage = page(
+                logicalUrl = rootUrl,
+                entries = listOf(
+                    entry(
+                        name = "child",
+                        logicalUrl = childUrl,
+                        requestUrl = "",
+                        kind = MediaKind.DIRECTORY,
+                    ),
+                ),
+            )
+            val repository = ResultQueueBrowserRepository(
+                ArrayDeque(
+                    listOf(
+                        AppResult.Success(rootPage),
+                        AppResult.Failure(AppError.NetworkFailure("offline")),
+                    ),
+                ),
+            )
+            val viewModel = BrowserViewModel(MIDDLE_SHARE, repository)
+            advanceUntilIdle()
+
+            viewModel.open(rootPage.entries.single())
+            advanceUntilIdle()
+
+            val error =
+                viewModel.uiState.value as BrowserUiState.Error
+            assertEquals(
+                rootPage,
+                retainedPageOrNull(error),
+            )
+            assertEquals(childUrl, error.failedLogicalUrl)
+            assertTrue(viewModel.goBack())
+            assertEquals(BrowserUiState.Content(rootPage), viewModel.uiState.value)
+        }
+
+    @Test
+    fun `child is appended once only after retry succeeds`() = runTest(dispatcher) {
+        val rootUrl = "http://media.example:8080/middle/"
+        val childUrl = "${rootUrl}child/"
+        val rootPage = page(
+            logicalUrl = rootUrl,
+            entries = listOf(
+                entry("child", childUrl, "", MediaKind.DIRECTORY),
+            ),
+        )
+        val childPage = page(
+            logicalUrl = childUrl,
+            entries = listOf(
+                entry(
+                    "movie.mp4",
+                    "${childUrl}movie.mp4",
+                    "http://192.0.2.1/movie.mp4",
+                    MediaKind.VIDEO,
+                ),
+            ),
+            breadcrumbs = listOf(
+                Breadcrumb("MiddleDir", rootUrl),
+                Breadcrumb("child", childUrl),
+            ),
+        )
+        val repository = ResultQueueBrowserRepository(
+            ArrayDeque(
+                listOf(
+                    AppResult.Success(rootPage),
+                    AppResult.Failure(AppError.NetworkFailure("offline")),
+                    AppResult.Success(childPage),
+                ),
+            ),
+        )
+        val viewModel = BrowserViewModel(MIDDLE_SHARE, repository)
+        advanceUntilIdle()
+        viewModel.open(rootPage.entries.single())
+        advanceUntilIdle()
+
+        viewModel.retry()
+        advanceUntilIdle()
+
+        assertEquals(listOf(childUrl, childUrl), repository.openedLogicalUrls)
+        assertEquals(childUrl, currentPage(viewModel).logicalDirectoryUrl)
+        assertTrue(viewModel.goBack())
+        assertEquals(rootUrl, currentPage(viewModel).logicalDirectoryUrl)
+        assertFalse(viewModel.goBack())
+    }
+
+    @Test
+    fun `加载更深目录时保留当前页且返回取消待处理尝试`() = runTest(dispatcher) {
         val rootUrl = "http://media.example:8080/middle/"
         val subUrl = "${rootUrl}sub/"
         val deepUrl = "${subUrl}deep/"
@@ -198,14 +288,22 @@ class BrowserViewModelTest {
 
         viewModel.open(currentPage(viewModel).entries.single())
         runCurrent()
-        assertTrue(viewModel.uiState.value is BrowserUiState.Loading)
+        val loading =
+            viewModel.uiState.value as BrowserUiState.Loading
+        assertEquals(
+            subPage,
+            retainedPageOrNull(loading),
+        )
         assertTrue(viewModel.goBack())
-        assertEquals(rootUrl, currentPage(viewModel).logicalDirectoryUrl)
+        assertEquals(subUrl, currentPage(viewModel).logicalDirectoryUrl)
 
         deepResult.complete(deepPage)
         advanceUntilIdle()
 
+        assertEquals(subUrl, currentPage(viewModel).logicalDirectoryUrl)
+        assertTrue(viewModel.goBack())
         assertEquals(rootUrl, currentPage(viewModel).logicalDirectoryUrl)
+        assertFalse(viewModel.goBack())
     }
 }
 
@@ -226,6 +324,8 @@ private class QueueBrowserRepository(
 private class ResultQueueBrowserRepository(
     private val results: ArrayDeque<AppResult<BrowserPage>>,
 ) : BrowserRepository {
+    val openedLogicalUrls = mutableListOf<String>()
+
     override suspend fun openRoot(root: ServerShare): AppResult<BrowserPage> =
         results.removeFirst()
 
@@ -233,8 +333,10 @@ private class ResultQueueBrowserRepository(
         root: ServerShare,
         logicalUrl: String,
         breadcrumbs: List<Breadcrumb>,
-    ): AppResult<BrowserPage> =
-        results.removeFirst()
+    ): AppResult<BrowserPage> {
+        openedLogicalUrls += logicalUrl
+        return results.removeFirst()
+    }
 }
 
 private class ControlledBrowserRepository(
@@ -294,6 +396,14 @@ private fun currentPage(viewModel: BrowserViewModel): BrowserPage =
         is BrowserUiState.Content -> state.page
         is BrowserUiState.Empty -> state.page
         else -> error("No page: $state")
+    }
+
+private fun retainedPageOrNull(state: BrowserUiState): BrowserPage? =
+    when (state) {
+        is BrowserUiState.Content -> state.page
+        is BrowserUiState.Empty -> state.page
+        is BrowserUiState.Loading -> state.previous
+        is BrowserUiState.Error -> state.previous
     }
 
 private val MIDDLE_SHARE = ServerShare(

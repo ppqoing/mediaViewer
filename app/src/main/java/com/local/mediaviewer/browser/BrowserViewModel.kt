@@ -18,13 +18,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 sealed interface BrowserUiState {
-    data object Loading : BrowserUiState
+    data class Loading(val previous: BrowserPage? = null) : BrowserUiState
 
     data class Content(val page: BrowserPage) : BrowserUiState
 
     data class Empty(val page: BrowserPage) : BrowserUiState
 
-    data class Error(val error: AppError) : BrowserUiState
+    data class Error(
+        val error: AppError,
+        val previous: BrowserPage? = null,
+        val failedLogicalUrl: String? = null,
+    ) : BrowserUiState
 }
 
 class BrowserViewModel(
@@ -32,12 +36,12 @@ class BrowserViewModel(
     private val repository: BrowserRepository,
 ) : ViewModel() {
     private val pages = mutableListOf<BrowserPage>()
-    private var pendingLoad: suspend () -> AppResult<BrowserPage> =
-        { repository.openRoot(root) }
+    private var pendingLoad: BrowserLoadRequest =
+        BrowserLoadRequest.Root
     private var loadJob: Job? = null
 
     private val mutableUiState =
-        MutableStateFlow<BrowserUiState>(BrowserUiState.Loading)
+        MutableStateFlow<BrowserUiState>(BrowserUiState.Loading())
     val uiState: StateFlow<BrowserUiState> = mutableUiState.asStateFlow()
 
     private val mutableMediaLaunches = MutableSharedFlow<MediaLaunchRequest>()
@@ -83,15 +87,13 @@ class BrowserViewModel(
 
         val breadcrumbs = current.breadcrumbs +
             Breadcrumb(entry.name, entry.logicalUrl)
-        val loader = suspend {
-            repository.openDirectory(
-                root = root,
+        load(
+            request = BrowserLoadRequest.Directory(
                 logicalUrl = entry.logicalUrl,
                 breadcrumbs = breadcrumbs,
-            )
-        }
-        pendingLoad = loader
-        load(loader, replaceFromIndex = pages.size)
+            ),
+            replaceFromIndex = pages.size,
+        )
     }
 
     fun requestPlayback(
@@ -113,7 +115,17 @@ class BrowserViewModel(
     }
 
     fun goBack(): Boolean {
+        val retainedPage = when (val state = mutableUiState.value) {
+            is BrowserUiState.Loading -> state.previous
+            is BrowserUiState.Error -> state.previous
+            is BrowserUiState.Content,
+            is BrowserUiState.Empty -> null
+        }
         cancelPendingLoad()
+        if (retainedPage != null) {
+            show(retainedPage)
+            return true
+        }
         if (pages.size <= 1) {
             pages.lastOrNull()?.let(::show)
             return false
@@ -124,32 +136,86 @@ class BrowserViewModel(
     }
 
     fun retry() {
-        load(pendingLoad, replaceFromIndex = pages.size)
+        val current = pages.lastOrNull()
+        val failedLogicalUrl =
+            (mutableUiState.value as? BrowserUiState.Error)
+                ?.failedLogicalUrl
+        val request = when {
+            failedLogicalUrl != null -> {
+                val failedRequest =
+                    pendingLoad as? BrowserLoadRequest.Directory
+                if (failedRequest?.logicalUrl != failedLogicalUrl) return
+                failedRequest
+            }
+
+            current != null -> BrowserLoadRequest.Directory(
+                logicalUrl = current.logicalDirectoryUrl,
+                breadcrumbs = current.breadcrumbs,
+            )
+
+            else -> BrowserLoadRequest.Root
+        }
+        val replaceFromIndex = when (request) {
+            BrowserLoadRequest.Root -> 0
+            is BrowserLoadRequest.Directory ->
+                if (
+                    request.logicalUrl ==
+                    current?.logicalDirectoryUrl
+                ) {
+                    pages.lastIndex
+                } else {
+                    pages.size
+                }
+        }
+        load(request, replaceFromIndex)
     }
 
     private fun load(
-        loader: suspend () -> AppResult<BrowserPage>,
+        request: BrowserLoadRequest,
         replaceFromIndex: Int,
     ) {
         loadJob?.cancel()
+        pendingLoad = request
+        val previous = pages.lastOrNull()
         loadJob = viewModelScope.launch {
-            mutableUiState.value = BrowserUiState.Loading
-            when (val result = loader()) {
+            mutableUiState.value = BrowserUiState.Loading(previous)
+            val result = when (request) {
+                BrowserLoadRequest.Root -> repository.openRoot(root)
+                is BrowserLoadRequest.Directory ->
+                    repository.openDirectory(
+                        root = root,
+                        logicalUrl = request.logicalUrl,
+                        breadcrumbs = request.breadcrumbs,
+                    )
+            }
+            when (result) {
                 is AppResult.Success -> {
                     while (pages.size > replaceFromIndex) {
                         pages.removeAt(pages.lastIndex)
                     }
-                    if (
-                        pages.lastOrNull()?.logicalDirectoryUrl !=
-                        result.value.logicalDirectoryUrl
-                    ) {
+                    val existingIndex = pages.indexOfFirst {
+                        it.logicalDirectoryUrl ==
+                            result.value.logicalDirectoryUrl
+                    }
+                    if (existingIndex >= 0) {
+                        while (pages.lastIndex > existingIndex) {
+                            pages.removeAt(pages.lastIndex)
+                        }
+                        pages[existingIndex] = result.value
+                    } else {
                         pages += result.value
                     }
-                    show(result.value)
+                    show(pages.last())
                 }
 
                 is AppResult.Failure -> {
-                    mutableUiState.value = BrowserUiState.Error(result.error)
+                    mutableUiState.value = BrowserUiState.Error(
+                        error = result.error,
+                        previous = previous,
+                        failedLogicalUrl =
+                            (request as? BrowserLoadRequest.Directory)
+                                ?.logicalUrl,
+                    )
                 }
             }
         }
@@ -183,6 +249,15 @@ class BrowserViewModel(
             ),
         )
     }
+}
+
+private sealed interface BrowserLoadRequest {
+    data object Root : BrowserLoadRequest
+
+    data class Directory(
+        val logicalUrl: String,
+        val breadcrumbs: List<Breadcrumb>,
+    ) : BrowserLoadRequest
 }
 
 private val DirectoryEntry.isPlayable: Boolean

@@ -1,6 +1,7 @@
 package com.local.mediaviewer
 
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -25,6 +26,7 @@ import com.local.mediaviewer.navigation.HomeRoute
 import com.local.mediaviewer.navigation.ImageReaderRoute
 import com.local.mediaviewer.navigation.PlayerRoute
 import com.local.mediaviewer.ui.browser.BrowserScreen
+import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -127,6 +129,35 @@ class BrowserScreenTest {
         rule.onNodeWithText("服务器返回 HTTP 404").assertIsDisplayed()
         rule.onNodeWithText("重试").performClick()
         assertTrue(retried)
+    }
+
+    @Test
+    fun existing_page_remains_visible_while_child_load_fails() {
+        val previous = browserPage(
+            entries = listOf(
+                browserEntry("旧页面视频.mp4", MediaKind.VIDEO),
+            ),
+        )
+        val retainedName = previous.entries.single().name
+        rule.setContent {
+            MediaViewerTheme {
+                BrowserScreen(
+                    state = BrowserUiState.Error(
+                        error = AppError.NetworkFailure("offline"),
+                        previous = previous,
+                        failedLogicalUrl = "http://media/child/",
+                    ),
+                    onRetry = {},
+                    onBack = {},
+                    onEntryClick = {},
+                    onBreadcrumbClick = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText(retainedName).assertIsDisplayed()
+        rule.onNodeWithText("加载子目录失败").assertIsDisplayed()
+        rule.onNodeWithText("重试").assertHasClickAction()
     }
 
     @Test
