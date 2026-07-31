@@ -3,6 +3,7 @@ package com.local.mediaviewer
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -16,6 +17,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.local.mediaviewer.browser.Breadcrumb
 import com.local.mediaviewer.browser.BrowserPage
+import com.local.mediaviewer.browser.BrowserPlaybackAction
 import com.local.mediaviewer.browser.BrowserUiState
 import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.model.DirectoryEntry
@@ -74,6 +76,45 @@ class BrowserScreenTest {
     }
 
     @Test
+    fun retainedPageRemainsVisibleWhileChildLoads() {
+        val page = browserPage(
+            breadcrumbs = listOf(
+                Breadcrumb(
+                    label = "根",
+                    logicalUrl = "http://media.example/middle/",
+                ),
+                Breadcrumb(
+                    label = "视频",
+                    logicalUrl = "http://media.example/middle/video/",
+                ),
+            ),
+            entries = listOf(
+                browserEntry(
+                    name = "long movie name.mp4",
+                    kind = MediaKind.VIDEO,
+                ),
+            ),
+        )
+        rule.setContent {
+            MediaViewerTheme {
+                BrowserScreen(
+                    state = BrowserUiState.Loading(previous = page),
+                    onEntryClick = {},
+                    onBreadcrumbClick = {},
+                    onPlaybackAction = { _, _ -> },
+                    onRetry = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("long movie name.mp4").assertIsDisplayed()
+        rule.onNodeWithTag("browser_list").assertIsDisplayed()
+        rule.onNodeWithTag("browser_refreshing").assertIsDisplayed()
+        rule.onNodeWithTag("breadcrumb_1").assertIsSelected()
+    }
+
+    @Test
     fun playableFilesExposeManualPlaybackActions() {
         val video = browserEntry("movie.mp4", MediaKind.VIDEO)
         val image = browserEntry("page.png", MediaKind.IMAGE)
@@ -90,12 +131,65 @@ class BrowserScreenTest {
             )
         }
 
-        rule.onNodeWithContentDescription("更多播放操作").performClick()
-        rule.onAllNodesWithContentDescription("更多播放操作")
+        rule.onNodeWithContentDescription("更多播放操作：movie.mp4").performClick()
+        rule.onAllNodesWithContentDescription("更多播放操作：movie.mp4")
             .assertCountEquals(1)
+        rule.onNodeWithContentDescription("更多播放操作：page.png")
+            .assertDoesNotExist()
+        rule.onNodeWithContentDescription("更多播放操作：nested")
+            .assertDoesNotExist()
         rule.onNodeWithText("立即播放").assertIsDisplayed()
         rule.onNodeWithText("下一项播放").assertIsDisplayed()
         rule.onNodeWithText("添加到队列").assertIsDisplayed()
+    }
+
+    @Test
+    fun playbackMenuNamesItsTargetAndKeepsApprovedOrder() {
+        val entry = browserEntry("movie.mp4", MediaKind.VIDEO)
+        val actions = mutableListOf<Pair<BrowserPlaybackAction, DirectoryEntry>>()
+        rule.setContent {
+            MediaViewerTheme {
+                BrowserScreen(
+                    state = BrowserUiState.Content(browserPage(entries = listOf(entry))),
+                    onEntryClick = {},
+                    onBreadcrumbClick = {},
+                    onPlaybackAction = { action, target ->
+                        actions += action to target
+                    },
+                    onRetry = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("更多播放操作：movie.mp4").performClick()
+        val now = rule.onNodeWithText("立即播放")
+            .assertIsDisplayed()
+            .fetchSemanticsNode().boundsInRoot
+        val next = rule.onNodeWithText("下一项播放")
+            .assertIsDisplayed()
+            .fetchSemanticsNode().boundsInRoot
+        val enqueue = rule.onNodeWithText("添加到队列")
+            .assertIsDisplayed()
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(now.top < next.top)
+        assertTrue(next.top < enqueue.top)
+
+        rule.onNodeWithText("立即播放").performClick()
+        rule.onNodeWithContentDescription("更多播放操作：movie.mp4").performClick()
+        rule.onNodeWithText("下一项播放").performClick()
+        rule.onNodeWithContentDescription("更多播放操作：movie.mp4").performClick()
+        rule.onNodeWithText("添加到队列").performClick()
+        rule.runOnIdle {
+            assertEquals(
+                listOf(
+                    BrowserPlaybackAction.PLAY_DIRECTORY to entry,
+                    BrowserPlaybackAction.PLAY_NEXT to entry,
+                    BrowserPlaybackAction.ADD_TO_QUEUE to entry,
+                ),
+                actions,
+            )
+        }
     }
 
     @Test
@@ -228,13 +322,19 @@ class BrowserScreenTest {
     }
 }
 
-private fun browserPage(entries: List<DirectoryEntry>) = BrowserPage(
-    root = BROWSER_SHARE,
-    logicalDirectoryUrl = "http://media.example/middle/",
-    requestDirectoryUrl = "http://192.0.2.1/middle/",
-    breadcrumbs = listOf(
-        Breadcrumb("MiddleDir", "http://media.example/middle/"),
+private fun browserPage(
+    entries: List<DirectoryEntry>,
+    breadcrumbs: List<Breadcrumb> = listOf(
+        Breadcrumb(
+            "MiddleDir",
+            "http://media.example/middle/",
+        ),
     ),
+) = BrowserPage(
+    root = BROWSER_SHARE,
+    logicalDirectoryUrl = breadcrumbs.last().logicalUrl,
+    requestDirectoryUrl = "http://192.0.2.1/middle/",
+    breadcrumbs = breadcrumbs,
     entries = entries,
 )
 

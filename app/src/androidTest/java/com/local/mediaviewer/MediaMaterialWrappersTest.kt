@@ -276,6 +276,37 @@ class MediaMaterialWrappersTest {
     }
 
     @Test
+    fun optionMenuWithoutSelectionOmitsSelectionSemantics() {
+        rule.setContent {
+            MediaViewerTheme {
+                MediaOptionMenu(
+                    expanded = true,
+                    options = listOf(
+                        MediaOption("play", "立即播放"),
+                        MediaOption("next", "下一项播放"),
+                    ),
+                    selectedKey = null,
+                    onSelect = {},
+                    onDismissRequest = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("立即播放")
+            .assert(
+                SemanticsMatcher.keyNotDefined(
+                    SemanticsProperties.Selected,
+                ),
+            )
+        rule.onNodeWithText("下一项播放")
+            .assert(
+                SemanticsMatcher.keyNotDefined(
+                    SemanticsProperties.Selected,
+                ),
+            )
+    }
+
+    @Test
     fun urlFieldAndChoiceRowExposeResultAndSelectionSemantics() {
         rule.setContent {
             MediaViewerTheme {

@@ -52,7 +52,9 @@ fun <T> MediaOptionMenu(
                 onClick = { onSelect(option.key) },
                 enabled = option.enabled,
                 modifier = Modifier.semantics(mergeDescendants = true) {
-                    selected = option.key == selectedKey
+                    if (selectedKey != null) {
+                        selected = option.key == selectedKey
+                    }
                 },
             )
         }
