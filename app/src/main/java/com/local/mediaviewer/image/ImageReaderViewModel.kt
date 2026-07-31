@@ -6,6 +6,8 @@ import com.local.mediaviewer.browser.DirectoryContentRepository
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.model.SessionEndpoint
 import com.local.mediaviewer.session.ServerSessionManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +24,7 @@ sealed interface ImageReaderUiState {
         val anchorLogicalUrl: String,
         val requestGeneration: Int = 0,
         val isRefreshingEndpoint: Boolean = false,
+        val refreshingImageLogicalUrl: String? = null,
         val itemFailures:
             Map<String, ImageItemFailure> = emptyMap(),
         val itemRequestGenerations:
@@ -85,6 +88,11 @@ class ImageReaderViewModel(
         )
     }
 
+    private enum class EndpointRefreshTrigger {
+        AUTOMATIC,
+        USER,
+    }
+
     fun updateAnchor(logicalUrl: String) {
         val content =
             mutableUiState.value
@@ -119,34 +127,12 @@ class ImageReaderViewModel(
                             )
                     ),
         )
-        if (kind != ImageLoadFailureKind.NETWORK) {
-            return
-        }
-        if (
-            automaticEndpointRefreshUsed ||
-            refreshJob?.isActive == true
-        ) {
-            return
-        }
-        automaticEndpointRefreshUsed = true
-        refreshJob = viewModelScope.launch {
-            setRefreshing(true)
-            when (
-                val result =
-                    session
-                        .refreshAfterRequestFailure()
-            ) {
-                is AppResult.Success -> {
-                    remapRequests(result.value)
-                }
-
-                is AppResult.Failure -> {
-                    retainRefreshFailure(
-                        result.error.userMessage,
-                    )
-                }
-            }
-            refreshJob = null
+        if (kind == ImageLoadFailureKind.NETWORK) {
+            refreshEndpoint(
+                trigger = EndpointRefreshTrigger.AUTOMATIC,
+                retryLogicalUrl = null,
+                targetLogicalUrl = logicalUrl,
+            )
         }
     }
 
@@ -161,6 +147,15 @@ class ImageReaderViewModel(
 
     fun retryImage(logicalUrl: String) {
         val content = contentWith(logicalUrl) ?: return
+        val failure = content.itemFailures[logicalUrl] ?: return
+        if (failure.kind == ImageLoadFailureKind.NETWORK) {
+            refreshEndpoint(
+                trigger = EndpointRefreshTrigger.USER,
+                retryLogicalUrl = logicalUrl,
+                targetLogicalUrl = logicalUrl,
+            )
+            return
+        }
         val nextGeneration =
             (
                 content.itemRequestGenerations[
@@ -240,64 +235,160 @@ class ImageReaderViewModel(
         }
     }
 
-    private fun setRefreshing(refreshing: Boolean) {
+    private fun setRefreshing(
+        refreshing: Boolean,
+        targetLogicalUrl: String? = null,
+    ) {
         val content =
             mutableUiState.value
                 as? ImageReaderUiState.Content
                 ?: return
+        val refreshingLogicalUrl =
+            targetLogicalUrl.takeIf { refreshing }
         if (
             content.isRefreshingEndpoint ==
-            refreshing
+            refreshing &&
+            content.refreshingImageLogicalUrl ==
+            refreshingLogicalUrl
         ) {
             return
         }
         mutableUiState.value = content.copy(
             isRefreshingEndpoint = refreshing,
+            refreshingImageLogicalUrl =
+                refreshingLogicalUrl,
         )
     }
 
-    private fun remapRequests(
+    private fun refreshEndpoint(
+        trigger: EndpointRefreshTrigger,
+        retryLogicalUrl: String?,
+        targetLogicalUrl: String,
+    ) {
+        if (refreshJob?.isActive == true) return
+        if (
+            trigger == EndpointRefreshTrigger.AUTOMATIC &&
+            automaticEndpointRefreshUsed
+        ) {
+            return
+        }
+        if (trigger == EndpointRefreshTrigger.AUTOMATIC) {
+            automaticEndpointRefreshUsed = true
+        }
+        val job = viewModelScope.launch(
+            start = CoroutineStart.LAZY,
+        ) {
+            try {
+                setRefreshing(
+                    refreshing = true,
+                    targetLogicalUrl =
+                        targetLogicalUrl,
+                )
+                when (
+                    val result =
+                        session
+                            .refreshAfterRequestFailure()
+                ) {
+                    is AppResult.Success -> {
+                        remapFailedRequests(
+                            endpoint = result.value,
+                            retryLogicalUrl =
+                                retryLogicalUrl,
+                        )
+                    }
+
+                    is AppResult.Failure -> {
+                        retainRefreshFailure(
+                            message =
+                                result.error.userMessage,
+                            retryLogicalUrl =
+                                retryLogicalUrl,
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                retainRefreshFailure(
+                    message =
+                        refreshFailureMessage(error),
+                    retryLogicalUrl =
+                        retryLogicalUrl,
+                )
+            } finally {
+                setRefreshing(false)
+                refreshJob = null
+            }
+        }
+        refreshJob = job
+        job.start()
+    }
+
+    private fun refreshFailureMessage(
+        error: Exception,
+    ): String {
+        val detail = error.message
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        return if (detail == null) {
+            "重新连接失败，请稍后重试"
+        } else {
+            "重新连接失败：$detail"
+        }
+    }
+
+    private fun remapFailedRequests(
         endpoint: SessionEndpoint,
+        retryLogicalUrl: String?,
     ) {
         val content =
             mutableUiState.value
                 as? ImageReaderUiState.Content
                 ?: return
+        val retryKeys =
+            content.itemFailures
+                .filterValues {
+                    it.kind == ImageLoadFailureKind.NETWORK
+                }
+                .keys + listOfNotNull(retryLogicalUrl)
         mutableUiState.value = content.copy(
             images = content.images.map { item ->
-                item.copy(
-                    requestUrl =
-                        endpoint.requestUrlFor(
-                            item.logicalUrl,
-                        ),
-                )
+                if (item.logicalUrl in retryKeys) {
+                    item.copy(
+                        requestUrl = endpoint.requestUrlFor(item.logicalUrl),
+                    )
+                } else {
+                    item
+                }
             },
-            requestGeneration =
-                content.requestGeneration + 1,
-            isRefreshingEndpoint = false,
-            itemFailures =
-                content.itemFailures.filterValues {
-                    it.kind !=
-                        ImageLoadFailureKind.NETWORK
+            itemRequestGenerations =
+                content.itemRequestGenerations.toMutableMap().apply {
+                    retryKeys.forEach { key ->
+                        this[key] = (this[key] ?: 0) + 1
+                    }
                 },
+            itemFailures = content.itemFailures - retryKeys,
         )
     }
 
     private fun retainRefreshFailure(
         message: String,
+        retryLogicalUrl: String?,
     ) {
         val content =
             mutableUiState.value
                 as? ImageReaderUiState.Content
                 ?: return
         mutableUiState.value = content.copy(
-            isRefreshingEndpoint = false,
             itemFailures =
                 content.itemFailures.mapValues {
-                    (_, failure) ->
+                    (logicalUrl, failure) ->
                     if (
-                        failure.kind ==
-                        ImageLoadFailureKind.NETWORK
+                        logicalUrl == retryLogicalUrl ||
+                        (
+                            retryLogicalUrl == null &&
+                                failure.kind == ImageLoadFailureKind.NETWORK
+                        )
                     ) {
                         failure.copy(message = message)
                     } else {

@@ -78,6 +78,7 @@ fun ComicReader(
         (String, ImageLoadFailureKind) -> Unit,
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
+    refreshingImageLogicalUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val deviceBitmapLimits = remember {
@@ -258,6 +259,9 @@ fun ComicReader(
                         onImageLoadSuccess =
                             onImageLoadSuccess,
                         onRetryImage = onRetryImage,
+                        isRefreshing =
+                            refreshingImageLogicalUrl ==
+                                item.logicalUrl,
                         modifier =
                             Modifier.fillMaxWidth(),
                     )
@@ -281,6 +285,7 @@ private fun ComicImage(
         (String, ImageLoadFailureKind) -> Unit,
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
+    isRefreshing: Boolean,
     modifier: Modifier,
 ) {
     if (failure != null) {
@@ -290,6 +295,7 @@ private fun ComicImage(
             onRetry = {
                 onRetryImage(item.logicalUrl)
             },
+            isRefreshing = isRefreshing,
             modifier = modifier,
         )
         return

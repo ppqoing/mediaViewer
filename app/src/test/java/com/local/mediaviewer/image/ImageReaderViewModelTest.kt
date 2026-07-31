@@ -11,17 +11,22 @@ import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import java.time.Instant
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -304,10 +309,11 @@ class ImageReaderViewModelTest {
     }
 
     @Test
-    fun `并发网络失败只刷新一次并重写全部请求 URL`() =
+    fun `并发网络失败只刷新一次并只重映射失败项`() =
         runTest(dispatcher) {
             val logicalA = "${DIRECTORY_URL}a.jpg"
             val logicalB = "${DIRECTORY_URL}b.jpg"
+            val logicalC = "${DIRECTORY_URL}c.jpg"
             val refreshedEndpoint = SessionEndpoint(
                 logicalBaseUrl =
                     "http://media.example:8080",
@@ -318,10 +324,22 @@ class ImageReaderViewModelTest {
             val session = ControlledImageSession(
                 AppResult.Success(refreshedEndpoint),
             )
-            val viewModel = populatedViewModel(
+            val viewModel = readerViewModel(
+                repository = ReaderDirectoryRepository(
+                    successContent(
+                        listOf(
+                            readerEntry("a.jpg", MediaKind.IMAGE),
+                            readerEntry("b.jpg", MediaKind.IMAGE),
+                            readerEntry("c.jpg", MediaKind.IMAGE),
+                        ),
+                    ),
+                ),
                 session = session,
             )
             advanceUntilIdle()
+            val initial =
+                viewModel.uiState.value
+                    as ImageReaderUiState.Content
 
             viewModel.onImageLoadError(
                 logicalA,
@@ -338,14 +356,37 @@ class ImageReaderViewModelTest {
                     as ImageReaderUiState.Content
             assertEquals(1, session.refreshCalls)
             assertTrue(
-                content.images.all {
-                    it.requestUrl.startsWith(
-                        refreshedEndpoint
-                            .requestBaseUrl,
-                    )
-                },
+                content.images
+                    .single { it.logicalUrl == logicalA }
+                    .requestUrl
+                    .startsWith(refreshedEndpoint.requestBaseUrl),
             )
-            assertEquals(1, content.requestGeneration)
+            assertTrue(
+                content.images
+                    .single { it.logicalUrl == logicalB }
+                    .requestUrl
+                    .startsWith(refreshedEndpoint.requestBaseUrl),
+            )
+            assertEquals(
+                initial.images
+                    .single { it.logicalUrl == logicalC }
+                    .requestUrl,
+                content.images
+                    .single { it.logicalUrl == logicalC }
+                    .requestUrl,
+            )
+            assertEquals(
+                initial.requestGeneration,
+                content.requestGeneration,
+            )
+            assertEquals(
+                initial.anchorLogicalUrl,
+                content.anchorLogicalUrl,
+            )
+            assertEquals(
+                mapOf(logicalA to 1, logicalB to 1),
+                content.itemRequestGenerations,
+            )
             assertTrue(content.itemFailures.isEmpty())
             assertEquals(
                 false,
@@ -418,7 +459,231 @@ class ImageReaderViewModelTest {
                 ImageLoadFailureKind.NETWORK,
                 content.itemFailures[logicalA]?.kind,
             )
-            assertEquals(1, content.requestGeneration)
+            assertEquals(0, content.requestGeneration)
+        }
+
+    @Test
+    fun `manual retry refreshes after automatic budget is exhausted and only retries failed images`() =
+        runTest(dispatcher) {
+            val firstEndpoint = SessionEndpoint(
+                logicalBaseUrl = "http://media.example:8080",
+                requestBaseUrl = "http://192.0.2.20:8080",
+                ipv4 = "192.0.2.20",
+            )
+            val secondEndpoint = firstEndpoint.copy(
+                requestBaseUrl = "http://192.0.2.21:8080",
+                ipv4 = "192.0.2.21",
+            )
+            val session = QueuedImageSession(
+                ArrayDeque(
+                    listOf(
+                        { AppResult.Success(firstEndpoint) },
+                        { AppResult.Success(secondEndpoint) },
+                    ),
+                ),
+            )
+            val viewModel = readerViewModel(
+                repository = ReaderDirectoryRepository(
+                    successContent(
+                        listOf(
+                            readerEntry("a.jpg", MediaKind.IMAGE),
+                            readerEntry("b.jpg", MediaKind.IMAGE),
+                        ),
+                    ),
+                ),
+                session = session,
+            )
+            advanceUntilIdle()
+            val initial = viewModel.uiState.value as ImageReaderUiState.Content
+            val successUrl = initial.images[0].logicalUrl
+            val failedUrl = initial.images[1].logicalUrl
+
+            viewModel.onImageLoadError(failedUrl, ImageLoadFailureKind.NETWORK)
+            advanceUntilIdle()
+            viewModel.onImageLoadError(failedUrl, ImageLoadFailureKind.NETWORK)
+            advanceUntilIdle()
+            assertEquals(1, session.refreshCalls)
+            val beforeManual = viewModel.uiState.value as ImageReaderUiState.Content
+
+            viewModel.retryImage(failedUrl)
+            advanceUntilIdle()
+            val afterManual = viewModel.uiState.value as ImageReaderUiState.Content
+
+            assertEquals(2, session.refreshCalls)
+            assertEquals(
+                beforeManual.requestGeneration,
+                afterManual.requestGeneration,
+            )
+            assertEquals(
+                beforeManual.itemRequestGenerations[successUrl] ?: 0,
+                afterManual.itemRequestGenerations[successUrl] ?: 0,
+            )
+            assertEquals(
+                (beforeManual.itemRequestGenerations[failedUrl] ?: 0) + 1,
+                afterManual.itemRequestGenerations[failedUrl] ?: 0,
+            )
+            assertEquals(
+                beforeManual.images.single { it.logicalUrl == successUrl }.requestUrl,
+                afterManual.images.single { it.logicalUrl == successUrl }.requestUrl,
+            )
+            assertTrue(
+                afterManual.images.single { it.logicalUrl == failedUrl }
+                    .requestUrl.contains("192.0.2.21"),
+            )
+
+            viewModel.onImageLoadError(
+                failedUrl,
+                ImageLoadFailureKind.NETWORK,
+            )
+            advanceUntilIdle()
+
+            assertEquals(2, session.refreshCalls)
+            assertEquals(
+                ImageLoadFailureKind.NETWORK,
+                (
+                    viewModel.uiState.value
+                        as ImageReaderUiState.Content
+                ).itemFailures[failedUrl]?.kind,
+            )
+        }
+
+    @Test
+    fun `repeated manual taps share one refresh job`() = runTest(dispatcher) {
+        val refresh = CompletableDeferred<AppResult<SessionEndpoint>>()
+        val manualEndpoint = REFRESHED_ENDPOINT.copy(
+            requestBaseUrl = "http://192.0.2.77:8080",
+            ipv4 = "192.0.2.77",
+        )
+        val session = QueuedImageSession(
+            ArrayDeque(
+                listOf(
+                    { AppResult.Success(REFRESHED_ENDPOINT) },
+                    { refresh.await() },
+                ),
+            ),
+        )
+        val viewModel = readerViewModel(
+            repository = ReaderDirectoryRepository(
+                successContent(
+                    listOf(readerEntry("a.jpg", MediaKind.IMAGE)),
+                ),
+            ),
+            session = session,
+        )
+        advanceUntilIdle()
+        viewModel.onImageLoadError(
+            "${DIRECTORY_URL}a.jpg",
+            ImageLoadFailureKind.NETWORK,
+        )
+        advanceUntilIdle()
+        viewModel.onImageLoadError(
+            "${DIRECTORY_URL}a.jpg",
+            ImageLoadFailureKind.NETWORK,
+        )
+        val beforeManual =
+            viewModel.uiState.value
+                as ImageReaderUiState.Content
+
+        viewModel.retryImage("${DIRECTORY_URL}a.jpg")
+        viewModel.retryImage("${DIRECTORY_URL}a.jpg")
+        runCurrent()
+
+        assertEquals(2, session.refreshCalls)
+        val refreshing =
+            viewModel.uiState.value
+                as ImageReaderUiState.Content
+        assertTrue(refreshing.isRefreshingEndpoint)
+        assertEquals(
+            "${DIRECTORY_URL}a.jpg",
+            refreshing.refreshingImageLogicalUrl,
+        )
+        refresh.complete(AppResult.Success(manualEndpoint))
+        advanceUntilIdle()
+        val afterManual =
+            viewModel.uiState.value
+                as ImageReaderUiState.Content
+        assertFalse(afterManual.isRefreshingEndpoint)
+        assertNull(afterManual.refreshingImageLogicalUrl)
+        assertEquals(
+            beforeManual.requestGeneration,
+            afterManual.requestGeneration,
+        )
+        assertEquals(
+            (
+                beforeManual.itemRequestGenerations[
+                    "${DIRECTORY_URL}a.jpg"
+                ] ?: 0
+            ) + 1,
+            afterManual.itemRequestGenerations[
+                "${DIRECTORY_URL}a.jpg"
+            ],
+        )
+        assertTrue(
+            afterManual.images.single().requestUrl
+                .startsWith(manualEndpoint.requestBaseUrl),
+        )
+    }
+
+    @Test
+    fun `刷新抛出异常转为局部错误并允许再次重试`() =
+        runTest(dispatcher) {
+            val logicalA = "${DIRECTORY_URL}a.jpg"
+            val session = QueuedImageSession(
+                ArrayDeque(
+                    listOf(
+                        {
+                            throw IllegalStateException(
+                                "refresh crashed",
+                            )
+                        },
+                        {
+                            AppResult.Success(
+                                REFRESHED_ENDPOINT,
+                            )
+                        },
+                    ),
+                ),
+            )
+            val viewModel = populatedViewModel(session)
+            advanceUntilIdle()
+
+            viewModel.onImageLoadError(
+                logicalA,
+                ImageLoadFailureKind.NETWORK,
+            )
+            advanceUntilIdle()
+
+            val failed =
+                viewModel.uiState.value
+                    as ImageReaderUiState.Content
+            assertFalse(failed.isRefreshingEndpoint)
+            assertNull(failed.refreshingImageLogicalUrl)
+            assertEquals(
+                ImageItemFailure(
+                    message =
+                        "重新连接失败：refresh crashed",
+                    kind =
+                        ImageLoadFailureKind.NETWORK,
+                ),
+                failed.itemFailures[logicalA],
+            )
+
+            viewModel.retryImage(logicalA)
+            advanceUntilIdle()
+
+            val recovered =
+                viewModel.uiState.value
+                    as ImageReaderUiState.Content
+            assertEquals(2, session.refreshCalls)
+            assertTrue(
+                logicalA !in recovered.itemFailures,
+            )
+            assertEquals(
+                1,
+                recovered.itemRequestGenerations[
+                    logicalA
+                ],
+            )
         }
 
     @Test
@@ -675,5 +940,31 @@ private class ControlledImageSession(
         AppResult<SessionEndpoint> {
         refreshCalls += 1
         return refreshResult
+    }
+}
+
+private class QueuedImageSession(
+    private val results: ArrayDeque<suspend () -> AppResult<SessionEndpoint>>,
+) : ServerSessionManager {
+    override val state: StateFlow<ServerSessionState> =
+        MutableStateFlow(ServerSessionState.Connecting)
+    var refreshCalls = 0
+        private set
+
+    override suspend fun connectSaved() = Unit
+
+    override suspend fun testCandidate(
+        input: String,
+    ): AppResult<ConnectionTestResult> =
+        error("unused testCandidate: $input")
+
+    override suspend fun saveCandidate(result: ConnectionTestResult) {
+        error("unused saveCandidate: ${result.server.logicalBaseUrl}")
+    }
+
+    override suspend fun refreshAfterRequestFailure():
+        AppResult<SessionEndpoint> {
+        refreshCalls += 1
+        return results.removeFirst().invoke()
     }
 }

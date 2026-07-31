@@ -45,6 +45,7 @@ fun SingleImageViewer(
         (String, ImageLoadFailureKind) -> Unit,
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
+    refreshingImageLogicalUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var zoom by remember(item.logicalUrl) {
@@ -68,6 +69,9 @@ fun SingleImageViewer(
                 onRetry = {
                     onRetryImage(item.logicalUrl)
                 },
+                isRefreshing =
+                    refreshingImageLogicalUrl ==
+                        item.logicalUrl,
                 modifier = Modifier.fillMaxSize(),
             )
             return@BoxWithConstraints

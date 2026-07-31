@@ -154,6 +154,9 @@ fun ImageReaderScreen(
                             itemRequestGenerations =
                                 state
                                     .itemRequestGenerations,
+                            refreshingImageLogicalUrl =
+                                state
+                                    .refreshingImageLogicalUrl,
                             transform =
                                 comicTransform,
                             onTransformChanged = {
@@ -196,12 +199,12 @@ fun ImageReaderScreen(
                                 onImageLoadSuccess,
                             onRetryImage =
                                 onRetryImage,
+                            refreshingImageLogicalUrl =
+                                state
+                                    .refreshingImageLogicalUrl,
                             modifier =
                                 Modifier.fillMaxSize(),
                         )
-                    }
-                    if (state.isRefreshingEndpoint) {
-                        CircularProgressIndicator()
                     }
                 }
             }

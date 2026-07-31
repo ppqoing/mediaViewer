@@ -1,12 +1,20 @@
 package com.local.mediaviewer
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -26,6 +34,7 @@ import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.ui.image.ComicHorizontalOffsetSemanticsKey
 import com.local.mediaviewer.ui.image.ComicScaleSemanticsKey
 import com.local.mediaviewer.ui.image.ImageReaderScreen
+import com.local.mediaviewer.ui.image.ImageItemErrorPanel
 import java.time.Instant
 import kotlin.math.abs
 import org.junit.After
@@ -233,6 +242,194 @@ class ImageReaderScreenTest {
         }
         rule.onNodeWithTag("comic_reader")
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun network_error_offers_reconnect_but_decode_error_only_retries_the_item() {
+        val networkItem = ImageReaderItem(
+            name = "network.jpg",
+            size = 1L,
+            modifiedAt = Instant.EPOCH,
+            logicalUrl = "http://media.example/network.jpg",
+            requestUrl = "http://192.0.2.1/network.jpg",
+        )
+        val decodeItem = networkItem.copy(
+            name = "decode.jpg",
+            logicalUrl = "http://media.example/decode.jpg",
+            requestUrl = "http://192.0.2.1/decode.jpg",
+        )
+        rule.setContent {
+            Column {
+                ImageItemErrorPanel(
+                    item = networkItem,
+                    failure = ImageItemFailure(
+                        message = "图片网络加载失败",
+                        kind = ImageLoadFailureKind.NETWORK,
+                    ),
+                    onRetry = {},
+                )
+                ImageItemErrorPanel(
+                    item = decodeItem,
+                    failure = ImageItemFailure(
+                        message = "图片解码失败",
+                        kind = ImageLoadFailureKind.DECODE,
+                    ),
+                    onRetry = {},
+                )
+            }
+        }
+
+        rule.onNodeWithText("重新连接并重试").assertHasClickAction()
+        rule.onNodeWithText("重试此图").assertHasClickAction()
+    }
+
+    @Test
+    fun comicEndpointRefreshOnlyDisablesAndLoadsTheTargetFailure() {
+        val base = contentState(ImageReaderMode.COMIC)
+        val target = base.images[0]
+        val other = base.images[1]
+        val networkFailure = ImageItemFailure(
+            message = "图片网络加载失败",
+            kind = ImageLoadFailureKind.NETWORK,
+        )
+        setScreen(
+            state = base.copy(
+                images = listOf(target, other),
+                anchorLogicalUrl = target.logicalUrl,
+                isRefreshingEndpoint = true,
+                refreshingImageLogicalUrl =
+                    target.logicalUrl,
+                itemFailures = mapOf(
+                    target.logicalUrl to networkFailure,
+                    other.logicalUrl to networkFailure,
+                ),
+            ),
+        )
+
+        rule
+            .onNodeWithTag(
+                "retry_image:" +
+                    target.logicalUrl.hashCode(),
+            )
+            .assertIsNotEnabled()
+        rule
+            .onNodeWithTag(
+                "retry_image_loading:" +
+                    target.logicalUrl.hashCode(),
+                useUnmergedTree = true,
+            )
+            .assertIsDisplayed()
+        rule
+            .onNodeWithTag(
+                "retry_image:" +
+                    other.logicalUrl.hashCode(),
+            )
+            .assertIsEnabled()
+        rule
+            .onNodeWithTag(
+                "retry_image_loading:" +
+                    other.logicalUrl.hashCode(),
+                useUnmergedTree = true,
+            )
+            .assertIsNotDisplayed()
+        rule.onNodeWithTag("comic_reader")
+            .assertIsDisplayed()
+        assertIndeterminateProgressCount(1)
+    }
+
+    @Test
+    fun singleEndpointRefreshDisablesAndLoadsTheCurrentTarget() {
+        val base = contentState(ImageReaderMode.SINGLE)
+        val current = base.images.single {
+            it.logicalUrl == base.anchorLogicalUrl
+        }
+        setScreen(
+            state = base.copy(
+                isRefreshingEndpoint = true,
+                refreshingImageLogicalUrl =
+                    current.logicalUrl,
+                itemFailures = mapOf(
+                    current.logicalUrl to
+                        ImageItemFailure(
+                            message =
+                                "图片网络加载失败",
+                            kind =
+                                ImageLoadFailureKind.NETWORK,
+                        ),
+                ),
+            ),
+        )
+
+        rule
+            .onNodeWithTag(
+                "retry_image:" +
+                    current.logicalUrl.hashCode(),
+            )
+            .assertIsNotEnabled()
+        rule
+            .onNodeWithTag(
+                "retry_image_loading:" +
+                    current.logicalUrl.hashCode(),
+                useUnmergedTree = true,
+            )
+            .assertIsDisplayed()
+        assertIndeterminateProgressCount(1)
+    }
+
+    @Test
+    fun singleEndpointRefreshLeavesANonTargetFailureEnabled() {
+        val base = contentState(ImageReaderMode.SINGLE)
+        val current = base.images.single {
+            it.logicalUrl == base.anchorLogicalUrl
+        }
+        val refreshTarget = base.images.first {
+            it.logicalUrl != current.logicalUrl
+        }
+        setScreen(
+            state = base.copy(
+                isRefreshingEndpoint = true,
+                refreshingImageLogicalUrl =
+                    refreshTarget.logicalUrl,
+                itemFailures = mapOf(
+                    current.logicalUrl to
+                        ImageItemFailure(
+                            message =
+                                "图片网络加载失败",
+                            kind =
+                                ImageLoadFailureKind.NETWORK,
+                        ),
+                ),
+            ),
+        )
+
+        rule
+            .onNodeWithTag(
+                "retry_image:" +
+                    current.logicalUrl.hashCode(),
+            )
+            .assertIsEnabled()
+        rule
+            .onNodeWithTag(
+                "retry_image_loading:" +
+                    current.logicalUrl.hashCode(),
+                useUnmergedTree = true,
+            )
+            .assertIsNotDisplayed()
+        assertIndeterminateProgressCount(0)
+    }
+
+    private fun assertIndeterminateProgressCount(
+        expected: Int,
+    ) {
+        rule.onAllNodes(
+            matcher =
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties
+                        .ProgressBarRangeInfo,
+                    ProgressBarRangeInfo.Indeterminate,
+                ),
+            useUnmergedTree = true,
+        ).assertCountEquals(expected)
     }
 
     private fun setScreen(
