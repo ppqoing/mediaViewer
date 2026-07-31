@@ -1,37 +1,33 @@
 package com.local.mediaviewer.ui.home
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.home.HomeUiState
 import com.local.mediaviewer.model.ServerShare
-import com.local.mediaviewer.model.ShareAuthenticationMode
-import com.local.mediaviewer.ui.components.AppErrorPanel
+import com.local.mediaviewer.ui.components.MediaAction
+import com.local.mediaviewer.ui.components.MediaIconButton
+import com.local.mediaviewer.ui.components.MediaScreenScaffold
+import com.local.mediaviewer.ui.components.MediaStateKind
+import com.local.mediaviewer.ui.components.MediaStatePanel
+import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.theme.MediaTheme
 
 /**
- * 展示服务器连接状态和 RangeShelf 动态共享入口。
- *
- * @param state 当前首页状态。
- * @param onRetry 重试连接回调。
- * @param onOpenSettings 打开设置页回调。
- * @param onOpenShare 打开当前客户端可浏览共享的回调。
+ * 展示服务器连接状态和可浏览共享入口。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     state: HomeUiState,
@@ -39,65 +35,71 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenShare: (ServerShare) -> Unit,
 ) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("mediaviewer") },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "设置",
-                        )
-                    }
-                },
+    MediaScreenScaffold(
+        title = "MediaViewer",
+        actions = {
+            MediaIconButton(
+                icon = MediaIcons.Settings,
+                contentDescription = "设置",
+                onClick = onOpenSettings,
             )
         },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            when (state) {
-                HomeUiState.Connecting -> {
-                    Text("正在连接服务器…")
-                    CircularProgressIndicator()
+    ) { scaffoldPadding ->
+        val layoutDirection = LocalLayoutDirection.current
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val pageGutter = if (maxWidth >= 600.dp) {
+                MediaTheme.spacing.widePageGutter
+            } else {
+                MediaTheme.spacing.pageGutter
+            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("home_list"),
+                contentPadding = PaddingValues(
+                    start = scaffoldPadding.calculateStartPadding(layoutDirection) +
+                        pageGutter,
+                    top = scaffoldPadding.calculateTopPadding() + MediaTheme.spacing.md,
+                    end = scaffoldPadding.calculateEndPadding(layoutDirection) +
+                        pageGutter,
+                    bottom = scaffoldPadding.calculateBottomPadding() + MediaTheme.spacing.md,
+                ),
+                verticalArrangement = Arrangement.spacedBy(MediaTheme.spacing.sm),
+            ) {
+                item {
+                    ConnectionStatusCard(
+                        state = state,
+                        onRetry = onRetry,
+                        onOpenSettings = onOpenSettings,
+                    )
                 }
-
-                is HomeUiState.Error -> {
-                    AppErrorPanel(state.message, onRetry)
-                }
-
-                is HomeUiState.Connected -> {
-                    Text("当前 IPv4：${state.ipv4}")
+                if (state is HomeUiState.Connected) {
                     if (state.shares.isEmpty()) {
-                        Text("服务器当前没有启用的共享")
-                    }
-                    state.shares.forEach { share ->
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(
-                                    enabled = share.canBrowse,
-                                    onClick = { onOpenShare(share) },
+                        item {
+                            MediaStatePanel(
+                                kind = MediaStateKind.EMPTY,
+                                title = "没有可浏览的共享",
+                                primaryAction = MediaAction(
+                                    label = "服务器设置",
+                                    onClick = onOpenSettings,
                                 ),
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(text = share.displayName)
-                                if (!share.directoryBrowsing) {
-                                    Text("服务器未启用目录浏览")
-                                } else if (
-                                    share.authenticationMode ==
-                                    ShareAuthenticationMode.BASIC
-                                ) {
-                                    Text("需要 Basic Auth，当前版本暂不能进入")
-                                }
-                            }
+                            )
+                        }
+                    } else {
+                        item {
+                            Text(
+                                text = "共享",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                        items(
+                            items = state.shares,
+                            key = ServerShare::id,
+                        ) { share ->
+                            ShareCard(
+                                share = share,
+                                onClick = onOpenShare,
+                            )
                         }
                     }
                 }
