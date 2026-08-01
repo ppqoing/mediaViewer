@@ -135,6 +135,9 @@ fun VideoPlayerScreen(
     BackHandler {
         when {
             gestureHintVisible -> dismissGestureHint()
+            // 规格 §10/§8.6：锁定时返回不退出全屏；
+            // 明确的解锁入口由锁定覆盖层常驻提供。
+            interaction.controlsLocked -> Unit
             fullscreen && volumeExpanded -> setVolumeExpanded(false)
             fullscreen -> fullscreenController.exit()
             else -> onBack()

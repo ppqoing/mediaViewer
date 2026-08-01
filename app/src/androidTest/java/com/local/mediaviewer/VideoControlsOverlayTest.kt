@@ -227,6 +227,24 @@ class VideoControlsOverlayTest {
     }
 
     @Test
+    fun backWhileLockedRevealsUnlockInsteadOfExitingFullscreen() {
+        val controller = showFullscreen(hasShownGestureHint = true)
+
+        rule.onNodeWithContentDescription("锁定控制").performClick()
+        rule.onNodeWithContentDescription("解锁控制").assertIsDisplayed()
+
+        Espresso.pressBack()
+
+        // 规格 §10：锁定时返回只提示解锁，不退出全屏。
+        rule.runOnIdle { assertEquals(0, controller.exitCalls) }
+        rule.onNodeWithContentDescription("解锁控制").assertIsDisplayed()
+
+        rule.onNodeWithContentDescription("解锁控制").performClick()
+        Espresso.pressBack()
+        rule.runOnIdle { assertEquals(1, controller.exitCalls) }
+    }
+
+    @Test
     fun backClosesFullscreenOptionMenuBeforeExit() {
         val controller = showFullscreen(hasShownGestureHint = true)
 
