@@ -76,13 +76,23 @@ assembleDebug
 
 本记录不使用编译或模拟器结果代替上述真机人工检查。
 
-## 6. Release 状态
+## 6. Release 构建与独立校验
 
-更新后的 `arm64-v8a` Release APK 尚待最终构建。完成后在本文件追加：
+- 构建源提交：`d5a7bb903aa272d5e9dbaec07494a23fb7ebb663`
+- 构建脚本：`scripts/Build-PersonalRelease.ps1`
+- 脚本门禁：`clean`、`testDebugUnitTest`、`lintRelease`、`assembleRelease` 全部 PASS，Gradle `BUILD SUCCESSFUL in 1m 10s`。
+- APK：`D:\code\mediaviewer\.worktrees\android-mediaviewer\dist\mediaviewer-v1.1.0-arm64-v8a-release.apk`
+- 大小：43,792,510 字节（41.76 MiB）
+- SHA-256：`6af0ca59481467ca8e247a6dfbdd83c1613074ef86d0cd5277d60ae6e9b437e9`
+- `.sha256` 文件与独立 `Get-FileHash` 结果：一致
+- 包名：`com.local.mediaviewer`
+- 版本：`1.1.0 (3)`
+- `minSdk` / `targetSdk`：29 / 36
+- Native ABI：仅 `arm64-v8a`
+- `zipalign -c -P 16 -v 4`：`Verification successful`
+- 签名：APK Signature Scheme v3 为 `true`，v1/v2/v3.1/v4 为 `false`，签名者数量为 1
+- 签名证书 SHA-256：`b432a64032601b66f275d0c4b3308d95cbb40b58be9269c1494783e82fa5415d`
+- 证书用途限制：`C=US, O=Android, CN=Android Debug`，仅适合个人安装和测试，不是应用商店正式发布证书
+- arm64 真机安装和播放：**NOT RUN**
 
-- Release 构建源提交；
-- APK 绝对路径和大小；
-- SHA-256；
-- 唯一 ABI；
-- ZIP 对齐和签名验证；
-- arm64 真机安装边界。
+构建脚本要求干净工作树。构建前只临时 stash 精确列出的 17 个未跟踪文件；构建完成后已恢复全部文件并删除临时 stash。旧同名 APK 和 `.sha256` 被本次已确认的 Release 产物替换，其他 `dist` 文件未删除或移动。
