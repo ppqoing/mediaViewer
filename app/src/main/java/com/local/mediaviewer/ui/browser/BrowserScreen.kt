@@ -125,21 +125,29 @@ private fun BrowserPageContent(
             onBreadcrumbClick = onBreadcrumbClick,
         )
         statusContent?.invoke()
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .testTag("browser_list"),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (isEmpty) {
-                item {
-                    MediaStatePanel(
-                        kind = MediaStateKind.EMPTY,
-                        title = "此目录为空",
-                    )
-                }
-            } else {
+        if (isEmpty) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .testTag("browser_list"),
+            ) {
+                MediaStatePanel(
+                    kind = MediaStateKind.EMPTY,
+                    title = "路径下无文件",
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .testTag("browser_empty_state"),
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .testTag("browser_list"),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 items(
                     items = page.entries,
                     key = DirectoryEntry::logicalUrl,

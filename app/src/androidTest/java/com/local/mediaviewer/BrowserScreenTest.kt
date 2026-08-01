@@ -30,6 +30,7 @@ import com.local.mediaviewer.navigation.PlayerRoute
 import com.local.mediaviewer.ui.browser.BrowserScreen
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import java.time.Instant
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -231,7 +232,33 @@ class BrowserScreenTest {
             )
         }
 
-        rule.onNodeWithText("此目录为空").assertIsDisplayed()
+        val contentBounds = rule.onNodeWithTag("browser_list")
+            .fetchSemanticsNode().boundsInRoot
+        val emptyBounds = rule.onNodeWithTag("browser_empty_state")
+            .assertIsDisplayed()
+            .fetchSemanticsNode().boundsInRoot
+        rule.onNodeWithText("路径下无文件").assertIsDisplayed()
+        assertTrue(abs(contentBounds.center.x - emptyBounds.center.x) <= 1f)
+        assertTrue(abs(contentBounds.center.y - emptyBounds.center.y) <= 1f)
+    }
+
+    @Test
+    fun folderOnlyDirectoryShowsFoldersWithoutEmptyMessage() {
+        val folder = browserEntry("child", MediaKind.DIRECTORY)
+        rule.setContent {
+            BrowserScreen(
+                state = BrowserUiState.Content(
+                    browserPage(entries = listOf(folder)),
+                ),
+                onEntryClick = {},
+                onBreadcrumbClick = {},
+                onRetry = {},
+                onBack = {},
+            )
+        }
+
+        rule.onNodeWithText("child").assertIsDisplayed()
+        rule.onNodeWithText("路径下无文件").assertDoesNotExist()
     }
 
     @Test

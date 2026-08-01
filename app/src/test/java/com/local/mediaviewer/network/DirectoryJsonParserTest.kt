@@ -64,6 +64,30 @@ class DirectoryJsonParserTest {
     }
 
     @Test
+    fun `Ayame 目录的子目录响应保留长 mode 并解析相对 URL`() {
+        val entries = (
+            parser.parse(
+                AYAME_FOLDERS_ONLY_JSON,
+                "http://media.example:8080/MiddleDir/11111111/Ayame/",
+                "http://127.0.0.1:8081/MiddleDir/11111111/Ayame/",
+            ) as AppResult.Success<List<DirectoryEntry>>
+        ).value
+
+        assertEquals(listOf("129+.7z/", "纱雾/"), entries.map { it.name })
+        assertTrue(entries.all { it.kind == MediaKind.DIRECTORY })
+        assertTrue(entries.all { it.mode == 2_147_484_159L })
+        assertEquals(
+            "http://media.example:8080/MiddleDir/11111111/Ayame/129+.7z/",
+            entries[0].logicalUrl,
+        )
+        assertEquals(
+            "http://127.0.0.1:8081/MiddleDir/11111111/Ayame/" +
+                "%E7%BA%B1%E9%9B%BE/",
+            entries[1].requestUrl,
+        )
+    }
+
+    @Test
     fun `空数组成功而缺字段和无效时间失败`() {
         val empty = parser.parse(
             "[]",
@@ -87,3 +111,10 @@ class DirectoryJsonParserTest {
         assertTrue(invalidTime is AppResult.Failure)
     }
 }
+
+internal val AYAME_FOLDERS_ONLY_JSON = """
+    [
+      {"name":"129+.7z/","size":0,"url":"./129+.7z/","mod_time":"2026-06-14T06:51:34.7013105Z","mode":2147484159,"is_dir":true,"is_symlink":false},
+      {"name":"纱雾/","size":0,"url":"./%E7%BA%B1%E9%9B%BE/","mod_time":"2026-06-15T05:49:45.4945284Z","mode":2147484159,"is_dir":true,"is_symlink":false}
+    ]
+""".trimIndent()

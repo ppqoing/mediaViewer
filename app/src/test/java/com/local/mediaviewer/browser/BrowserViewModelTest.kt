@@ -161,6 +161,36 @@ class BrowserViewModelTest {
     }
 
     @Test
+    fun `只有子目录是内容而完全空目录才为空`() = runTest(dispatcher) {
+        val rootUrl = "http://media.example:8080/middle/"
+        val foldersPage = page(
+            rootUrl,
+            listOf(
+                entry(
+                    name = "child",
+                    logicalUrl = "${rootUrl}child/",
+                    requestUrl = "http://192.0.2.1:8080/middle/child/",
+                    kind = MediaKind.DIRECTORY,
+                ),
+            ),
+        )
+        val folderBrowser = BrowserViewModel(
+            MIDDLE_SHARE,
+            QueueBrowserRepository(ArrayDeque(listOf(foldersPage))),
+        )
+        advanceUntilIdle()
+        assertTrue(folderBrowser.uiState.value is BrowserUiState.Content)
+
+        val emptyPage = page(rootUrl, emptyList())
+        val emptyBrowser = BrowserViewModel(
+            MIDDLE_SHARE,
+            QueueBrowserRepository(ArrayDeque(listOf(emptyPage))),
+        )
+        advanceUntilIdle()
+        assertTrue(emptyBrowser.uiState.value is BrowserUiState.Empty)
+    }
+
+    @Test
     fun `failed child keeps the parent and back consumes the failed attempt`() =
         runTest(dispatcher) {
             val rootUrl = "http://media.example:8080/middle/"

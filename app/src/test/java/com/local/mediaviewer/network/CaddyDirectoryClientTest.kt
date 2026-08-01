@@ -59,6 +59,41 @@ class CaddyDirectoryClientTest {
     }
 
     @Test
+    fun `Ayame 只含子目录的完整请求链返回两个目录`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body(AYAME_FOLDERS_ONLY_JSON)
+                .build(),
+        )
+        val client = DefaultCaddyDirectoryClient(
+            client = OkHttpClient(),
+            parser = DefaultDirectoryJsonParser(),
+            dispatchers = dispatchers,
+        )
+        val requestUrl = server.url(
+            "/MiddleDir/11111111/Ayame/",
+        ).toString()
+
+        val result = client.listDirectory(
+            logicalDirectoryUrl =
+                "http://media.example:8080/MiddleDir/11111111/Ayame/",
+            requestDirectoryUrl = requestUrl,
+        )
+
+        val entries = (result as AppResult.Success<List<DirectoryEntry>>).value
+        assertEquals(2, entries.size)
+        assertTrue(entries.all { it.isDirectory })
+        assertTrue(
+            entries.all {
+                it.logicalUrl.startsWith("http://media.example:8080/")
+            },
+        )
+        assertTrue(entries.all { it.requestUrl.startsWith(server.url("/").toString()) })
+    }
+
+    @Test
     fun `HTTP 错误不解析正文`() = runTest {
         server.enqueue(
             MockResponse.Builder()
