@@ -54,6 +54,12 @@ class SettingsViewModel(
     private var candidateVersion = 0L
     private var testJob: Job? = null
 
+    // 只有“已验证但未保存”的输入才需要放弃确认（规格 §8.3/§10）；
+    // 普通未验证输入不拦截返回。
+    private fun hasValidatedUnsavedChange(input: String): Boolean =
+        successfulResult?.server?.logicalBaseUrl == input &&
+            input != savedServerInput
+
     init {
         val initialVersion = candidateVersion
         viewModelScope.launch {
@@ -68,7 +74,7 @@ class SettingsViewModel(
             } else {
                 mutableUiState.value = currentState.copy(
                     hasUnsavedServerChange =
-                        currentState.input != logicalBaseUrl,
+                        hasValidatedUnsavedChange(currentState.input),
                 )
             }
         }
@@ -94,7 +100,7 @@ class SettingsViewModel(
             canSave = false,
             saveError = null,
             hasUnsavedServerChange =
-                value != savedServerInput,
+                hasValidatedUnsavedChange(value),
         )
     }
 
@@ -126,8 +132,9 @@ class SettingsViewModel(
                         errorMessage = null,
                         canSave = !currentState.isSaving,
                         hasUnsavedServerChange =
-                            result.value.server.logicalBaseUrl !=
-                                savedServerInput,
+                            hasValidatedUnsavedChange(
+                                result.value.server.logicalBaseUrl,
+                            ),
                     )
                 }
 
@@ -184,7 +191,7 @@ class SettingsViewModel(
                             canSaveCurrentResult
                         },
                         hasUnsavedServerChange =
-                            currentState.input != persistedInput,
+                            hasValidatedUnsavedChange(currentState.input),
                     )
                     shouldEmitSaved = inputStillPersisted
                 } else if (saveFailure != null) {
@@ -204,7 +211,7 @@ class SettingsViewModel(
                             canSaveCurrentResult
                         },
                         hasUnsavedServerChange =
-                            currentState.input != savedServerInput,
+                            hasValidatedUnsavedChange(currentState.input),
                     )
                 } else {
                     mutableUiState.value =

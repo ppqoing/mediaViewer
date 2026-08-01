@@ -291,7 +291,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `editing B while A saves keeps B dirty and does not navigate away`() =
+    fun `editing B while A saves leaves B unverified and free to leave`() =
         runTest(dispatcher) {
             val resultA = successfulResult()
             val inputB = "http://other.example:8080"
@@ -328,7 +328,7 @@ class SettingsViewModelTest {
             assertTrue(viewModel.uiState.value.isSaving)
             assertEquals(inputB, viewModel.uiState.value.input)
             assertFalse(viewModel.uiState.value.canSave)
-            assertTrue(
+            assertFalse(
                 viewModel.uiState.value.hasUnsavedServerChange,
             )
 
@@ -339,11 +339,11 @@ class SettingsViewModelTest {
             assertEquals(inputB, viewModel.uiState.value.input)
             assertFalse(viewModel.uiState.value.isSaving)
             assertFalse(viewModel.uiState.value.canSave)
-            assertTrue(
+            assertFalse(
                 viewModel.uiState.value.hasUnsavedServerChange,
             )
             assertEquals(
-                SettingsBackDecision.CONFIRM_DISCARD,
+                SettingsBackDecision.LEAVE,
                 viewModel.requestBack(),
             )
             assertEquals(0, savedEvents)
@@ -550,13 +550,13 @@ class SettingsViewModelTest {
                 "保存失败，请重试",
                 viewModel.uiState.value.saveError,
             )
-            assertTrue(
+            assertFalse(
                 viewModel.uiState.value.hasUnsavedServerChange,
             )
         }
 
     @Test
-    fun `only an unsaved server change asks for discard confirmation`() =
+    fun `only a validated unsaved server change asks for discard confirmation`() =
         runTest(dispatcher) {
             val savedInput = "http://saved.example:8080"
             val viewModel = SettingsViewModel(
@@ -567,7 +567,12 @@ class SettingsViewModelTest {
                 ),
                 SettingsFakeReaderPreferences(),
                 SettingsFakeSession {
-                    error("back decision must not probe")
+                    AppResult.Success(
+                        successfulResult(
+                            logicalBaseUrl = "http://other.example:8080",
+                            host = "other.example",
+                        ),
+                    )
                 },
             )
             advanceUntilIdle()
@@ -589,9 +594,21 @@ class SettingsViewModelTest {
                 viewModel.requestBack(),
             )
 
+            // 普通未验证输入不拦截返回（规格 §8.3/§10）。
             viewModel.onInputChanged(
                 "http://other.example:8080",
             )
+            assertFalse(
+                viewModel.uiState.value.hasUnsavedServerChange,
+            )
+            assertEquals(
+                SettingsBackDecision.LEAVE,
+                viewModel.requestBack(),
+            )
+
+            // 已验证但未保存才需要放弃确认。
+            viewModel.testConnection()
+            advanceUntilIdle()
             assertTrue(
                 viewModel.uiState.value.hasUnsavedServerChange,
             )
@@ -631,7 +648,7 @@ class SettingsViewModelTest {
             viewModel.onInputChanged(
                 "HTTP://MEDIA.EXAMPLE:8080/",
             )
-            assertTrue(
+            assertFalse(
                 viewModel.uiState.value.hasUnsavedServerChange,
             )
             viewModel.testConnection()
@@ -675,11 +692,11 @@ class SettingsViewModelTest {
                 editedInput,
                 viewModel.uiState.value.input,
             )
-            assertTrue(
+            assertFalse(
                 viewModel.uiState.value.hasUnsavedServerChange,
             )
             assertEquals(
-                SettingsBackDecision.CONFIRM_DISCARD,
+                SettingsBackDecision.LEAVE,
                 viewModel.requestBack(),
             )
         }
