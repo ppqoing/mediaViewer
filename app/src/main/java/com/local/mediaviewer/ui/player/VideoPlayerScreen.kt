@@ -44,6 +44,7 @@ import com.local.mediaviewer.ui.components.MediaOption
 import com.local.mediaviewer.ui.components.MediaOptionMenu
 import com.local.mediaviewer.ui.components.MediaTopAppBar
 import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -140,16 +141,17 @@ fun VideoPlayerScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            if (!fullscreen) {
-                MediaTopAppBar(
-                    title = state.name,
-                    onBack = onBack,
-                )
-            }
-        },
-    ) { padding ->
+    MediaViewerTheme(darkTheme = true) {
+        Scaffold(
+            topBar = {
+                if (!fullscreen) {
+                    MediaTopAppBar(
+                        title = state.name,
+                        onBack = onBack,
+                    )
+                }
+            },
+        ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -358,6 +360,7 @@ fun VideoPlayerScreen(
                 TextButton(onClick = ::dismissGestureHint) { Text("知道了") }
             },
         )
+    }
     }
 }
 

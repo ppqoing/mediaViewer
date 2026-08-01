@@ -1,6 +1,7 @@
 package com.local.mediaviewer
 
 import android.view.ViewGroup
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
@@ -8,6 +9,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -15,11 +17,13 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
@@ -40,6 +44,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -582,9 +587,9 @@ class PlayerScreenTest {
         isSeekable = true,
     )
 
-    private fun showAudio(state: PlayerUiState) {
+    private fun showAudio(state: PlayerUiState, darkTheme: Boolean? = null) {
         rule.setContent {
-            MediaViewerTheme {
+            MediaViewerTheme(darkTheme = darkTheme ?: isSystemInDarkTheme()) {
                 AudioPlayerScreen(
                     state = state,
                     onPlay = {},
@@ -608,9 +613,10 @@ class PlayerScreenTest {
 
     private fun showVideo(
         stateProvider: () -> PlayerUiState,
+        darkTheme: Boolean? = null,
     ) {
         rule.setContent {
-            MediaViewerTheme {
+            MediaViewerTheme(darkTheme = darkTheme ?: isSystemInDarkTheme()) {
                 VideoPlayerScreen(
                     state = stateProvider(),
                     controller = ScreenFakePlaybackController(),
@@ -642,7 +648,59 @@ class PlayerScreenTest {
         }
     }
 
-    private fun showVideo(state: PlayerUiState) = showVideo { state }
+    private fun showVideo(
+        state: PlayerUiState,
+        darkTheme: Boolean? = null,
+    ) = showVideo(stateProvider = { state }, darkTheme = darkTheme)
+
+    @Test
+    fun ordinaryVideoPlayerKeepsControlsOnDarkCanvasInLightTheme() {
+        showVideo(
+            playerState(name = "movie.mp4", kind = MediaKind.VIDEO),
+            darkTheme = false,
+        )
+
+        rule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        assertControlsRegionStaysOnDarkCanvas()
+    }
+
+    @Test
+    fun ordinaryAudioPlayerKeepsControlsOnDarkCanvasInLightTheme() {
+        showAudio(
+            playerState(name = "song.flac", kind = MediaKind.AUDIO),
+            darkTheme = false,
+        )
+
+        rule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        assertControlsRegionStaysOnDarkCanvas()
+    }
+
+    private fun assertControlsRegionStaysOnDarkCanvas() {
+        val pixels = rule.onRoot().captureToImage().toPixelMap()
+        val regionTop = pixels.height * 3 / 5
+        var luminanceSum = 0.0
+        var samples = 0
+        var y = regionTop
+        while (y < pixels.height) {
+            var x = 0
+            while (x < pixels.width) {
+                val color = pixels[x, y]
+                luminanceSum +=
+                    0.2126 * color.red +
+                    0.7152 * color.green +
+                    0.0722 * color.blue
+                samples++
+                x += 8
+            }
+            y += 4
+        }
+        val averageLuminance = luminanceSum / samples
+        assertTrue(
+            "ordinary player must keep the dark player canvas in light theme " +
+                "(average controls-region luminance=$averageLuminance)",
+            averageLuminance < 0.5,
+        )
+    }
 }
 
 private class ScreenFakeFullscreenController :

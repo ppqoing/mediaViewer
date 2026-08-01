@@ -25,6 +25,7 @@ import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.ui.components.MediaScreenScaffold
 import com.local.mediaviewer.ui.theme.MediaTheme
+import com.local.mediaviewer.ui.theme.MediaViewerTheme
 
 @Composable
 fun AudioPlayerScreen(
@@ -57,10 +58,11 @@ fun AudioPlayerScreen(
         onResumeHintShown = onResumeHintShown,
     )
 
-    MediaScreenScaffold(
-        title = "音频播放",
-        onBack = onBack,
-    ) { padding ->
+    MediaViewerTheme(darkTheme = true) {
+        MediaScreenScaffold(
+            title = "音频播放",
+            onBack = onBack,
+        ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -139,5 +141,6 @@ fun AudioPlayerScreen(
                 )
             }
         }
+    }
     }
 }
