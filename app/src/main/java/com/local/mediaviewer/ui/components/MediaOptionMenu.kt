@@ -6,15 +6,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.local.mediaviewer.ui.icons.MediaIcons
 
 @Immutable
 data class MediaOption<T>(
@@ -42,9 +45,24 @@ fun <T> MediaOptionMenu(
             DropdownMenuItem(
                 text = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        option.icon?.let { icon ->
-                            Icon(icon, contentDescription = null)
-                            Spacer(Modifier.width(12.dp))
+                        when {
+                            option.icon != null -> {
+                                Icon(option.icon, contentDescription = null)
+                                Spacer(Modifier.width(12.dp))
+                            }
+                            option.key == selectedKey -> {
+                                // 规格 §7.1：菜单负责可见勾选；
+                                // 选中语义之外必须有非颜色选择标记。
+                                Icon(
+                                    MediaIcons.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.testTag(
+                                        "media_option_selected_check",
+                                    ),
+                                )
+                                Spacer(Modifier.width(12.dp))
+                            }
                         }
                         Text(option.label)
                     }

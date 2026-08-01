@@ -307,6 +307,30 @@ class MediaMaterialWrappersTest {
     }
 
     @Test
+    fun optionMenuShowsVisibleCheckForSelectedOption() {
+        rule.setContent {
+            MediaViewerTheme {
+                MediaOptionMenu(
+                    expanded = true,
+                    options = listOf(
+                        MediaOption("name", "按名称"),
+                        MediaOption("date", "按日期"),
+                    ),
+                    selectedKey = "date",
+                    onSelect = {},
+                    onDismissRequest = {},
+                )
+            }
+        }
+
+        // 规格 §7.1：MediaOptionMenu 负责可见勾选；选中语义不能是唯一表达。
+        // 菜单项合并了后代语义，装饰性勾选图标仅在未合并树中查询。
+        rule.onNodeWithTag("media_option_selected_check", useUnmergedTree = true)
+            .assertIsDisplayed()
+        rule.onNodeWithText("按日期").assertIsSelected()
+    }
+
+    @Test
     fun urlFieldAndChoiceRowExposeResultAndSelectionSemantics() {
         rule.setContent {
             MediaViewerTheme {

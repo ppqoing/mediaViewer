@@ -7,6 +7,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.AddToQueue
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -41,10 +42,12 @@ object MediaIcons {
     val Queue = Icons.AutoMirrored.Filled.QueueMusic
     val ReaderMode = Icons.Filled.ViewStream
     val Sort = Icons.AutoMirrored.Filled.Sort
+    val Check = Icons.Filled.Check
 
     val all = listOf(
         Back, Settings, Folder, Video, Audio, Image, File,
         Connected, Offline, Empty, Error, Refresh, More,
         PlayNow, PlayNext, AddQueue, Queue, ReaderMode, Sort,
+        Check,
     )
 }
