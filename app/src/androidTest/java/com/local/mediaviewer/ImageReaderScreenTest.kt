@@ -2,6 +2,7 @@ package com.local.mediaviewer
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -592,6 +593,62 @@ class ImageReaderScreenTest {
                 0.001f,
             )
         }
+    }
+
+    @Test
+    fun immersiveToolbarRespectsInjectedCutoutInsets() {
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(1f, 1f),
+            ) {
+                Box(
+                    Modifier
+                        .size(600.dp, 568.dp)
+                        .testTag("cutout_reader_window"),
+                ) {
+                    MediaViewerTheme(darkTheme = true) {
+                        ImageReaderScreen(
+                            state = contentState(
+                                ImageReaderMode.SINGLE,
+                            ),
+                            imageLoader = loader,
+                            onModeChanged = {},
+                            onSortChanged = {},
+                            onAnchorChanged = {},
+                            onRetryDirectory = {},
+                            onImageLoadError = { _, _ -> },
+                            onImageLoadSuccess = {},
+                            onRetryImage = {},
+                            onBack = {},
+                            safeDrawingInsets = WindowInsets(
+                                left = 16.dp,
+                                top = 24.dp,
+                                right = 20.dp,
+                                bottom = 32.dp,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+
+        val window = rule.onNodeWithTag(
+            "cutout_reader_window",
+        ).fetchSemanticsNode().boundsInRoot
+        val canvas = rule.onNodeWithTag("image_reader_canvas")
+            .fetchSemanticsNode().boundsInRoot
+        val back = rule.onNodeWithTag("image_reader_back")
+            .fetchSemanticsNode().boundsInRoot
+        val sort = rule.onNodeWithTag("image_sort_menu")
+            .fetchSemanticsNode().boundsInRoot
+
+        assertEquals(window.left, canvas.left, 0.001f)
+        assertEquals(window.top, canvas.top, 0.001f)
+        assertEquals(window.right, canvas.right, 0.001f)
+        assertEquals(window.bottom, canvas.bottom, 0.001f)
+        assertTrue(back.left >= window.left + 16f)
+        assertTrue(back.top >= window.top + 24f)
+        assertTrue(sort.right <= window.right - 20f)
     }
 
     @Test

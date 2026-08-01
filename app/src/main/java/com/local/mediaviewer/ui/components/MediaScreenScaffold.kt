@@ -3,6 +3,8 @@ package com.local.mediaviewer.ui.components
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -26,6 +28,10 @@ fun MediaScreenScaffold(
                 title = title,
                 onBack = onBack,
                 actions = actions,
+                windowInsets = contentWindowInsets.only(
+                    WindowInsetsSides.Top +
+                        WindowInsetsSides.Horizontal,
+                ),
             )
         },
         snackbarHost = snackbarHost,

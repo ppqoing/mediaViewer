@@ -4,9 +4,11 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,6 +50,8 @@ fun ImageReaderScreen(
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
     onBack: () -> Unit,
+    safeDrawingInsets: WindowInsets =
+        WindowInsets.safeDrawing,
 ) {
     BackHandler(onBack = onBack)
     var comicTransform by rememberSaveable(
@@ -141,6 +145,8 @@ fun ImageReaderScreen(
                             onRetryImage =
                                 onRetryImage,
                             onBack = onBack,
+                            safeDrawingInsets =
+                                safeDrawingInsets,
                         )
                     }
                 }
@@ -164,6 +170,7 @@ private fun ImageReaderContent(
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
     onBack: () -> Unit,
+    safeDrawingInsets: WindowInsets,
 ) {
     // 规格 §8.4：轻触切换顶部工具栏；默认可见。
     var toolbarVisible by rememberSaveable {
@@ -242,6 +249,8 @@ private fun ImageReaderContent(
                     onModeChanged = onModeChanged,
                     onSortChanged = onSortChanged,
                     onBack = onBack,
+                    safeDrawingInsets =
+                        safeDrawingInsets,
                 )
                 if (state.isRefreshingEndpoint) {
                     EndpointRefreshChip()

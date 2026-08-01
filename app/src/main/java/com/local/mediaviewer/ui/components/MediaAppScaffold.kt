@@ -2,7 +2,6 @@ package com.local.mediaviewer.ui.components
 
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
@@ -14,7 +13,8 @@ fun MediaAppScaffold(
     snackbarHostState: SnackbarHostState,
     bottomBar: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
-    contentWindowInsets: WindowInsets = WindowInsets.safeDrawing,
+    contentWindowInsets: WindowInsets =
+        WindowInsets(0, 0, 0, 0),
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(

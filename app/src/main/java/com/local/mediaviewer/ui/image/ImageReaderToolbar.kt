@@ -56,6 +56,8 @@ fun ImageReaderToolbar(
     onModeChanged: (ImageReaderMode) -> Unit,
     onSortChanged: (ImageSortOrder) -> Unit,
     onBack: () -> Unit,
+    safeDrawingInsets: WindowInsets =
+        WindowInsets.safeDrawing,
 ) {
     var sortExpanded by remember {
         mutableStateOf(false)
@@ -90,8 +92,9 @@ fun ImageReaderToolbar(
             title = "",
             containerColor = Color.Transparent,
             contentColor = playerColors.control,
-            windowInsets = WindowInsets.safeDrawing.only(
-                WindowInsetsSides.Top,
+            windowInsets = safeDrawingInsets.only(
+                WindowInsetsSides.Top +
+                    WindowInsetsSides.Horizontal,
             ),
         )
 
@@ -99,8 +102,9 @@ fun ImageReaderToolbar(
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(
-                    WindowInsets.safeDrawing.only(
-                        WindowInsetsSides.Top,
+                    safeDrawingInsets.only(
+                        WindowInsetsSides.Top +
+                            WindowInsetsSides.Horizontal,
                     ),
                 )
                 .heightIn(min = 64.dp)
