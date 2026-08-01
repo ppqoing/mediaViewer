@@ -44,6 +44,12 @@ android {
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
     }
 
+    sourceSets {
+        getByName("androidTest").assets.directories.add(
+            "$projectDir/schemas",
+        )
+    }
+
     packaging {
         jniLibs.useLegacyPackaging = true
         dex.useLegacyPackaging = true

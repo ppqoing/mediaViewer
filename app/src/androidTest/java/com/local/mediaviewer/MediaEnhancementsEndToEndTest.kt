@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import com.local.mediaviewer.app.MediaViewerApp
@@ -109,6 +110,10 @@ class MediaEnhancementsEndToEndTest {
         }
         rule.onNodeWithContentDescription("设置")
             .performClick()
+        rule.onNodeWithTag("settings_list")
+            .performScrollToNode(
+                hasTestTag("default_reader_comic"),
+            )
         rule.onNodeWithTag("default_reader_comic")
             .assertIsDisplayed()
         rule.onNodeWithTag("default_reader_single")

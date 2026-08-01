@@ -34,9 +34,11 @@ class PlaybackServiceTest {
         application.container = fake
 
         try {
-            serviceRule.startService(
+            application.startService(
                 Intent(application, PlaybackService::class.java),
             )
+            InstrumentationRegistry.getInstrumentation()
+                .waitForIdleSync()
             assertEquals(1, fake.playbackEngineCreationCount)
             assertTrue(
                 serviceRule.bindService(
