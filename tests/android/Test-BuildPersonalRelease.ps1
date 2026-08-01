@@ -55,7 +55,7 @@ if ($missingKeystoreOutput.Contains($missingKeystore)) {
 $distDirectory = Join-Path $repositoryRoot 'dist'
 $officialApk = Join-Path `
     $distDirectory `
-    'mediaviewer-v1.0.1-arm64-v8a-release.apk'
+    'mediaviewer-v1.1.0-arm64-v8a-release.apk'
 $officialChecksum = "$officialApk.sha256"
 New-Item `
     -ItemType Directory `

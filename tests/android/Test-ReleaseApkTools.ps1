@@ -247,7 +247,7 @@ try {
     $validBadging = @(
         (
             "package: name='com.local.mediaviewer' " +
-            "versionCode='2' versionName='1.0.1'"
+            "versionCode='3' versionName='1.1.0'"
         ),
         "sdkVersion:'29'",
         "targetSdkVersion:'36'",
@@ -256,8 +256,8 @@ try {
     $null = Assert-ApkBadgingMetadata `
         -Badging $validBadging `
         -ExpectedApplicationId 'com.local.mediaviewer' `
-        -ExpectedVersionCode 2 `
-        -ExpectedVersionName '1.0.1' `
+        -ExpectedVersionCode 3 `
+        -ExpectedVersionName '1.1.0' `
         -ExpectedMinSdk 29 `
         -ExpectedTargetSdk 36 `
         -ExpectedAbi 'arm64-v8a'
@@ -269,8 +269,8 @@ try {
                     "sdkVersion:'28'"
             ) `
             -ExpectedApplicationId 'com.local.mediaviewer' `
-            -ExpectedVersionCode 2 `
-            -ExpectedVersionName '1.0.1' `
+            -ExpectedVersionCode 3 `
+            -ExpectedVersionName '1.1.0' `
             -ExpectedMinSdk 29 `
             -ExpectedTargetSdk 36 `
             -ExpectedAbi 'arm64-v8a'
@@ -283,8 +283,8 @@ try {
                     "targetSdkVersion:'35'"
             ) `
             -ExpectedApplicationId 'com.local.mediaviewer' `
-            -ExpectedVersionCode 2 `
-            -ExpectedVersionName '1.0.1' `
+            -ExpectedVersionCode 3 `
+            -ExpectedVersionName '1.1.0' `
             -ExpectedMinSdk 29 `
             -ExpectedTargetSdk 36 `
             -ExpectedAbi 'arm64-v8a'

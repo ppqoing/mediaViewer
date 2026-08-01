@@ -154,6 +154,7 @@ try {
             'testDebugUnitTest',
             'lintRelease',
             'assembleRelease',
+            '-Pkotlin.incremental=false',
             '--no-daemon',
             '--stacktrace'
         )

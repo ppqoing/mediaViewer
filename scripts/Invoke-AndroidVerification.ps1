@@ -271,6 +271,8 @@ try {
         'assembleDebug',
         'assembleRelease',
         'compileDebugAndroidTestKotlin',
+        '-Pkotlin.incremental=false',
+        '--no-daemon',
         '--stacktrace'
     )
     Assert-ApkAbiContract
@@ -322,6 +324,8 @@ try {
                 'com.local.mediaviewer.MediaSessionControlsTest,' +
                 'com.local.mediaviewer.LibVlcVideoOutputTest'
             ),
+            '-Pkotlin.incremental=false',
+            '--no-daemon',
             '--stacktrace'
         )
         Write-Host 'API 36 后台播放定向设备测试通过'
@@ -342,6 +346,8 @@ try {
                 '-Pandroid.testInstrumentationRunnerArguments.' +
                 "realServerBaseUrl=$RealServerBaseUrl"
             ),
+            '-Pkotlin.incremental=false',
+            '--no-daemon',
             '--stacktrace'
         )
         Write-Host '真实服务器 Smoke：通过'

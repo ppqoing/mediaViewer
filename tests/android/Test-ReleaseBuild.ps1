@@ -37,6 +37,7 @@ try {
         & $gradle `
             assembleDebug `
             assembleRelease `
+            '-Pkotlin.incremental=false' `
             --no-daemon `
             --stacktrace
         if ($LASTEXITCODE -ne 0) {
@@ -71,10 +72,10 @@ $packageLine = $badging | Where-Object {
 if ($packageLine -notmatch "name='com\.local\.mediaviewer'") {
     throw "包名错误：$packageLine"
 }
-if ($packageLine -notmatch "versionCode='2'") {
+if ($packageLine -notmatch "versionCode='3'") {
     throw "versionCode 错误：$packageLine"
 }
-if ($packageLine -notmatch "versionName='1\.0\.1'") {
+if ($packageLine -notmatch "versionName='1\.1\.0'") {
     throw "versionName 错误：$packageLine"
 }
 if ($badging -notcontains "sdkVersion:'29'") {
