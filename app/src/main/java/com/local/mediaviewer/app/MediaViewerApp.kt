@@ -261,6 +261,8 @@ fun MediaViewerApp(
                             readerPreferences =
                                 container.readerPreferencesRepository,
                             session = container.sessionManager,
+                            playerPreferences =
+                                container.playerPreferencesRepository,
                         )
                     }
                 },
@@ -278,6 +280,8 @@ fun MediaViewerApp(
                 onSave = settings::save,
                 onDefaultImageModeChanged =
                     settings::onDefaultImageModeChanged,
+                onVideoControlsAutoHideChanged =
+                    settings::onVideoControlsAutoHideChanged,
                 onBack = { navController.popBackStack() },
                 onBackRequest = settings::requestBack,
                 onDiscardConfirmed = { navController.popBackStack() },

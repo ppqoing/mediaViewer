@@ -40,6 +40,7 @@ import com.local.mediaviewer.ui.player.AudioPlayerScreen
 import com.local.mediaviewer.ui.player.FullscreenStateController
 import com.local.mediaviewer.ui.player.VideoPlayerScreen
 import com.local.mediaviewer.settings.PlayerPreferencesRepository
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
@@ -726,9 +727,20 @@ private class ScreenPlayerPreferencesRepository(
 ) : PlayerPreferencesRepository {
     private val mutable = MutableStateFlow(initiallyShown)
     override val hasShownVideoGestures: StateFlow<Boolean> = mutable
+    private val autoHide = MutableStateFlow(
+        VideoControlsAutoHide.THREE_SECONDS,
+    )
+    override val videoControlsAutoHide: StateFlow<VideoControlsAutoHide> =
+        autoHide
 
     override suspend fun markVideoGesturesShown() {
         mutable.value = true
+    }
+
+    override suspend fun setVideoControlsAutoHide(
+        value: VideoControlsAutoHide,
+    ) {
+        autoHide.value = value
     }
 }
 

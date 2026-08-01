@@ -38,6 +38,7 @@ import com.local.mediaviewer.model.ServerShare
 import com.local.mediaviewer.model.ShareAuthenticationMode
 import com.local.mediaviewer.settings.SettingsBackDecision
 import com.local.mediaviewer.settings.SettingsUiState
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 import com.local.mediaviewer.ui.home.HomeScreen
 import com.local.mediaviewer.ui.settings.SettingsScreen
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
@@ -328,6 +329,10 @@ class HomeSettingsScreenTest {
         rule.onNodeWithText("10.0.0.8").assertDoesNotExist()
         rule.onNodeWithText("已选择：203.0.113.7")
             .assertDoesNotExist()
+        rule.onNodeWithTag("settings_list")
+            .performScrollToNode(
+                hasTestTag("default_reader_comic"),
+            )
         rule.onNodeWithText("图片阅读").assertIsDisplayed()
         rule.onNodeWithTag("default_reader_comic")
             .assertIsSelected()
@@ -338,6 +343,53 @@ class HomeSettingsScreenTest {
             selectedReaderMode,
         )
         rule.onNodeWithTag("save_server").assertIsNotEnabled()
+    }
+
+    @Test
+    fun settingsShowsFiveVideoControlAutoHideChoices() {
+        var selected: VideoControlsAutoHide? = null
+        rule.setContent {
+            MediaViewerTheme {
+                SettingsScreen(
+                    state = SettingsUiState(
+                        videoControlsAutoHide =
+                            VideoControlsAutoHide.TEN_SECONDS,
+                    ),
+                    onInputChanged = {},
+                    onTest = {},
+                    onSave = {},
+                    onDefaultImageModeChanged = {},
+                    onVideoControlsAutoHideChanged = {
+                        selected = it
+                    },
+                    onBack = {},
+                )
+            }
+        }
+
+        val choices = listOf(
+            "video_controls_auto_hide_3" to "3 秒",
+            "video_controls_auto_hide_5" to "5 秒",
+            "video_controls_auto_hide_10" to "10 秒",
+            "video_controls_auto_hide_15" to "15 秒",
+            "video_controls_auto_hide_never" to "不隐藏",
+        )
+        choices.forEach { (tag, label) ->
+            rule.onNodeWithTag("settings_list")
+                .performScrollToNode(hasTestTag(tag))
+            rule.onNodeWithTag(tag).assertIsDisplayed()
+            rule.onNodeWithText(label).assertIsDisplayed()
+        }
+        rule.onNodeWithTag("video_controls_auto_hide_10")
+            .assertIsSelected()
+        rule.onNodeWithTag("video_controls_auto_hide_15")
+            .performClick()
+        rule.runOnIdle {
+            assertEquals(
+                VideoControlsAutoHide.FIFTEEN_SECONDS,
+                selected,
+            )
+        }
     }
 
     @Test
@@ -534,6 +586,10 @@ class HomeSettingsScreenTest {
                     SemanticsProperties.LiveRegion,
                     LiveRegionMode.Polite,
                 ),
+            )
+        rule.onNodeWithTag("settings_list")
+            .performScrollToNode(
+                hasTestTag("default_reader_comic"),
             )
         rule.onNodeWithTag("default_reader_comic")
             .assertIsSelected()

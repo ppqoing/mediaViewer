@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.settings.SettingsBackDecision
 import com.local.mediaviewer.settings.SettingsUiState
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 import com.local.mediaviewer.ui.components.MediaConfirmDialog
 import com.local.mediaviewer.ui.components.MediaPrimaryButton
 import com.local.mediaviewer.ui.components.MediaScreenScaffold
@@ -42,6 +43,9 @@ fun SettingsScreen(
     onTest: () -> Unit,
     onSave: () -> Unit,
     onDefaultImageModeChanged: (ImageReaderMode) -> Unit,
+    onVideoControlsAutoHideChanged: (
+        VideoControlsAutoHide,
+    ) -> Unit = {},
     onBack: () -> Unit,
     onBackRequest: () -> SettingsBackDecision = {
         SettingsBackDecision.LEAVE
@@ -182,6 +186,107 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("save_server"),
+                            )
+                        }
+                    }
+                }
+                item {
+                    SettingsSection(
+                        title = "视频播放",
+                        description = "选择上下功能区自动隐藏时长",
+                    ) {
+                        SettingsChoiceRow(
+                            title = "3 秒",
+                            description = "3 秒无操作后自动隐藏",
+                            selected =
+                                state.videoControlsAutoHide ==
+                                    VideoControlsAutoHide.THREE_SECONDS,
+                            onClick = {
+                                onVideoControlsAutoHideChanged(
+                                    VideoControlsAutoHide.THREE_SECONDS,
+                                )
+                            },
+                            enabled =
+                                !state.isSavingVideoControlsAutoHide,
+                            modifier = Modifier.testTag(
+                                "video_controls_auto_hide_3",
+                            ),
+                        )
+                        SettingsChoiceRow(
+                            title = "5 秒",
+                            description = "5 秒无操作后自动隐藏",
+                            selected =
+                                state.videoControlsAutoHide ==
+                                    VideoControlsAutoHide.FIVE_SECONDS,
+                            onClick = {
+                                onVideoControlsAutoHideChanged(
+                                    VideoControlsAutoHide.FIVE_SECONDS,
+                                )
+                            },
+                            enabled =
+                                !state.isSavingVideoControlsAutoHide,
+                            modifier = Modifier.testTag(
+                                "video_controls_auto_hide_5",
+                            ),
+                        )
+                        SettingsChoiceRow(
+                            title = "10 秒",
+                            description = "10 秒无操作后自动隐藏",
+                            selected =
+                                state.videoControlsAutoHide ==
+                                    VideoControlsAutoHide.TEN_SECONDS,
+                            onClick = {
+                                onVideoControlsAutoHideChanged(
+                                    VideoControlsAutoHide.TEN_SECONDS,
+                                )
+                            },
+                            enabled =
+                                !state.isSavingVideoControlsAutoHide,
+                            modifier = Modifier.testTag(
+                                "video_controls_auto_hide_10",
+                            ),
+                        )
+                        SettingsChoiceRow(
+                            title = "15 秒",
+                            description = "15 秒无操作后自动隐藏",
+                            selected =
+                                state.videoControlsAutoHide ==
+                                    VideoControlsAutoHide.FIFTEEN_SECONDS,
+                            onClick = {
+                                onVideoControlsAutoHideChanged(
+                                    VideoControlsAutoHide.FIFTEEN_SECONDS,
+                                )
+                            },
+                            enabled =
+                                !state.isSavingVideoControlsAutoHide,
+                            modifier = Modifier.testTag(
+                                "video_controls_auto_hide_15",
+                            ),
+                        )
+                        SettingsChoiceRow(
+                            title = "不隐藏",
+                            description = "保持功能区显示",
+                            selected =
+                                state.videoControlsAutoHide ==
+                                    VideoControlsAutoHide.NEVER,
+                            onClick = {
+                                onVideoControlsAutoHideChanged(
+                                    VideoControlsAutoHide.NEVER,
+                                )
+                            },
+                            enabled =
+                                !state.isSavingVideoControlsAutoHide,
+                            modifier = Modifier.testTag(
+                                "video_controls_auto_hide_never",
+                            ),
+                        )
+                        state.videoControlsAutoHideError?.let { message ->
+                            Text(
+                                text = message,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.semantics {
+                                    liveRegion = LiveRegionMode.Polite
+                                },
                             )
                         }
                     }

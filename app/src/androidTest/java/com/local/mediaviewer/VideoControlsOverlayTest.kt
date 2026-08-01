@@ -33,6 +33,7 @@ import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.settings.PlayerPreferencesRepository
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 import com.local.mediaviewer.ui.player.FullscreenStateController
 import com.local.mediaviewer.ui.player.PlayerBrightnessController
 import com.local.mediaviewer.ui.player.PlayerVolumeController
@@ -480,9 +481,20 @@ private class OverlayPreferencesRepository(
 ) : PlayerPreferencesRepository {
     private val value = MutableStateFlow(initiallyShown)
     override val hasShownVideoGestures: StateFlow<Boolean> = value
+    private val autoHide = MutableStateFlow(
+        VideoControlsAutoHide.THREE_SECONDS,
+    )
+    override val videoControlsAutoHide: StateFlow<VideoControlsAutoHide> =
+        autoHide
 
     override suspend fun markVideoGesturesShown() {
         value.value = true
+    }
+
+    override suspend fun setVideoControlsAutoHide(
+        value: VideoControlsAutoHide,
+    ) {
+        autoHide.value = value
     }
 }
 

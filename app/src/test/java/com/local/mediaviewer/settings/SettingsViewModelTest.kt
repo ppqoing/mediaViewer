@@ -806,6 +806,84 @@ class SettingsViewModelTest {
             )
             assertFalse(viewModel.uiState.value.canSave)
         }
+
+    @Test
+    fun `自动隐藏偏好加载后立即独立保存`() =
+        runTest(dispatcher) {
+            val playerPreferences = SettingsFakePlayerPreferences(
+                initial = VideoControlsAutoHide.FIVE_SECONDS,
+            )
+            val viewModel = SettingsViewModel(
+                settings = SettingsFakeRepository(ServerConfig()),
+                readerPreferences = SettingsFakeReaderPreferences(),
+                session = SettingsFakeSession {
+                    error("自动隐藏偏好不应探测服务器")
+                },
+                playerPreferences = playerPreferences,
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                VideoControlsAutoHide.FIVE_SECONDS,
+                viewModel.uiState.value.videoControlsAutoHide,
+            )
+
+            viewModel.onVideoControlsAutoHideChanged(
+                VideoControlsAutoHide.NEVER,
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                VideoControlsAutoHide.NEVER,
+                playerPreferences.videoControlsAutoHide.value,
+            )
+            assertEquals(
+                VideoControlsAutoHide.NEVER,
+                viewModel.uiState.value.videoControlsAutoHide,
+            )
+            assertEquals(1, playerPreferences.saveCalls)
+            assertFalse(
+                viewModel.uiState.value.isSavingVideoControlsAutoHide,
+            )
+            assertNull(
+                viewModel.uiState.value.videoControlsAutoHideError,
+            )
+        }
+
+    @Test
+    fun `自动隐藏偏好保存失败回滚并显示错误`() =
+        runTest(dispatcher) {
+            val playerPreferences = SettingsFakePlayerPreferences(
+                initial = VideoControlsAutoHide.FIVE_SECONDS,
+                failOnSave = true,
+            )
+            val viewModel = SettingsViewModel(
+                settings = SettingsFakeRepository(ServerConfig()),
+                readerPreferences = SettingsFakeReaderPreferences(),
+                session = SettingsFakeSession {
+                    error("自动隐藏偏好不应探测服务器")
+                },
+                playerPreferences = playerPreferences,
+            )
+            advanceUntilIdle()
+
+            viewModel.onVideoControlsAutoHideChanged(
+                VideoControlsAutoHide.TEN_SECONDS,
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                VideoControlsAutoHide.FIVE_SECONDS,
+                viewModel.uiState.value.videoControlsAutoHide,
+            )
+            assertFalse(
+                viewModel.uiState.value.isSavingVideoControlsAutoHide,
+            )
+            assertEquals(
+                "自动隐藏时长保存失败",
+                viewModel.uiState.value.videoControlsAutoHideError,
+            )
+        }
 }
 
 private fun successfulResult(
@@ -863,6 +941,32 @@ private class SettingsFakeReaderPreferences(
             error("save failed")
         }
         mutable.value = mode
+    }
+}
+
+private class SettingsFakePlayerPreferences(
+    initial: VideoControlsAutoHide =
+        VideoControlsAutoHide.THREE_SECONDS,
+    private val failOnSave: Boolean = false,
+) : PlayerPreferencesRepository {
+    private val gesturesShown = MutableStateFlow(false)
+    override val hasShownVideoGestures: Flow<Boolean> = gesturesShown
+    override val videoControlsAutoHide = MutableStateFlow(initial)
+    var saveCalls = 0
+        private set
+
+    override suspend fun markVideoGesturesShown() {
+        gesturesShown.value = true
+    }
+
+    override suspend fun setVideoControlsAutoHide(
+        value: VideoControlsAutoHide,
+    ) {
+        saveCalls += 1
+        if (failOnSave) {
+            error("save failed")
+        }
+        videoControlsAutoHide.value = value
     }
 }
 

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
@@ -28,6 +29,10 @@ data class SettingsUiState(
         ImageReaderMode = ImageReaderMode.COMIC,
     val isSavingImageMode: Boolean = false,
     val imageModeError: String? = null,
+    val videoControlsAutoHide: VideoControlsAutoHide =
+        VideoControlsAutoHide.THREE_SECONDS,
+    val isSavingVideoControlsAutoHide: Boolean = false,
+    val videoControlsAutoHideError: String? = null,
     val isSaving: Boolean = false,
     val saveError: String? = null,
     val hasUnsavedServerChange: Boolean = false,
@@ -42,6 +47,7 @@ class SettingsViewModel(
     private val settings: ServerSettingsRepository,
     private val readerPreferences: ReaderPreferencesRepository,
     private val session: ServerSessionManager,
+    private val playerPreferences: PlayerPreferencesRepository? = null,
 ) : ViewModel() {
     private val mutableUiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = mutableUiState.asStateFlow()
@@ -82,6 +88,13 @@ class SettingsViewModel(
             val mode = readerPreferences.currentDefaultMode()
             mutableUiState.value = mutableUiState.value.copy(
                 defaultImageMode = mode,
+            )
+        }
+        viewModelScope.launch {
+            val preferences = playerPreferences ?: return@launch
+            val autoHide = preferences.videoControlsAutoHide.first()
+            mutableUiState.value = mutableUiState.value.copy(
+                videoControlsAutoHide = autoHide,
             )
         }
     }
@@ -258,6 +271,40 @@ class SettingsViewModel(
                     defaultImageMode = previous,
                     isSavingImageMode = false,
                     imageModeError = "默认看图方式保存失败",
+                )
+            }
+        }
+    }
+
+    fun onVideoControlsAutoHideChanged(
+        value: VideoControlsAutoHide,
+    ) {
+        val preferences = playerPreferences ?: return
+        if (
+            value == mutableUiState.value.videoControlsAutoHide ||
+            mutableUiState.value.isSavingVideoControlsAutoHide
+        ) {
+            return
+        }
+        val previous = mutableUiState.value.videoControlsAutoHide
+        mutableUiState.value = mutableUiState.value.copy(
+            videoControlsAutoHide = value,
+            isSavingVideoControlsAutoHide = true,
+            videoControlsAutoHideError = null,
+        )
+        viewModelScope.launch {
+            runCatching {
+                preferences.setVideoControlsAutoHide(value)
+            }.onSuccess {
+                mutableUiState.value = mutableUiState.value.copy(
+                    isSavingVideoControlsAutoHide = false,
+                )
+            }.onFailure {
+                mutableUiState.value = mutableUiState.value.copy(
+                    videoControlsAutoHide = previous,
+                    isSavingVideoControlsAutoHide = false,
+                    videoControlsAutoHideError =
+                        "自动隐藏时长保存失败",
                 )
             }
         }

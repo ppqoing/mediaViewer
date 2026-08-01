@@ -38,6 +38,7 @@ import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.settings.ServerSettingsRepository
 import com.local.mediaviewer.settings.PlayerPreferencesRepository
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CoroutineScope
@@ -150,9 +151,20 @@ private class FakePlayerPreferencesRepository(
 ) : PlayerPreferencesRepository {
     private val mutable = MutableStateFlow(initiallyShown)
     override val hasShownVideoGestures: Flow<Boolean> = mutable
+    private val autoHide = MutableStateFlow(
+        VideoControlsAutoHide.THREE_SECONDS,
+    )
+    override val videoControlsAutoHide: Flow<VideoControlsAutoHide> =
+        autoHide
 
     override suspend fun markVideoGesturesShown() {
         mutable.value = true
+    }
+
+    override suspend fun setVideoControlsAutoHide(
+        value: VideoControlsAutoHide,
+    ) {
+        autoHide.value = value
     }
 }
 
