@@ -2,8 +2,7 @@ package com.local.mediaviewer.ui.player
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -15,7 +14,6 @@ import com.local.mediaviewer.ui.components.MediaIconButton
 import com.local.mediaviewer.ui.icons.MediaIcons
 import com.local.mediaviewer.ui.theme.MediaTheme
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlayerControls(
     state: PlayerUiState,
@@ -34,7 +32,8 @@ fun PlayerControls(
     onPlaybackModeChanged: (PlaybackMode) -> Unit = {},
     onOpenQueue: (() -> Unit)? = null,
     showLowFrequencyControls: Boolean = true,
-    secondaryControls: @Composable () -> Unit = {},
+    leadingUtilityControls: @Composable RowScope.() -> Unit = {},
+    secondaryControls: @Composable RowScope.() -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -61,22 +60,23 @@ fun PlayerControls(
             onPrevious = onPrevious,
             onNext = onNext,
         )
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(MediaTheme.spacing.xs),
-            verticalArrangement = Arrangement.spacedBy(MediaTheme.spacing.xxs),
-        ) {
-            if (showLowFrequencyControls) {
-                PlaybackSpeedMenu(
-                    current = state.playbackSpeed,
-                    onSpeedChanged = onSpeedChanged,
-                )
-                playbackMode?.let { mode ->
-                    PlaybackModeButton(
-                        mode = mode,
-                        onModeChanged = onPlaybackModeChanged,
+        PlayerUtilityRow(
+            startContent = {
+                if (showLowFrequencyControls) {
+                    PlaybackSpeedMenu(
+                        current = state.playbackSpeed,
+                        onSpeedChanged = onSpeedChanged,
                     )
+                    playbackMode?.let { mode ->
+                        PlaybackModeButton(
+                            mode = mode,
+                            onModeChanged = onPlaybackModeChanged,
+                        )
+                    }
                 }
+                leadingUtilityControls()
+            },
+            endContent = {
                 onOpenQueue?.let { openQueue ->
                     MediaIconButton(
                         icon = MediaIcons.Queue,
@@ -84,8 +84,8 @@ fun PlayerControls(
                         onClick = openQueue,
                     )
                 }
-            }
-            secondaryControls()
-        }
+                secondaryControls()
+            },
+        )
     }
 }

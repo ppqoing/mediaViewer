@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
@@ -31,7 +32,9 @@ fun PlaybackTransportControls(
     val seekEnabled = state.isSeekable && state.durationMs > 0L
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("player_transport_layer"),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
         ControlButton(

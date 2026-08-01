@@ -3,6 +3,7 @@ package com.local.mediaviewer
 import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +24,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import com.local.mediaviewer.model.MediaKind
@@ -240,6 +242,60 @@ class PlaybackControlsTest {
         rule.onNodeWithText("00:05").assertIsDisplayed()
         rule.onNodeWithText("01:00").assertIsDisplayed()
         rule.onNodeWithText("00:05 / 01:00").assertDoesNotExist()
+    }
+
+    @Test
+    fun sharedControlsLayerTimelineTransportAndUtilitiesByFrequency() {
+        rule.setContent {
+            MaterialTheme {
+                PlayerControls(
+                    state = PlayerUiState(
+                        name = "视频.mp4",
+                        kind = MediaKind.VIDEO,
+                        status = PlaybackStatus.PAUSED,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                    ),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("utility_probe"),
+                    )
+                }
+            }
+        }
+
+        val timeline = rule.onNodeWithTag("player_timeline_layer")
+            .fetchSemanticsNode().boundsInRoot
+        val transport = rule.onNodeWithTag("player_transport_layer")
+            .fetchSemanticsNode().boundsInRoot
+        val utilities = rule.onNodeWithTag("player_utility_layer")
+            .fetchSemanticsNode().boundsInRoot
+        val startGroup = rule.onNodeWithTag("player_utility_start_group")
+            .fetchSemanticsNode().boundsInRoot
+        val endGroup = rule.onNodeWithTag("player_utility_end_group")
+            .fetchSemanticsNode().boundsInRoot
+        val primary = rule.onNodeWithContentDescription("播放")
+            .fetchSemanticsNode().boundsInRoot
+        val seekBack = rule.onNodeWithContentDescription("快退 10 秒")
+            .fetchSemanticsNode().boundsInRoot
+
+        assertTrue(timeline.bottom <= transport.top)
+        assertTrue(transport.bottom <= utilities.top)
+        assertTrue(startGroup.right <= endGroup.left)
+        assertTrue(primary.width > seekBack.width)
     }
 
     @Test

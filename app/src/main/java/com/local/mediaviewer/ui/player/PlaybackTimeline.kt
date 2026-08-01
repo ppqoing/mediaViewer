@@ -22,7 +22,11 @@ fun PlaybackTimeline(
     val durationMs = state.durationMs.coerceAtLeast(0L)
     val positionMs = state.displayedPositionMs.coerceIn(0L, durationMs)
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("player_timeline_layer"),
+    ) {
         MediaTimelineSlider(
             durationMs = durationMs,
             positionMs = positionMs,
