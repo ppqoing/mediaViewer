@@ -13,6 +13,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 
 fun Modifier.comicTransformGestures(
     onDoubleTap: () -> Unit,
+    onTap: () -> Unit,
     onGesture: (
         zoomChange: Float,
         panXPx: Float,
@@ -22,10 +23,15 @@ fun Modifier.comicTransformGestures(
         rememberUpdatedState(onGesture)
     val currentOnDoubleTap by
         rememberUpdatedState(onDoubleTap)
+    val currentOnTap by
+        rememberUpdatedState(onTap)
     pointerInput(Unit) {
         detectTapGestures(
             onDoubleTap = {
                 currentOnDoubleTap()
+            },
+            onTap = {
+                currentOnTap()
             },
         )
     }

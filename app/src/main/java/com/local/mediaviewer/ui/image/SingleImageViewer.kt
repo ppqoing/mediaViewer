@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -41,12 +42,15 @@ fun SingleImageViewer(
         (String, ImageLoadFailureKind) -> Unit,
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
+    onToggleToolbar: () -> Unit = {},
     refreshingImageLogicalUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
     var zoom by remember(item.logicalUrl) {
         mutableStateOf(ZoomTransform())
     }
+    val currentOnToggleToolbar by
+        rememberUpdatedState(onToggleToolbar)
     val context = LocalContext.current
     val deviceBitmapLimits = remember {
         queryDeviceBitmapLimits()
@@ -131,6 +135,9 @@ fun SingleImageViewer(
                     detectTapGestures(
                         onDoubleTap = {
                             zoom = ZoomReducer.reset()
+                        },
+                        onTap = {
+                            currentOnToggleToolbar()
                         },
                     )
                 }

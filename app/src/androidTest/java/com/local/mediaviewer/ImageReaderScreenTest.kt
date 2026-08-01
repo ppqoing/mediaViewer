@@ -26,6 +26,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -176,6 +177,47 @@ class ImageReaderScreenTest {
         setScreen(contentState(ImageReaderMode.SINGLE))
         rule.onNodeWithTag("media_image")
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun tapTogglesImmersiveToolbar() {
+        setScreen(contentState(ImageReaderMode.SINGLE))
+        rule.onNodeWithTag("image_reader_scrim").assertIsDisplayed()
+        rule.onNodeWithText("2 / 3").assertIsDisplayed()
+
+        // 规格 §8.4：轻触切换顶部工具栏。
+        rule.onNodeWithTag("media_image").performTouchInput { click() }
+        // 注册了双击手势时单击在双击超时窗口后生效。
+        rule.mainClock.advanceTimeBy(500)
+        rule.waitForIdle()
+
+        rule.onNodeWithTag("image_reader_scrim").assertDoesNotExist()
+        rule.onNodeWithText("2 / 3").assertDoesNotExist()
+
+        rule.onNodeWithTag("media_image").performTouchInput { click() }
+        rule.mainClock.advanceTimeBy(500)
+        rule.waitForIdle()
+
+        rule.onNodeWithTag("image_reader_scrim").assertIsDisplayed()
+        rule.onNodeWithText("2 / 3").assertIsDisplayed()
+    }
+
+    @Test
+    fun comicTapTogglesImmersiveToolbar() {
+        setScreen(contentState(ImageReaderMode.COMIC))
+        rule.onNodeWithTag("image_reader_scrim").assertIsDisplayed()
+
+        rule.onNodeWithTag("comic_reader").performTouchInput { click() }
+        rule.mainClock.advanceTimeBy(500)
+        rule.waitForIdle()
+
+        rule.onNodeWithTag("image_reader_scrim").assertDoesNotExist()
+
+        rule.onNodeWithTag("comic_reader").performTouchInput { click() }
+        rule.mainClock.advanceTimeBy(500)
+        rule.waitForIdle()
+
+        rule.onNodeWithTag("image_reader_scrim").assertIsDisplayed()
     }
 
     @Test

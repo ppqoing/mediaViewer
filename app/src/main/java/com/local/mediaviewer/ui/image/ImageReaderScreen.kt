@@ -165,6 +165,11 @@ private fun ImageReaderContent(
     onRetryImage: (String) -> Unit,
     onBack: () -> Unit,
 ) {
+    // 规格 §8.4：轻触切换顶部工具栏；默认可见。
+    var toolbarVisible by rememberSaveable {
+        mutableStateOf(true)
+    }
+    val onToggleToolbar = { toolbarVisible = !toolbarVisible }
     Box(modifier = Modifier.fillMaxSize()) {
         if (state.mode == ImageReaderMode.COMIC) {
             ComicReader(
@@ -188,6 +193,7 @@ private fun ImageReaderContent(
                 onImageLoadSuccess =
                     onImageLoadSuccess,
                 onRetryImage = onRetryImage,
+                onToggleToolbar = onToggleToolbar,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
@@ -212,37 +218,40 @@ private fun ImageReaderContent(
                 onImageLoadSuccess =
                     onImageLoadSuccess,
                 onRetryImage = onRetryImage,
+                onToggleToolbar = onToggleToolbar,
                 refreshingImageLogicalUrl =
                     state.refreshingImageLogicalUrl,
                 modifier = Modifier.fillMaxSize(),
             )
         }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth(),
-            horizontalAlignment =
-                Alignment.CenterHorizontally,
-        ) {
-            val currentIndex = state.images
-                .indexOfFirst {
-                    it.logicalUrl ==
-                        current.logicalUrl
+        if (toolbarVisible) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth(),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally,
+            ) {
+                val currentIndex = state.images
+                    .indexOfFirst {
+                        it.logicalUrl ==
+                            current.logicalUrl
+                    }
+                    .coerceAtLeast(0)
+                ImageReaderToolbar(
+                    title = current.name,
+                    currentIndex = currentIndex,
+                    totalCount = state.images.size,
+                    mode = state.mode,
+                    sortOrder = state.sortOrder,
+                    onModeChanged = onModeChanged,
+                    onSortChanged = onSortChanged,
+                    onBack = onBack,
+                )
+                if (state.isRefreshingEndpoint) {
+                    EndpointRefreshChip()
                 }
-                .coerceAtLeast(0)
-            ImageReaderToolbar(
-                title = current.name,
-                currentIndex = currentIndex,
-                totalCount = state.images.size,
-                mode = state.mode,
-                sortOrder = state.sortOrder,
-                onModeChanged = onModeChanged,
-                onSortChanged = onSortChanged,
-                onBack = onBack,
-            )
-            if (state.isRefreshingEndpoint) {
-                EndpointRefreshChip()
             }
         }
     }

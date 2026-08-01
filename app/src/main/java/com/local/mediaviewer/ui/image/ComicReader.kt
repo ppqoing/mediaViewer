@@ -76,6 +76,7 @@ fun ComicReader(
         (String, ImageLoadFailureKind) -> Unit,
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
+    onToggleToolbar: () -> Unit = {},
     refreshingImageLogicalUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -168,6 +169,7 @@ fun ComicReader(
                         currentTransform.value = reset
                         onTransformChanged(reset)
                     },
+                    onTap = onToggleToolbar,
                     onGesture = {
                         zoomChange,
                         panXPx,
