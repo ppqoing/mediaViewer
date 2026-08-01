@@ -42,6 +42,13 @@ class VlcSessionPlayer(
     override fun getState(): State {
         val session = coordinator.sessionState.value
         val playback = session.playback
+        val contentPositionMs = playback.positionMs.coerceAtLeast(0L).let { position ->
+            if (playback.durationMs > 0L) {
+                position.coerceAtMost(playback.durationMs)
+            } else {
+                position
+            }
+        }
         val bufferedPositionMs = (
             playback.durationMs.toDouble() *
                 playback.bufferedPercent.coerceIn(0f, 100f) /
@@ -71,13 +78,15 @@ class VlcSessionPlayer(
                 },
             )
             .setCurrentMediaItemIndex(session.queue.currentIndex.coerceAtLeast(0))
-            .setContentPositionMs(playback.positionMs)
+            .setContentPositionMs(
+                PositionSupplier.getConstant(contentPositionMs),
+            )
             .setContentBufferedPositionMs(
                 PositionSupplier.getConstant(bufferedPositionMs),
             )
             .setTotalBufferedDurationMs(
                 PositionSupplier.getConstant(
-                    (bufferedPositionMs - playback.positionMs).coerceAtLeast(0L),
+                    (bufferedPositionMs - contentPositionMs).coerceAtLeast(0L),
                 ),
             )
             .setPlaybackParameters(PlaybackParameters(session.queue.playbackSpeed))

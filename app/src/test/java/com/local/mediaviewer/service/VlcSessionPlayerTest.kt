@@ -38,6 +38,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.LooperMode
+import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -175,6 +176,80 @@ class VlcSessionPlayerTest {
         assertEquals(1.5f, fixture.coordinator.sessionState.value.queue.playbackSpeed)
         assertEquals(1.5f, fixture.engine.speedCalls.last())
 
+        fixture.close()
+    }
+
+    @Test
+    fun `Media3 does not extrapolate LibVLC position after pause resume`() = runTest {
+        val fixture = fixture(this)
+        fixture.coordinator.replaceQueue(listOf(item("a")), "a")
+        fixture.engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.PAUSED,
+                positionMs = 12_000L,
+                durationMs = 60_000L,
+                isSeekable = true,
+            ),
+        )
+        settle()
+
+        fixture.player.play()
+        settle()
+        fixture.engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.PLAYING,
+                positionMs = 12_000L,
+                durationMs = 60_000L,
+                isSeekable = true,
+            ),
+        )
+        settle()
+
+        shadowOf(Looper.getMainLooper()).idleFor(5L, TimeUnit.SECONDS)
+        assertEquals(12_000L, fixture.player.currentPosition)
+
+        fixture.engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.PLAYING,
+                positionMs = 12_750L,
+                durationMs = 60_000L,
+                isSeekable = true,
+            ),
+        )
+        settle()
+        assertEquals(12_750L, fixture.player.currentPosition)
+        fixture.close()
+    }
+
+    @Test
+    fun `Media3 does not multiply LibVLC position by playback speed`() = runTest {
+        val fixture = fixture(this)
+        fixture.coordinator.replaceQueue(listOf(item("a")), "a")
+        fixture.engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.PAUSED,
+                positionMs = 8_000L,
+                durationMs = 60_000L,
+                isSeekable = true,
+            ),
+        )
+        settle()
+
+        fixture.player.setPlaybackSpeed(2f)
+        fixture.player.play()
+        settle()
+        fixture.engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.PLAYING,
+                positionMs = 8_000L,
+                durationMs = 60_000L,
+                isSeekable = true,
+            ),
+        )
+        settle()
+
+        shadowOf(Looper.getMainLooper()).idleFor(3L, TimeUnit.SECONDS)
+        assertEquals(8_000L, fixture.player.currentPosition)
         fixture.close()
     }
 
