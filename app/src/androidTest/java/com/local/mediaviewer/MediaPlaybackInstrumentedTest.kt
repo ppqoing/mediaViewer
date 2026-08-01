@@ -25,11 +25,13 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.util.VLCVideoLayout
 
 @RunWith(AndroidJUnit4::class)
 class MediaPlaybackInstrumentedTest {
@@ -57,6 +59,94 @@ class MediaPlaybackInstrumentedTest {
     fun tearDown() {
         server.close()
         fixtureDirectory.deleteRecursively()
+    }
+
+    @Test
+    fun pausedVideoResumeAdvancesWithoutReplacingMediaOrSurfaceHost() {
+        val resumeFixtureDirectory = File(
+            context.cacheDir,
+            "paused-resume-fixtures",
+        ).apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        val resumeServer = MediaFixtureServer(
+            MediaFixtureFactory(
+                directory = resumeFixtureDirectory,
+                videoDurationSeconds = 120,
+            ).create(),
+        ).also(MediaFixtureServer::start)
+        val engine = AndroidVlcPlaybackEngine(context)
+        val hostId = View.generateViewId()
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.setContentView(
+                        FrameLayout(activity).apply { id = hostId },
+                        ViewGroup.LayoutParams(800, 450),
+                    )
+                    engine.attachVideoOutput(
+                        requireNotNull(
+                            activity.findViewById<FrameLayout>(hostId),
+                        ),
+                    )
+                }
+                engine.prepare(resumeServer.url("/middle/sample.mp4"))
+                engine.play()
+                waitUntil(
+                    timeoutMs = 20_000L,
+                    diagnostic = {
+                        "${engine.state.value}; nativeTime=" +
+                            nativeMediaPlayer(engine).time
+                    },
+                ) {
+                    engine.state.value.status == PlaybackStatus.PLAYING &&
+                        nativeMediaPlayer(engine).time > 1_000L
+                }
+
+                val mediaBeforeResume =
+                    requireNotNull(nativeMediaPlayer(engine).media)
+                scenario.onActivity { engine.pause() }
+                waitUntil(
+                    timeoutMs = 10_000L,
+                    diagnostic = { engine.state.value.toString() },
+                ) {
+                    engine.state.value.status == PlaybackStatus.PAUSED
+                }
+                val pausedAt = nativeMediaPlayer(engine).time
+
+                scenario.onActivity {
+                    engine.play()
+                    engine.refreshVideoOutput()
+                }
+                waitUntil(
+                    timeoutMs = 10_000L,
+                    diagnostic = {
+                        "${engine.state.value}; nativeTime=" +
+                            nativeMediaPlayer(engine).time
+                    },
+                ) {
+                    engine.state.value.status != PlaybackStatus.ERROR &&
+                        nativeMediaPlayer(engine).time > pausedAt + 500L
+                }
+
+                scenario.onActivity { activity ->
+                    val host = requireNotNull(
+                        activity.findViewById<FrameLayout>(hostId),
+                    )
+                    assertEquals(1, host.childCount)
+                    assertTrue(host.getChildAt(0) is VLCVideoLayout)
+                    assertSame(
+                        mediaBeforeResume,
+                        nativeMediaPlayer(engine).media,
+                    )
+                }
+            }
+        } finally {
+            engine.close()
+            resumeServer.close()
+            resumeFixtureDirectory.deleteRecursively()
+        }
     }
 
     @Test

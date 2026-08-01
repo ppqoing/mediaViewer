@@ -15,6 +15,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCVideoLayout
 
 @RunWith(AndroidJUnit4::class)
@@ -24,12 +25,14 @@ class LibVlcVideoOutputTest {
         val context =
             ApplicationProvider.getApplicationContext<Context>()
         val engine = AndroidVlcPlaybackEngine(context)
+        lateinit var host: FrameLayout
+        lateinit var mediaBeforeRefresh: IMedia
         try {
             ActivityScenario.launch(
                 MainActivity::class.java,
             ).use { scenario ->
                 scenario.onActivity { activity ->
-                    val host = FrameLayout(activity)
+                    host = FrameLayout(activity)
                     activity.setContentView(
                         host,
                         ViewGroup.LayoutParams(800, 450),
@@ -40,7 +43,7 @@ class LibVlcVideoOutputTest {
                     engine.attachVideoOutput(host)
                     val stateBeforeRefresh = engine.state.value
                     val mediaPlayer = engine.mediaPlayerForTest()
-                    val mediaBeforeRefresh = mediaPlayer.media
+                    mediaBeforeRefresh = requireNotNull(mediaPlayer.media)
 
                     engine.refreshVideoOutput()
 
@@ -50,6 +53,15 @@ class LibVlcVideoOutputTest {
                     )
                     assertEquals(stateBeforeRefresh, engine.state.value)
                     assertSame(mediaBeforeRefresh, mediaPlayer.media)
+                }
+                Thread.sleep(400L)
+                scenario.onActivity {
+                    assertEquals(1, host.childCount)
+                    assertTrue(host.getChildAt(0) is VLCVideoLayout)
+                    assertSame(
+                        mediaBeforeRefresh,
+                        engine.mediaPlayerForTest().media,
+                    )
                 }
             }
         } finally {

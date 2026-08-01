@@ -112,10 +112,11 @@ class AndroidVlcPlaybackEngine(
         if (closed.get()) return
         requireMainThread("刷新")
         val layout = videoLayout ?: return
-        videoOutputRefreshScheduler.refresh rebind@{
-            if (closed.get() || videoLayout !== layout) return@rebind
-            mediaPlayer.detachViews()
-            mediaPlayer.attachViews(layout, null, false, false)
+        videoOutputRefreshScheduler.refresh fallbackRefresh@{
+            if (closed.get() || videoLayout !== layout) {
+                return@fallbackRefresh
+            }
+            mediaPlayer.updateVideoSurfaces()
             mediaPlayer.setVideoScale(
                 videoScaleMode.toLibVlcScaleType(),
             )
@@ -282,22 +283,21 @@ internal class VideoOutputRefreshScheduler(
     private val isActive: () -> Boolean,
     private val updateVideoSurfaces: () -> Unit,
 ) {
-    private var pendingRebind: Runnable? = null
+    private var pendingRefresh: Runnable? = null
 
-    fun refresh(rebind: () -> Unit) {
+    fun refresh(fallbackRefresh: () -> Unit) {
         if (!isActive()) return
-        updateVideoSurfaces()
         cancel()
-        lateinit var rebindTask: Runnable
-        rebindTask = Runnable {
-            if (pendingRebind !== rebindTask) return@Runnable
-            pendingRebind = null
-            if (isActive()) rebind()
+        lateinit var refreshTask: Runnable
+        refreshTask = Runnable {
+            if (pendingRefresh !== refreshTask) return@Runnable
+            pendingRefresh = null
+            if (isActive()) fallbackRefresh()
         }
-        pendingRebind = rebindTask
+        pendingRefresh = refreshTask
         postDelayedToOwner(
-            rebindTask,
-            VIDEO_REBIND_DELAY_MS,
+            refreshTask,
+            VIDEO_REFRESH_DELAY_MS,
         )
     }
 
@@ -305,19 +305,18 @@ internal class VideoOutputRefreshScheduler(
         postToOwner(
             Runnable {
                 if (!isActive()) return@Runnable
-                cancel()
                 updateVideoSurfaces()
             },
         )
     }
 
     fun cancel() {
-        pendingRebind?.let(removeFromOwner)
-        pendingRebind = null
+        pendingRefresh?.let(removeFromOwner)
+        pendingRefresh = null
     }
 
     private companion object {
-        const val VIDEO_REBIND_DELAY_MS = 120L
+        const val VIDEO_REFRESH_DELAY_MS = 120L
     }
 }
 

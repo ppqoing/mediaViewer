@@ -444,13 +444,13 @@ class PlayerViewModel(
     }
 
     private fun playNow() {
+        controller.play()
         if (
             currentRequest.kind == MediaKind.VIDEO &&
             lastStatus == PlaybackStatus.PAUSED
         ) {
             controller.refreshVideoOutput()
         }
-        controller.play()
     }
 
     private fun cancelDeferredPlay() {
