@@ -80,6 +80,50 @@ class CurrentPlayerNavigationTest {
     }
 
     @Test
+    fun `presented player keeps connecting while the session reopens`() {
+        val opening = session(currentItem = null, status = PlaybackStatus.OPENING)
+
+        assertEquals(
+            PlayerEntryState.Connecting,
+            resolvePlayerEntryState(
+                opening,
+                hasPresentedItem = true,
+                waitExpired = false,
+            ),
+        )
+        assertEquals(
+            PlayerEntryState.Connecting,
+            resolvePlayerEntryState(
+                opening,
+                hasPresentedItem = true,
+                waitExpired = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `presented player leaves only after an idle empty wait expires`() {
+        val idle = session(currentItem = null, status = PlaybackStatus.IDLE)
+
+        assertEquals(
+            PlayerEntryState.Connecting,
+            resolvePlayerEntryState(
+                idle,
+                hasPresentedItem = true,
+                waitExpired = false,
+            ),
+        )
+        assertEquals(
+            PlayerEntryState.Empty,
+            resolvePlayerEntryState(
+                idle,
+                hasPresentedItem = true,
+                waitExpired = true,
+            ),
+        )
+    }
+
+    @Test
     fun `只有通知 action 与显式 extra 同时匹配才接受打开请求`() {
         assertEquals(
             true,

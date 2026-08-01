@@ -68,8 +68,10 @@ fun resolvePlayerEntryState(
 ): PlayerEntryState = when {
     session.currentItem != null -> PlayerEntryState.Ready(session.currentItem)
     session.errorMessage != null -> PlayerEntryState.Failed(session.errorMessage)
-    hasPresentedItem -> PlayerEntryState.Empty
+    // 暂停退到后台时控制器进入休眠，回前台重连期间 currentItem 短暂为 null；
+    // 此时必须保持 Connecting，不能把已呈现的播放器页当作空队列弹走。
     session.playback.status == PlaybackStatus.OPENING || !waitExpired ->
         PlayerEntryState.Connecting
+    hasPresentedItem -> PlayerEntryState.Empty
     else -> PlayerEntryState.Empty
 }
