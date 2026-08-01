@@ -209,21 +209,25 @@ class MediaViewerNavigationTest {
         rule.onNodeWithText("video-a").assertIsDisplayed()
         container.fakePlaybackController.emitSessionState(PlaybackSessionState())
         rule.waitForIdle()
-        rule.onNodeWithText("MediaViewer").assertIsDisplayed()
+        // CQ-F1 修复后：已呈现播放器页遇到空队列先经过有限等待，
+        // 等待到期后单次安全退出回首页，不再立即弹走。
         rule.mainClock.advanceTimeBy(PLAYER_ENTRY_WAIT_TIMEOUT_MS + 1_000L)
+        rule.waitForIdle()
+        rule.onNodeWithText("MediaViewer").assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(1_000L)
         rule.onNodeWithText("MediaViewer").assertIsDisplayed()
     }
 
     @Test
-    fun dirty_settings_back_uses_discard_confirmation() {
+    fun unverified_settings_edit_back_leaves_without_confirmation() {
         rule.onNodeWithContentDescription("设置").performClick()
         rule.onNodeWithText("服务器设置").assertIsDisplayed()
         rule.onNodeWithTag("server_url")
             .performClick()
             .performTextInput("/edited")
         rule.onNodeWithContentDescription("返回").performClick()
-        rule.onNodeWithText("放弃未保存的服务器更改？").assertIsDisplayed()
-        rule.onNodeWithText("放弃更改").performClick()
+        // 规格 §8.3/§10：普通未验证输入不拦截返回、不出现放弃确认。
+        rule.onNodeWithText("放弃未保存的服务器更改？").assertDoesNotExist()
         rule.onNodeWithText("MediaViewer").assertIsDisplayed()
     }
 
