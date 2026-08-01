@@ -73,6 +73,30 @@ class ImageDecodePolicyTest {
         assertWithinPixelBudget(target)
     }
 
+    @Test
+    fun `条漫解码目标只由视口和设备上限决定`() {
+        val target = ImageDecodePolicy.comicTarget(
+            viewportWidthPx = 1_440,
+            viewportHeightPx = 3_200,
+            maxBitmapWidthPx = 2_048,
+            maxBitmapHeightPx = 4_096,
+        )
+
+        assertEquals(
+            ImageDecodePolicy.target(
+                viewportWidthPx = 1_440,
+                viewportHeightPx = 3_200,
+                scale = 1f,
+                maxBitmapWidthPx = 2_048,
+                maxBitmapHeightPx = 4_096,
+            ),
+            target,
+        )
+        assertTrue(target.widthPx <= 2_048)
+        assertTrue(target.heightPx <= 4_096)
+        assertWithinPixelBudget(target)
+    }
+
     private fun assertWithinPixelBudget(
         target: ImageDecodeSize,
     ) {

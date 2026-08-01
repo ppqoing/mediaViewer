@@ -253,7 +253,6 @@ fun ComicReader(
                             viewportHeightPx,
                         deviceBitmapLimits =
                             deviceBitmapLimits,
-                        visualScale = transform.scale,
                         onImageLoadError =
                             onImageLoadError,
                         onImageLoadSuccess =
@@ -279,7 +278,6 @@ private fun ComicImage(
     viewportWidthPx: Int,
     viewportHeightPx: Int,
     deviceBitmapLimits: DeviceBitmapLimits,
-    visualScale: Float,
     failure: ImageItemFailure?,
     onImageLoadError:
         (String, ImageLoadFailureKind) -> Unit,
@@ -311,12 +309,10 @@ private fun ComicImage(
         viewportWidthPx,
         viewportHeightPx,
         deviceBitmapLimits,
-        visualScale,
     ) {
-        ImageDecodePolicy.target(
+        ImageDecodePolicy.comicTarget(
             viewportWidthPx = viewportWidthPx,
             viewportHeightPx = viewportHeightPx,
-            scale = visualScale,
             maxBitmapWidthPx =
                 deviceBitmapLimits.maxWidthPx,
             maxBitmapHeightPx =

@@ -11,6 +11,19 @@ data class ImageDecodeSize(
 object ImageDecodePolicy {
     const val MAX_PIXELS = 4_194_304L
 
+    fun comicTarget(
+        viewportWidthPx: Int,
+        viewportHeightPx: Int,
+        maxBitmapWidthPx: Int = Int.MAX_VALUE,
+        maxBitmapHeightPx: Int = Int.MAX_VALUE,
+    ): ImageDecodeSize = target(
+        viewportWidthPx = viewportWidthPx,
+        viewportHeightPx = viewportHeightPx,
+        scale = 1f,
+        maxBitmapWidthPx = maxBitmapWidthPx,
+        maxBitmapHeightPx = maxBitmapHeightPx,
+    )
+
     fun target(
         viewportWidthPx: Int,
         viewportHeightPx: Int,

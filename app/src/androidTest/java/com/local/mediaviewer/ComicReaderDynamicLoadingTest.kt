@@ -1,14 +1,17 @@
 package com.local.mediaviewer
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import coil3.ImageLoader
 import com.local.mediaviewer.image.ComicTransform
@@ -21,6 +24,7 @@ import com.local.mediaviewer.ui.image.ComicReader
 import java.io.File
 import java.time.Instant
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -144,6 +148,105 @@ class ComicReaderDynamicLoadingTest {
             "scrolledPaths=$scrolledPaths",
             scrolledPaths.size < IMAGE_COUNT,
         )
+    }
+
+    @Test
+    fun zoomingLoadedImageKeepsTheExistingRequest() {
+        val image = ImageReaderItem(
+            name = "page-001.png",
+            size = 1_024L,
+            modifiedAt =
+                Instant.parse(
+                    "2026-07-28T00:00:00Z",
+                ),
+            logicalUrl =
+                "http://media.example/pik/page-001.png",
+            requestUrl =
+                server.url("/pik/page-001.png"),
+        )
+        var successfulLoads = 0
+        rule.setContent {
+            var transform by remember {
+                mutableStateOf(ComicTransform())
+            }
+            MaterialTheme {
+                ComicReader(
+                    images = listOf(image),
+                    anchorLogicalUrl = image.logicalUrl,
+                    sortOrder = ImageSortOrder.NAME_ASC,
+                    imageLoader = imageLoader,
+                    requestGeneration = 0,
+                    itemFailures = emptyMap(),
+                    itemRequestGenerations = emptyMap(),
+                    transform = transform,
+                    onTransformChanged = {
+                        transform = it
+                    },
+                    onAnchorChanged = {},
+                    onImageLoadError = { _, _ -> },
+                    onImageLoadSuccess = {
+                        successfulLoads += 1
+                    },
+                    onRetryImage = {},
+                )
+            }
+        }
+        rule.waitUntil(10_000) {
+            successfulLoads > 0
+        }
+        val initialRequestCount =
+            server.mediaRequestCount()
+        val initialSuccessCount = successfulLoads
+
+        zoomComic()
+        zoomComic()
+        rule.waitForIdle()
+        waitForPossibleReload(
+            initialRequestCount = initialRequestCount,
+        )
+
+        assertEquals(
+            initialRequestCount,
+            server.mediaRequestCount(),
+        )
+        assertEquals(
+            initialSuccessCount,
+            successfulLoads,
+        )
+    }
+
+    private fun zoomComic() {
+        rule.onNodeWithTag("comic_reader")
+            .performTouchInput {
+                val middle = center
+                down(0, middle + Offset(-40f, 0f))
+                down(1, middle + Offset(40f, 0f))
+                moveTo(
+                    0,
+                    middle + Offset(-120f, 0f),
+                    delayMillis = 120L,
+                )
+                moveTo(
+                    1,
+                    middle + Offset(120f, 0f),
+                    delayMillis = 120L,
+                )
+                up(0)
+                up(1)
+            }
+    }
+
+    private fun waitForPossibleReload(
+        initialRequestCount: Int,
+    ) {
+        val deadline = SystemClock.uptimeMillis() + 750L
+        while (
+            server.mediaRequestCount() ==
+                initialRequestCount &&
+            SystemClock.uptimeMillis() < deadline
+        ) {
+            SystemClock.sleep(20L)
+        }
     }
 
     private companion object {
