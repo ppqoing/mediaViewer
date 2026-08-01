@@ -220,6 +220,19 @@ class ImageSequenceTest {
         )
     }
 
+    @Test
+    fun `单图初始页使用锚点且缺失时回退第一页`() {
+        val items = listOf(
+            item("a.jpg", logicalUrl = "logical-a"),
+            item("b.jpg", logicalUrl = "logical-b"),
+            item("c.jpg", logicalUrl = "logical-c"),
+        )
+
+        assertEquals(1, ImageSequence.indexOfAnchor(items, "logical-b"))
+        assertEquals(0, ImageSequence.indexOfAnchor(items, "missing"))
+        assertEquals(0, ImageSequence.indexOfAnchor(emptyList(), "missing"))
+    }
+
     private fun assertOrder(
         items: List<ImageReaderItem>,
         order: ImageSortOrder,

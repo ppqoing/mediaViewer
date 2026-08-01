@@ -37,6 +37,14 @@ object ImageSequence {
             it.logicalUrl == requestedLogicalUrl
         }?.logicalUrl ?: items.firstOrNull()?.logicalUrl
 
+    fun indexOfAnchor(
+        items: List<ImageReaderItem>,
+        requestedLogicalUrl: String,
+    ): Int =
+        items.indexOfFirst {
+            it.logicalUrl == requestedLogicalUrl
+        }.coerceAtLeast(0)
+
     private fun compareNames(
         left: ImageReaderItem,
         right: ImageReaderItem,

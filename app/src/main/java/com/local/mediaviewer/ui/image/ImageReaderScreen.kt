@@ -197,30 +197,24 @@ private fun ImageReaderContent(
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            SingleImageViewer(
-                item = current,
+            SingleImagePager(
+                images = state.images,
+                anchorLogicalUrl =
+                    state.anchorLogicalUrl,
                 imageLoader = imageLoader,
                 requestGeneration =
-                    effectiveRequestGeneration(
-                        requestGeneration =
-                            state.requestGeneration,
-                        itemRequestGeneration =
-                            state
-                                .itemRequestGenerations[
-                                    current.logicalUrl
-                                ] ?: 0,
-                    ),
-                failure =
-                    state.itemFailures[
-                        current.logicalUrl
-                    ],
+                    state.requestGeneration,
+                itemFailures = state.itemFailures,
+                itemRequestGenerations =
+                    state.itemRequestGenerations,
+                refreshingImageLogicalUrl =
+                    state.refreshingImageLogicalUrl,
+                onAnchorChanged = onAnchorChanged,
                 onImageLoadError = onImageLoadError,
                 onImageLoadSuccess =
                     onImageLoadSuccess,
                 onRetryImage = onRetryImage,
                 onToggleToolbar = onToggleToolbar,
-                refreshingImageLogicalUrl =
-                    state.refreshingImageLogicalUrl,
                 modifier = Modifier.fillMaxSize(),
             )
         }

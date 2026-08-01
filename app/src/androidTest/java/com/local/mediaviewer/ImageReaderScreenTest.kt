@@ -34,6 +34,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -177,6 +179,99 @@ class ImageReaderScreenTest {
         setScreen(contentState(ImageReaderMode.SINGLE))
         rule.onNodeWithTag("media_image")
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun singleImageSwipesLeftToNextAndRightToPrevious() {
+        val anchors = mutableListOf<String>()
+        setScreen(
+            state = contentState(ImageReaderMode.SINGLE),
+            onAnchorChanged = anchors::add,
+        )
+
+        rule.onNodeWithTag("single_image_pager")
+            .performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        assertEquals(
+            "http://media.example/pik/c.webp",
+            anchors.last(),
+        )
+
+        rule.onNodeWithTag("single_image_pager")
+            .performTouchInput { swipeRight() }
+        rule.waitForIdle()
+        assertEquals(
+            "http://media.example/pik/b.png",
+            anchors.last(),
+        )
+    }
+
+    @Test
+    fun singleImagePagerStopsAtSequenceEnd() {
+        val base = contentState(ImageReaderMode.SINGLE)
+        val lastAnchors = mutableListOf<String>()
+        setScreen(
+            state = base.copy(
+                anchorLogicalUrl =
+                    base.images.last().logicalUrl,
+            ),
+            onAnchorChanged = lastAnchors::add,
+        )
+        rule.onNodeWithTag("single_image_pager")
+            .performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        assertEquals(
+            base.images.last().logicalUrl,
+            lastAnchors.last(),
+        )
+    }
+
+    @Test
+    fun singleImagePagerStopsAtSequenceStart() {
+        val base = contentState(ImageReaderMode.SINGLE)
+        val firstAnchors = mutableListOf<String>()
+        setScreen(
+            state = base.copy(
+                anchorLogicalUrl =
+                    base.images.first().logicalUrl,
+            ),
+            onAnchorChanged = firstAnchors::add,
+        )
+        rule.onNodeWithTag("single_image_pager")
+            .performTouchInput { swipeRight() }
+        rule.waitForIdle()
+        assertEquals(
+            base.images.first().logicalUrl,
+            firstAnchors.last(),
+        )
+    }
+
+    @Test
+    fun zoomedSingleImagePansWithoutPagingUntilDoubleTapReset() {
+        val anchors = mutableListOf<String>()
+        setScreen(
+            state = contentState(ImageReaderMode.SINGLE),
+            onAnchorChanged = anchors::add,
+        )
+        zoomSingleImage()
+
+        rule.onNodeWithTag("single_image_pager")
+            .performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        assertEquals(
+            "http://media.example/pik/b.png",
+            anchors.last(),
+        )
+
+        rule.onNodeWithTag("media_image")
+            .performTouchInput { doubleClick() }
+        rule.onNodeWithTag("single_image_pager")
+            .performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        assertEquals(
+            "http://media.example/pik/c.webp",
+            anchors.last(),
+        )
     }
 
     @Test
@@ -703,6 +798,7 @@ class ImageReaderScreenTest {
         state: ImageReaderUiState,
         onModeChanged: (ImageReaderMode) -> Unit = {},
         onSortChanged: (ImageSortOrder) -> Unit = {},
+        onAnchorChanged: (String) -> Unit = {},
         onRetryDirectory: () -> Unit = {},
         onImageLoadError:
             (String, ImageLoadFailureKind) -> Unit =
@@ -717,7 +813,7 @@ class ImageReaderScreenTest {
                     imageLoader = loader,
                     onModeChanged = onModeChanged,
                     onSortChanged = onSortChanged,
-                    onAnchorChanged = {},
+                    onAnchorChanged = onAnchorChanged,
                     onRetryDirectory = onRetryDirectory,
                     onImageLoadError =
                         onImageLoadError,
@@ -728,6 +824,27 @@ class ImageReaderScreenTest {
                 )
             }
         }
+    }
+
+    private fun zoomSingleImage() {
+        rule.onNodeWithTag("media_image")
+            .performTouchInput {
+                val middle = center
+                down(0, middle + Offset(-40f, 0f))
+                down(1, middle + Offset(40f, 0f))
+                moveTo(
+                    0,
+                    middle + Offset(-150f, 0f),
+                    delayMillis = 120L,
+                )
+                moveTo(
+                    1,
+                    middle + Offset(150f, 0f),
+                    delayMillis = 120L,
+                )
+                up(0)
+                up(1)
+            }
     }
 
     private fun zoomAndPanComic() {

@@ -2,7 +2,8 @@ package com.local.mediaviewer.ui.image
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -43,6 +44,7 @@ fun SingleImageViewer(
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
     onToggleToolbar: () -> Unit = {},
+    onZoomedChanged: (Boolean) -> Unit = {},
     refreshingImageLogicalUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -51,6 +53,23 @@ fun SingleImageViewer(
     }
     val currentOnToggleToolbar by
         rememberUpdatedState(onToggleToolbar)
+    val currentOnZoomedChanged by
+        rememberUpdatedState(onZoomedChanged)
+    val isZoomed = zoom.scale > 1.001f
+    LaunchedEffect(item.logicalUrl, isZoomed) {
+        currentOnZoomedChanged(isZoomed)
+    }
+    val transformableState = rememberTransformableState {
+            zoomChange,
+            panChange,
+            _,
+        ->
+        zoom = ZoomReducer.gesture(
+            current = zoom,
+            zoomChange = zoomChange,
+            panChange = panChange,
+        )
+    }
     val context = LocalContext.current
     val deviceBitmapLimits = remember {
         queryDeviceBitmapLimits()
@@ -117,20 +136,10 @@ fun SingleImageViewer(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(item.logicalUrl) {
-                    detectTransformGestures {
-                            _,
-                            pan,
-                            gestureZoom,
-                            _,
-                        ->
-                        zoom = ZoomReducer.gesture(
-                            current = zoom,
-                            zoomChange = gestureZoom,
-                            panChange = pan,
-                        )
-                    }
-                }
+                .transformable(
+                    state = transformableState,
+                    canPan = { zoom.scale > 1.001f },
+                )
                 .pointerInput(item.logicalUrl) {
                     detectTapGestures(
                         onDoubleTap = {
