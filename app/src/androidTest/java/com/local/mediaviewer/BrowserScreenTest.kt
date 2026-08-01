@@ -115,6 +115,33 @@ class BrowserScreenTest {
     }
 
     @Test
+    fun contentTopBarExposesRefreshEntry() {
+        var retries = 0
+        rule.setContent {
+            MediaViewerTheme {
+                BrowserScreen(
+                    state = BrowserUiState.Content(
+                        browserPage(
+                            entries = listOf(
+                                browserEntry("movie.mp4", MediaKind.VIDEO),
+                            ),
+                        ),
+                    ),
+                    onEntryClick = {},
+                    onBreadcrumbClick = {},
+                    onRetry = { retries += 1 },
+                    onBack = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("刷新")
+            .assertIsDisplayed()
+            .performClick()
+        rule.runOnIdle { assertEquals(1, retries) }
+    }
+
+    @Test
     fun playableFilesExposeManualPlaybackActions() {
         val video = browserEntry("movie.mp4", MediaKind.VIDEO)
         val image = browserEntry("page.png", MediaKind.IMAGE)

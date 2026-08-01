@@ -25,9 +25,11 @@ import com.local.mediaviewer.browser.BrowserPlaybackAction
 import com.local.mediaviewer.browser.BrowserUiState
 import com.local.mediaviewer.model.DirectoryEntry
 import com.local.mediaviewer.ui.components.MediaAction
+import com.local.mediaviewer.ui.components.MediaIconButton
 import com.local.mediaviewer.ui.components.MediaScreenScaffold
 import com.local.mediaviewer.ui.components.MediaStateKind
 import com.local.mediaviewer.ui.components.MediaStatePanel
+import com.local.mediaviewer.ui.icons.MediaIcons
 
 @Composable
 fun BrowserScreen(
@@ -42,6 +44,14 @@ fun BrowserScreen(
     MediaScreenScaffold(
         title = currentTitle(state),
         onBack = onBack,
+        actions = {
+            // 规格 §8.2：顶栏提供返回和一个刷新入口。
+            MediaIconButton(
+                icon = MediaIcons.Refresh,
+                contentDescription = "刷新",
+                onClick = onRetry,
+            )
+        },
         snackbarHost = { snackbarHostState?.let { SnackbarHost(it) } },
     ) { padding ->
         val visiblePage = visiblePage(state)
