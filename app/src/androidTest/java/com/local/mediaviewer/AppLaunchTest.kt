@@ -12,6 +12,6 @@ class AppLaunchTest {
 
     @Test
     fun appNameIsDisplayed() {
-        composeRule.onNodeWithText("mediaviewer").assertIsDisplayed()
+        composeRule.onNodeWithText("MediaViewer").assertIsDisplayed()
     }
 }
