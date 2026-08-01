@@ -19,6 +19,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,7 +40,9 @@ import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.ui.components.MediaGlyph
 import com.local.mediaviewer.ui.components.PlayerIconButton
 import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.theme.LocalPlayerColors
 import com.local.mediaviewer.ui.theme.MediaTheme
+import com.local.mediaviewer.ui.theme.surfacePlayerColors
 
 @Composable
 fun NowPlayingBar(
@@ -54,19 +58,30 @@ fun NowPlayingBar(
     val item = state.currentItem ?: return
     if (state.queue.items.isEmpty()) return
     val action = playbackPrimaryAction(state.playback.status)
-    NowPlayingBarContent(
-        item = item,
-        action = action,
-        playback = state.playback,
-        canSkipNext = state.canSkipNext,
-        onPrimaryAction = {
-            action.command.invoke(onPlay, onPause, onReplay)
-        },
-        onNext = onNext,
-        onOpenQueue = onOpenQueue,
-        onOpenPlayer = onOpenPlayer,
-        modifier = modifier,
-    )
+    // 迷你播放器位于普通主题 surface 上（surface3），
+    // 不能使用黑底 PlayerColors（规格 §6.1 浅色对比度）。
+    // staticCompositionLocalOf 要求提供值稳定，remember 固定实例。
+    val colorScheme = MaterialTheme.colorScheme
+    val surfaceColors = remember(colorScheme) {
+        surfacePlayerColors(colorScheme)
+    }
+    CompositionLocalProvider(
+        LocalPlayerColors provides surfaceColors,
+    ) {
+        NowPlayingBarContent(
+            item = item,
+            action = action,
+            playback = state.playback,
+            canSkipNext = state.canSkipNext,
+            onPrimaryAction = {
+                action.command.invoke(onPlay, onPause, onReplay)
+            },
+            onNext = onNext,
+            onOpenQueue = onOpenQueue,
+            onOpenPlayer = onOpenPlayer,
+            modifier = modifier,
+        )
+    }
 }
 
 @Deprecated("Flow Task 7 switches the root to the volume-free overload")

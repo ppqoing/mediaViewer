@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -24,6 +25,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertRangeInfoEquals
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -666,6 +668,57 @@ class PlaybackQueueUiTest {
     }
 
     @Test
+    fun miniPlayerControlsStayVisibleOnLightSurface() {
+        val current = item("video", "movie.mp4", MediaKind.VIDEO)
+        rule.setContent {
+            MediaViewerTheme(darkTheme = false) {
+                NowPlayingBar(
+                    state = miniSession(current),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onNext = {},
+                    onOpenQueue = {},
+                    onOpenPlayer = {},
+                )
+            }
+        }
+
+        // 规格 §6.1：浅色页面上关键非文字控制至少 3:1，
+        // 迷你条不得把黑底 PlayerColors 的近白控件放在浅色 surface 上。
+        rule.onNodeWithContentDescription("播放").assertIsDisplayed()
+        assertControlHasDarkPixels("播放")
+        assertControlHasDarkPixels("打开播放队列")
+    }
+
+    @Test
+    fun queueRowControlsStayVisibleOnLightSurface() {
+        val first = item("a", "song-a.mp3")
+        val second = item("b", "song-b.mp3")
+        rule.setContent {
+            MediaViewerTheme(darkTheme = false) {
+                PlaybackQueueSheet(
+                    queue = PlaybackQueue(
+                        listOf(first, second),
+                        first.mediaKey,
+                    ),
+                    onSelect = {},
+                    onMove = { _, _ -> },
+                    onRemove = {},
+                    onClearExceptCurrent = {},
+                    onStopAndClear = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("删除 song-b.mp3")
+            .assertIsDisplayed()
+        assertControlHasDarkPixels("删除 song-b.mp3")
+        assertControlHasDarkPixels("拖动排序 song-b.mp3")
+    }
+
+    @Test
     fun compactMiniKeepsPrimaryAndQueueWithoutNextOrVolume() {
         val current = item("audio", "long song name.flac", MediaKind.AUDIO)
         rule.setContent {
@@ -1109,6 +1162,37 @@ class PlaybackQueueUiTest {
                 )
             }
         }
+    }
+
+    private fun assertControlHasDarkPixels(contentDescription: String) {
+        val pixels = rule.onNodeWithContentDescription(contentDescription)
+            .captureToImage()
+            .toPixelMap()
+        var dark = 0
+        var samples = 0
+        var y = 0
+        while (y < pixels.height) {
+            var x = 0
+            while (x < pixels.width) {
+                val color = pixels[x, y]
+                val luminance =
+                    0.2126 * color.red +
+                        0.7152 * color.green +
+                        0.0722 * color.blue
+                if (luminance < 0.5) {
+                    dark++
+                }
+                samples++
+                x += 2
+            }
+            y += 2
+        }
+        val darkFraction = dark.toDouble() / samples
+        assertTrue(
+            "$contentDescription must stay visible on a light surface " +
+                "(dark pixel fraction=$darkFraction)",
+            darkFraction > 0.02,
+        )
     }
 
     private fun miniSession(

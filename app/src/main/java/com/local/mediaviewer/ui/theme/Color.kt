@@ -1,5 +1,6 @@
 package com.local.mediaviewer.ui.theme
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Immutable
@@ -135,3 +136,14 @@ val DefaultPlayerColors = PlayerColors(
     bottomScrimStart = Color.Transparent,
     bottomScrimEnd = Color(0xCC000000),
 )
+
+// 普通主题 surface（迷你播放器、队列浮层等 surface3/surface4）上的
+// 播放器控件颜色：黑底 PlayerColors 的近白控件在浅色页面对比度不足，
+// 按规格 §6.1 改用当前 ColorScheme 的角色色。
+fun surfacePlayerColors(colorScheme: ColorScheme): PlayerColors =
+    DefaultPlayerColors.copy(
+        control = colorScheme.onSurface,
+        active = colorScheme.primary,
+        accent = colorScheme.tertiary,
+        disabled = colorScheme.outline,
+    )

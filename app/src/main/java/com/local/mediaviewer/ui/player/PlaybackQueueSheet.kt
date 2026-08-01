@@ -36,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -73,7 +74,9 @@ import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.queue.PlaybackQueue
 import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.ui.components.MediaBottomSheet
+import com.local.mediaviewer.ui.theme.LocalPlayerColors
 import com.local.mediaviewer.ui.theme.MediaTheme
+import com.local.mediaviewer.ui.theme.surfacePlayerColors
 import java.net.URI
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -409,6 +412,16 @@ private fun QueueItemRow(
         animationSpec = tween(MediaTheme.motion.stateMillis),
         label = "queueRowDragElevation",
     )
+    // 队列浮层是普通主题 surface（surface4），行控件配色跟随
+    // ColorScheme，不能使用黑底 PlayerColors（规格 §6.1/§8.8）。
+    // staticCompositionLocalOf 要求提供值稳定，remember 固定实例。
+    val colorScheme = MaterialTheme.colorScheme
+    val surfaceColors = remember(colorScheme) {
+        surfacePlayerColors(colorScheme)
+    }
+    CompositionLocalProvider(
+        LocalPlayerColors provides surfaceColors,
+    ) {
     androidx.compose.foundation.layout.Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -459,7 +472,11 @@ private fun QueueItemRow(
             } else {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
             },
-            border = if (isCurrent) BorderStroke(1.dp, NeonPurple) else null,
+            border = if (isCurrent) {
+                BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+            } else {
+                null
+            },
             shadowElevation = dragElevation,
         ) {
             Row(
@@ -491,7 +508,7 @@ private fun QueueItemRow(
                             Text(
                                 text = "即将播放",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = NeonPurple,
+                                color = MaterialTheme.colorScheme.tertiary,
                             )
                         }
                     }
@@ -525,6 +542,7 @@ private fun QueueItemRow(
                 }
             }
         }
+    }
     }
 }
 
