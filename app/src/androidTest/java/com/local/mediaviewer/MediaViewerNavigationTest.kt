@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -29,6 +30,7 @@ import com.local.mediaviewer.testing.FakeAppContainer
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -290,6 +292,30 @@ class MediaViewerNavigationTest {
         rule.onNodeWithContentDescription("返回").performClick()
         rule.onNodeWithText("MediaViewer").assertIsDisplayed()
         rule.onNodeWithTag("browser_list").assertDoesNotExist()
+    }
+
+    @Test
+    fun nowPlayingDockLeavesTheBrowserTailReachable() {
+        container.playbackController.replaceQueue(
+            items = listOf(
+                QueueMediaItem(
+                    mediaKey = "playing",
+                    name = "正在播放.mp3",
+                    logicalUrl = "http://media.test/playing.mp3",
+                    kind = MediaKind.AUDIO,
+                ),
+            ),
+            startMediaKey = "playing",
+        )
+        openNestedDirectory()
+        rule.onNodeWithTag("browser_list")
+            .performScrollToNode(hasText("样例.wav"))
+
+        val dockTop = rule.onNodeWithTag("now_playing_bar")
+            .fetchSemanticsNode().boundsInRoot.top
+        val tailBottom = rule.onNodeWithText("样例.wav")
+            .fetchSemanticsNode().boundsInRoot.bottom
+        assertTrue(tailBottom <= dockTop)
     }
 
     private fun openNestedDirectory() {
