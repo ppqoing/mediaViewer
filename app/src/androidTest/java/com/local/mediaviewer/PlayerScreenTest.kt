@@ -379,6 +379,7 @@ class PlayerScreenTest {
     @Test
     fun lowFrequencyOptionsWorkInNormalAndFullscreen() {
         var selectedMode: VideoScaleMode? = null
+        var backgroundPlaybackEnabled by mutableStateOf(false)
         val fullscreenController =
             ScreenFakeFullscreenController()
         rule.setContent {
@@ -408,8 +409,10 @@ class PlayerScreenTest {
                     onPrevious = {},
                     onNext = {},
                     onSpeedChanged = {},
-                    backgroundPlaybackEnabled = false,
-                    onBackgroundPlaybackChanged = {},
+                    backgroundPlaybackEnabled = backgroundPlaybackEnabled,
+                    onBackgroundPlaybackChanged = {
+                        backgroundPlaybackEnabled = it
+                    },
                     onRetry = {},
                     onVideoScaleModeChanged = {
                         selectedMode = it
@@ -423,6 +426,9 @@ class PlayerScreenTest {
             .assertIsDisplayed()
         rule.onNodeWithContentDescription("更多播放设置")
             .performClick()
+        rule.onNodeWithTag("video_background_playback")
+            .performClick()
+        rule.runOnIdle { assertTrue(backgroundPlaybackEnabled) }
         rule.onNodeWithText("画面比例")
             .assertIsDisplayed()
             .performClick()
@@ -444,6 +450,9 @@ class PlayerScreenTest {
         rule.onNodeWithContentDescription("更多播放设置")
             .performClick()
         rule.onNodeWithText("后台播放").assertIsDisplayed()
+        rule.onNodeWithTag("video_background_playback")
+            .performClick()
+        rule.runOnIdle { assertFalse(backgroundPlaybackEnabled) }
         rule.onNodeWithText("播放速度").assertDoesNotExist()
         rule.onNodeWithText("播放模式").assertDoesNotExist()
         rule.onNodeWithText("画面比例").assertDoesNotExist()

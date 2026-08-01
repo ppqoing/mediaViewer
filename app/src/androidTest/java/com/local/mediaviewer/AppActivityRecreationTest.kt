@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.app.AppContainer
@@ -87,9 +88,84 @@ class AppActivityRecreationTest {
             containerRule.container.fakePlaybackController
                 .sessionState.value.playback.positionMs,
         )
+        assertEquals(
+            1,
+            containerRule.container.fakePlaybackController
+                .sessionState.value.queue.items.size,
+        )
 
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithText("MediaViewer").assertIsDisplayed()
+    }
+
+    @Test
+    fun defaultVideoSessionClearsQueueWhenActivityReallyStops() {
+        val item = QueueMediaItem(
+            mediaKey = "http://media.test/video-background-off",
+            name = "video-background-off",
+            logicalUrl = "http://media.test/video-background-off",
+            kind = MediaKind.VIDEO,
+        )
+        containerRule.container.fakePlaybackController.emitSessionState(
+            PlaybackSessionState(
+                playback = PlaybackState(
+                    status = PlaybackStatus.PAUSED,
+                    durationMs = 60_000L,
+                ),
+                queue = PlaybackQueue(
+                    items = listOf(item),
+                    currentMediaKey = item.mediaKey,
+                ),
+                currentItem = item,
+            ),
+        )
+
+        compose.onNodeWithContentDescription(
+            "打开播放器：video-background-off",
+        ).performClick()
+        compose.onNodeWithText("video-background-off").assertIsDisplayed()
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+
+        assertEquals(
+            0,
+            containerRule.container.fakePlaybackController
+                .sessionState.value.queue.items.size,
+        )
+    }
+
+    @Test
+    fun audioSessionKeepsQueueWhenActivityStops() {
+        val item = QueueMediaItem(
+            mediaKey = "http://media.test/audio-background",
+            name = "audio-background",
+            logicalUrl = "http://media.test/audio-background",
+            kind = MediaKind.AUDIO,
+        )
+        containerRule.container.fakePlaybackController.emitSessionState(
+            PlaybackSessionState(
+                playback = PlaybackState(
+                    status = PlaybackStatus.PAUSED,
+                    durationMs = 60_000L,
+                ),
+                queue = PlaybackQueue(
+                    items = listOf(item),
+                    currentMediaKey = item.mediaKey,
+                ),
+                currentItem = item,
+            ),
+        )
+
+        compose.onNodeWithContentDescription(
+            "打开播放器：audio-background",
+        ).performClick()
+        compose.onNodeWithText("audio-background").assertIsDisplayed()
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+
+        assertEquals(
+            MediaKind.AUDIO,
+            containerRule.container.fakePlaybackController
+                .sessionState.value.currentItem?.kind,
+        )
     }
 
     @Test

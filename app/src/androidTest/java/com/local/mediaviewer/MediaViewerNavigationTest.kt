@@ -1,6 +1,7 @@
 package com.local.mediaviewer
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -13,6 +14,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.state.ToggleableState
+import androidx.test.espresso.Espresso
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.app.MediaViewerApp
@@ -184,6 +188,82 @@ class MediaViewerNavigationTest {
     }
 
     @Test
+    fun videoBackgroundDefaultsOffAndBackClearsQueue() {
+        openNestedDirectory()
+        rule.onNodeWithText("样例.mp4").performClick()
+        rule.onNodeWithContentDescription("更多播放设置")
+            .performClick()
+        rule.onNodeWithTag("video_background_playback")
+            .assert(
+                androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                    SemanticsProperties.ToggleableState,
+                    ToggleableState.Off,
+                ),
+            )
+
+        Espresso.pressBack()
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithTag("browser_list").assertIsDisplayed()
+        rule.runOnIdle {
+            assertTrue(
+                container.fakePlaybackController
+                    .sessionState.value.queue.items.isEmpty(),
+            )
+        }
+    }
+
+    @Test
+    fun videoBackgroundOptInPreservesQueueAndNewSessionResetsOff() {
+        openNestedDirectory()
+        rule.onNodeWithText("样例.mp4").performClick()
+        rule.onNodeWithContentDescription("更多播放设置")
+            .performClick()
+        rule.onNodeWithTag("video_background_playback")
+            .performClick()
+            .assert(
+                androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                    SemanticsProperties.ToggleableState,
+                    ToggleableState.On,
+                ),
+            )
+
+        Espresso.pressBack()
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithTag("browser_list").assertIsDisplayed()
+        rule.runOnIdle {
+            assertTrue(
+                container.fakePlaybackController
+                    .sessionState.value.queue.items.isNotEmpty(),
+            )
+        }
+
+        currentPlayerRequests.requestOpenCurrentPlayer()
+        rule.onNodeWithText("样例.mp4").assertIsDisplayed()
+        rule.onNodeWithContentDescription("更多播放设置")
+            .performClick()
+        rule.onNodeWithTag("video_background_playback")
+            .assert(
+                androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                    SemanticsProperties.ToggleableState,
+                    ToggleableState.Off,
+                ),
+            )
+    }
+
+    @Test
+    fun audioBackKeepsQueueForExistingBackgroundBehavior() {
+        openNestedDirectory()
+        rule.onNodeWithText("样例.wav").performClick()
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithTag("browser_list").assertIsDisplayed()
+        rule.runOnIdle {
+            val current = container.fakePlaybackController
+                .sessionState.value.currentItem
+            assertEquals(MediaKind.AUDIO, current?.kind)
+        }
+    }
+
+    @Test
     fun notification_request_from_browser_returns_home_and_empty_queue_exits_once() {
         val item = QueueMediaItem(
             mediaKey = "video-a",
@@ -205,6 +285,17 @@ class MediaViewerNavigationTest {
         rule.onNodeWithText("MediaViewer").assertIsDisplayed()
         rule.onNodeWithTag("breadcrumb_1").assertDoesNotExist()
 
+        // 视频会话默认不后台播放，返回已清空队列；
+        // 重新注入当前项后再验证第二次通知导航。
+        container.fakePlaybackController.emitSessionState(
+            PlaybackSessionState(
+                queue = PlaybackQueue(
+                    listOf(item),
+                    currentMediaKey = item.mediaKey,
+                ),
+                currentItem = item,
+            ),
+        )
         currentPlayerRequests.requestOpenCurrentPlayer()
         rule.onNodeWithText("video-a").assertIsDisplayed()
         container.fakePlaybackController.emitSessionState(PlaybackSessionState())

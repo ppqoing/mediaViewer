@@ -256,6 +256,23 @@ class PlayerViewModel(
         }
     }
 
+    fun stopAndClear(onFinished: () -> Unit) {
+        if (leaving) return
+        leaving = true
+        viewModelScope.launch {
+            try {
+                saveSnapshot(ended = false)
+            } finally {
+                try {
+                    (controller as? QueuePlaybackController)?.clearAll()
+                        ?: controller.stop()
+                } finally {
+                    onFinished()
+                }
+            }
+        }
+    }
+
     private fun applyResumeIfReady() {
         val resume = pendingResumeMs ?: return
         val state = controller.state.value

@@ -644,6 +644,48 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun `停止清队列先保存快照再清空并只回调一次`() =
+        runTest(dispatcher) {
+            val playerRequest = request()
+            val item = queueItem(
+                mediaKey = playerRequest.mediaKey,
+                name = playerRequest.name,
+            )
+            val controller = FakeQueuePlaybackController(
+                items = listOf(item),
+                currentMediaKey = item.mediaKey,
+            )
+            val store = FakeStore()
+            val viewModel = PlayerViewModel(
+                playerRequest,
+                controller,
+                store,
+                FakePlayerSession(),
+                clock = { 790L },
+            )
+            runCurrent()
+            controller.emitPlayback(
+                PlaybackState(
+                    status = PlaybackStatus.PLAYING,
+                    positionMs = 12_000L,
+                    durationMs = 100_000L,
+                    isSeekable = true,
+                ),
+            )
+            runCurrent()
+            var callbacks = 0
+
+            viewModel.stopAndClear { callbacks += 1 }
+            viewModel.stopAndClear { callbacks += 1 }
+            runCurrent()
+
+            assertEquals(12_000L, store.records.last().positionMs)
+            assertEquals(1, controller.clearAllCalls)
+            assertEquals(1, callbacks)
+            assertEquals(0, controller.closeCalls)
+        }
+
+    @Test
     fun `画面模式只更新当前播放器且不重启媒体`() =
         runTest(dispatcher) {
             val controller = FakePlaybackController()
@@ -1087,6 +1129,7 @@ private class FakeQueuePlaybackController(
     var playCalls = 0
     var reloadCalls = 0
     var closeCalls = 0
+    var clearAllCalls = 0
 
     override fun prepare(url: String) {
         preparedUrls += url
@@ -1127,7 +1170,9 @@ private class FakeQueuePlaybackController(
     override fun move(mediaKey: String, toIndex: Int) = Unit
     override fun remove(mediaKey: String) = Unit
     override fun clearExceptCurrent() = Unit
-    override fun clearAll() = Unit
+    override fun clearAll() {
+        clearAllCalls += 1
+    }
     override fun setPlaybackMode(mode: PlaybackMode) = Unit
 
     override fun close() {

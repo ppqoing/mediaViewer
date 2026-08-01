@@ -20,6 +20,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +60,8 @@ import com.local.mediaviewer.navigation.leavePlayerSafely
 import com.local.mediaviewer.navigation.resolvePlayerEntryState
 import com.local.mediaviewer.player.PlayerRequest
 import com.local.mediaviewer.player.PlayerViewModel
+import com.local.mediaviewer.player.VideoBackgroundPlaybackPolicy
+import com.local.mediaviewer.player.VideoSessionExitReason
 import com.local.mediaviewer.queue.PlaybackNoticeAction
 import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.settings.SettingsViewModel
@@ -126,6 +129,10 @@ fun MediaViewerApp(
     val globalSnackbarHostState = remember { SnackbarHostState() }
     val rootScope = rememberCoroutineScope()
     var queueSheetVisible by rememberSaveable { mutableStateOf(false) }
+    var activeVideoEntryId by remember { mutableStateOf<String?>(null) }
+    var activeVideoBackgroundPlaybackEnabled by remember {
+        mutableStateOf(false)
+    }
     var handledNoticeIds by rememberSaveable {
         mutableStateOf(arrayListOf<Long>())
     }
@@ -141,6 +148,19 @@ fun MediaViewerApp(
         playbackController.onAppStarted()
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (
+            activeVideoEntryId != null &&
+            VideoBackgroundPlaybackPolicy.shouldStopAndClear(
+                enabled = activeVideoBackgroundPlaybackEnabled,
+                reason = if (activity.isChangingConfigurations) {
+                    VideoSessionExitReason.CONFIGURATION_CHANGE
+                } else {
+                    VideoSessionExitReason.APP_BACKGROUND
+                },
+            )
+        ) {
+            playbackController.clearAll()
+        }
         playbackController.onAppStopped()
     }
 
@@ -458,6 +478,10 @@ fun MediaViewerApp(
             ) {
                 is PlayerEntryState.Ready -> {
                     val item = playerEntryState.item
+                    var videoBackgroundPlaybackEnabled by
+                        rememberSaveable(entry.id) {
+                            mutableStateOf(false)
+                        }
                     LaunchedEffect(item.mediaKey) {
                         hasPresentedItem = true
                     }
@@ -497,6 +521,22 @@ fun MediaViewerApp(
                         }
                     }
 
+                    if (state.kind == MediaKind.VIDEO) {
+                        SideEffect {
+                            activeVideoEntryId = entry.id
+                            activeVideoBackgroundPlaybackEnabled =
+                                videoBackgroundPlaybackEnabled
+                        }
+                        DisposableEffect(entry.id) {
+                            onDispose {
+                                if (activeVideoEntryId == entry.id) {
+                                    activeVideoEntryId = null
+                                    activeVideoBackgroundPlaybackEnabled = false
+                                }
+                            }
+                        }
+                    }
+
                     if (state.kind == MediaKind.AUDIO) {
                         AudioPlayerScreen(
                             state = state,
@@ -521,6 +561,23 @@ fun MediaViewerApp(
                             onBack = leave,
                         )
                     } else {
+                        val leaveVideo = {
+                            if (
+                                VideoBackgroundPlaybackPolicy
+                                    .shouldStopAndClear(
+                                        enabled =
+                                            videoBackgroundPlaybackEnabled,
+                                        reason =
+                                            VideoSessionExitReason.NAVIGATE_AWAY,
+                                    )
+                            ) {
+                                player.stopAndClear {
+                                    navController.leavePlayerSafely()
+                                }
+                            } else {
+                                leave()
+                            }
+                        }
                         val brightnessController = remember(activity) {
                             WindowBrightnessController(activity)
                         }
@@ -545,6 +602,11 @@ fun MediaViewerApp(
                             onPrevious = player::previous,
                             onNext = player::next,
                             onSpeedChanged = player::setPlaybackSpeed,
+                            backgroundPlaybackEnabled =
+                                videoBackgroundPlaybackEnabled,
+                            onBackgroundPlaybackChanged = {
+                                videoBackgroundPlaybackEnabled = it
+                            },
                             playbackMode = playbackSession.queue.mode,
                             onPlaybackModeChanged =
                                 playbackController::setPlaybackMode,
@@ -553,7 +615,7 @@ fun MediaViewerApp(
                             onResumeHintShown = player::onResumeHintShown,
                             onVideoScaleModeChanged =
                                 player::setVideoScaleMode,
-                            onBack = leave,
+                            onBack = leaveVideo,
                         )
                     }
                 }

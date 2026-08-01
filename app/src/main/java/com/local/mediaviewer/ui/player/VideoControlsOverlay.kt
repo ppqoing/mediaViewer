@@ -330,19 +330,21 @@ private fun FullscreenPlaybackSettingsMenu(
                         !backgroundPlaybackEnabled,
                     )
                 },
-                modifier = Modifier.semantics {
-                    role = Role.Checkbox
-                    toggleableState = if (backgroundPlaybackEnabled) {
-                        ToggleableState.On
-                    } else {
-                        ToggleableState.Off
-                    }
-                    stateDescription = if (backgroundPlaybackEnabled) {
-                        "已启用"
-                    } else {
-                        "未启用"
-                    }
-                },
+                modifier = Modifier
+                    .testTag("video_background_playback")
+                    .semantics {
+                        role = Role.Checkbox
+                        toggleableState = if (backgroundPlaybackEnabled) {
+                            ToggleableState.On
+                        } else {
+                            ToggleableState.Off
+                        }
+                        stateDescription = if (backgroundPlaybackEnabled) {
+                            "已启用"
+                        } else {
+                            "未启用"
+                        }
+                    },
             )
         }
     }
