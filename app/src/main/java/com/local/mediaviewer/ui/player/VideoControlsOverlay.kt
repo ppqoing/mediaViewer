@@ -137,11 +137,11 @@ fun VideoControlsOverlay(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                PlayerIconButton(
-                    icon = PlayerIcons.Queue,
-                    contentDescription = "打开播放队列",
-                    onClick = onOpenQueue,
-                    modifier = Modifier.testTag("queue_entry_fullscreen"),
+                FullscreenPlaybackSettingsMenu(
+                    backgroundPlaybackEnabled = backgroundPlaybackEnabled,
+                    onBackgroundPlaybackChanged =
+                        onBackgroundPlaybackChanged,
+                    onExpandedChanged = onMenuExpandedChanged,
                 )
             }
 
@@ -217,52 +217,54 @@ fun VideoControlsOverlay(
                         onExpandedChanged = onMenuExpandedChanged,
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    PlayerIconButton(
-                        icon = PlayerIcons.Previous,
-                        contentDescription = "上一项",
-                        onClick = onPrevious,
-                        enabled = state.canSkipPrevious,
-                    )
-                    PlayerIconButton(
-                        icon = PlayerIcons.Next,
-                        contentDescription = "下一项",
-                        onClick = onNext,
-                        enabled = state.canSkipNext,
-                    )
-                    FullscreenPlaybackSettingsMenu(
-                        backgroundPlaybackEnabled =
-                            backgroundPlaybackEnabled,
-                        onBackgroundPlaybackChanged =
-                            onBackgroundPlaybackChanged,
-                        onExpandedChanged = onMenuExpandedChanged,
-                    )
-                    PlaybackVolumeControl(
-                        state = volumeState,
-                        expanded = volumeExpanded,
-                        onExpandedChanged = onVolumeExpandedChanged,
-                        onRefresh = onVolumeRefresh,
-                        onToggleMute = onToggleMute,
-                        onVolumeChanged = onVolumeChanged,
-                    )
-                    PlayerIconButton(
-                        icon = PlayerIcons.Lock,
-                        contentDescription = "锁定控制",
-                        stateDescription = "控制未锁定",
-                        onClick = onLock,
-                        modifier = Modifier.semantics {
-                            toggleableState = ToggleableState.Off
-                        },
-                    )
-                    PlayerIconButton(
-                        icon = PlayerIcons.FullscreenExit,
-                        contentDescription = "退出全屏",
-                        onClick = onBack,
-                    )
-                }
+                PlayerUtilityRow(
+                    startContent = {
+                        PlayerIconButton(
+                            icon = PlayerIcons.Previous,
+                            contentDescription = "上一项",
+                            onClick = onPrevious,
+                            enabled = state.canSkipPrevious,
+                        )
+                        PlayerIconButton(
+                            icon = PlayerIcons.Next,
+                            contentDescription = "下一项",
+                            onClick = onNext,
+                            enabled = state.canSkipNext,
+                        )
+                        PlayerIconButton(
+                            icon = PlayerIcons.Queue,
+                            contentDescription = "打开播放队列",
+                            onClick = onOpenQueue,
+                            modifier = Modifier.testTag(
+                                "queue_entry_fullscreen",
+                            ),
+                        )
+                    },
+                    endContent = {
+                        PlaybackVolumeControl(
+                            state = volumeState,
+                            expanded = volumeExpanded,
+                            onExpandedChanged = onVolumeExpandedChanged,
+                            onRefresh = onVolumeRefresh,
+                            onToggleMute = onToggleMute,
+                            onVolumeChanged = onVolumeChanged,
+                        )
+                        PlayerIconButton(
+                            icon = PlayerIcons.Lock,
+                            contentDescription = "锁定控制",
+                            stateDescription = "控制未锁定",
+                            onClick = onLock,
+                            modifier = Modifier.semantics {
+                                toggleableState = ToggleableState.Off
+                            },
+                        )
+                        PlayerIconButton(
+                            icon = PlayerIcons.FullscreenExit,
+                            contentDescription = "退出全屏",
+                            onClick = onBack,
+                        )
+                    },
+                )
             }
         }
     }

@@ -306,6 +306,42 @@ class VideoControlsOverlayTest {
     }
 
     @Test
+    fun fullscreenPlacesMoreAtTopAndQueueInBottomUtilityGroup() {
+        showFullscreen(hasShownGestureHint = true)
+
+        assertControlInsideRegion(
+            "更多播放设置",
+            "fullscreen_top_controls",
+        )
+        assertControlInsideRegion(
+            "打开播放队列",
+            "player_utility_start_group",
+        )
+        assertControlInsideRegion(
+            "音量，当前 50%，未静音",
+            "player_utility_end_group",
+        )
+        assertControlInsideRegion(
+            "锁定控制",
+            "player_utility_end_group",
+        )
+        assertControlInsideRegion(
+            "退出全屏",
+            "player_utility_end_group",
+        )
+
+        val timeline = rule.onNodeWithTag("player_timeline_layer")
+            .fetchSemanticsNode().boundsInRoot
+        val playbackOptions = rule.onNodeWithTag(
+            "fullscreen_inline_playback_options",
+        ).fetchSemanticsNode().boundsInRoot
+        val utilities = rule.onNodeWithTag("player_utility_layer")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(timeline.bottom <= playbackOptions.top)
+        assertTrue(playbackOptions.bottom <= utilities.top)
+    }
+
+    @Test
     fun fullscreenLockExposesToggleStateAndOnlyOneUnlockAction() {
         showFullscreen(hasShownGestureHint = true)
 
@@ -400,6 +436,24 @@ class VideoControlsOverlayTest {
         rule.onNodeWithTag("gesture_volume_rail").assertIsDisplayed()
         rule.mainClock.advanceTimeBy(200)
         rule.onNodeWithTag("gesture_volume_rail").assertDoesNotExist()
+    }
+
+    private fun assertControlInsideRegion(
+        contentDescription: String,
+        regionTag: String,
+    ) {
+        val control = rule.onNodeWithContentDescription(contentDescription)
+            .fetchSemanticsNode().boundsInRoot
+        val region = rule.onNodeWithTag(regionTag)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "$contentDescription should be inside $regionTag: " +
+                "control=$control region=$region",
+            control.left >= region.left &&
+                control.top >= region.top &&
+                control.right <= region.right &&
+                control.bottom <= region.bottom,
+        )
     }
 
     private fun fullscreenState(status: PlaybackStatus) = PlayerUiState(
