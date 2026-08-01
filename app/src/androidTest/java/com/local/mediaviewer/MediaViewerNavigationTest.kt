@@ -19,6 +19,8 @@ import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.navigation.CurrentPlayerNavigationRequests
 import com.local.mediaviewer.navigation.PLAYER_ENTRY_WAIT_TIMEOUT_MS
+import com.local.mediaviewer.playback.PlaybackState
+import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.queue.PlaybackQueue
 import com.local.mediaviewer.queue.PlaybackSessionState
 import com.local.mediaviewer.queue.QueueMediaItem
@@ -221,6 +223,73 @@ class MediaViewerNavigationTest {
         rule.onNodeWithText("放弃未保存的服务器更改？").assertIsDisplayed()
         rule.onNodeWithText("放弃更改").performClick()
         rule.onNodeWithText("MediaViewer").assertIsDisplayed()
+    }
+
+    @Test
+    fun player_connecting_back_does_not_reopen_after_timeout() {
+        val item = QueueMediaItem(
+            mediaKey = "video-a",
+            name = "video-a",
+            logicalUrl = "http://media.test/video-a",
+            kind = MediaKind.VIDEO,
+        )
+        // 生产路径：通知请求被消费后、Player 目的地首帧前控制器尚未
+        // 回报当前项（异步服务恢复窗口）。测试以冻结时钟复现该窗口：
+        // 第一帧消费请求并导航，清掉当前项后第二帧才组成 Player。
+        rule.mainClock.autoAdvance = false
+        currentPlayerRequests.requestOpenCurrentPlayer()
+        container.fakePlaybackController.emitSessionState(
+            PlaybackSessionState(
+                queue = PlaybackQueue(listOf(item), currentMediaKey = item.mediaKey),
+                currentItem = item,
+            ),
+        )
+        rule.mainClock.advanceTimeByFrame()
+        container.fakePlaybackController.emitSessionState(
+            PlaybackSessionState(
+                playback = PlaybackState(status = PlaybackStatus.OPENING),
+            ),
+        )
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.autoAdvance = true
+
+        rule.onNodeWithText("正在连接播放器").assertIsDisplayed()
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithText("MediaViewer").assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(PLAYER_ENTRY_WAIT_TIMEOUT_MS + 1_000L)
+        rule.onNodeWithText("MediaViewer").assertIsDisplayed()
+        rule.onNodeWithText("正在连接播放器").assertDoesNotExist()
+    }
+
+    @Test
+    fun browser_deep_reconnect_retains_current_breadcrumbs() {
+        openNestedDirectory()
+        rule.onNodeWithText("样例.mp4").assertIsDisplayed()
+
+        container.emitServerSession(ServerSessionState.Connecting)
+        rule.waitForIdle()
+        rule.onNodeWithText("样例.mp4").assertIsDisplayed()
+        rule.onNodeWithText("正在重新连接").assertIsDisplayed()
+
+        // 重连完成后仍锚定原目录：面包屑与内容不跳根。
+        runBlocking { container.sessionManager.connectSaved() }
+        rule.waitForIdle()
+        rule.onNodeWithText("正在重新连接").assertDoesNotExist()
+        rule.onNodeWithTag("breadcrumb_1").assertIsDisplayed()
+        rule.onNode(
+            hasText("样例.mp4") and
+                hasAnyAncestor(hasTestTag("browser_list")),
+        ).assertIsDisplayed()
+
+        // Back 先消费 Browser 内层目录，而不是直接 pop 回 Home。
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithTag("browser_list").assertIsDisplayed()
+        rule.onNodeWithText("示例目录").assertIsDisplayed()
+        rule.onNodeWithTag("breadcrumb_1").assertDoesNotExist()
+
+        rule.onNodeWithContentDescription("返回").performClick()
+        rule.onNodeWithText("MediaViewer").assertIsDisplayed()
+        rule.onNodeWithTag("browser_list").assertDoesNotExist()
     }
 
     private fun openNestedDirectory() {
