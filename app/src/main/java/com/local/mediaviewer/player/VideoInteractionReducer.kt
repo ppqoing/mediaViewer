@@ -1,8 +1,25 @@
 package com.local.mediaviewer.player
 
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 
 object VideoInteractionReducer {
+    fun autoHideDelayMs(
+        playbackStatus: PlaybackStatus,
+        interaction: VideoInteractionState,
+        preference: VideoControlsAutoHide,
+    ): Long? {
+        val canHide =
+            (playbackStatus == PlaybackStatus.PLAYING ||
+                playbackStatus == PlaybackStatus.PAUSED) &&
+                interaction.controlsVisible &&
+                !interaction.controlsLocked &&
+                !interaction.menuExpanded &&
+                !interaction.scrubbing &&
+                interaction.feedback == null
+        return if (canHide) preference.delayMs else null
+    }
+
     fun canAutoHide(
         playbackStatus: PlaybackStatus,
         interaction: VideoInteractionState,

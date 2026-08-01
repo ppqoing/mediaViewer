@@ -1,21 +1,25 @@
 package com.local.mediaviewer.ui.player
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,7 +31,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.mediaviewer.player.PlayerUiState
@@ -39,6 +50,7 @@ import com.local.mediaviewer.playback.PlaybackSpeeds
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.settings.PlayerPreferencesRepository
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 import com.local.mediaviewer.ui.components.MediaIconButton
 import com.local.mediaviewer.ui.components.MediaOption
 import com.local.mediaviewer.ui.components.MediaOptionMenu
@@ -68,6 +80,8 @@ fun VideoPlayerScreen(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onSpeedChanged: (Float) -> Unit,
+    backgroundPlaybackEnabled: Boolean = false,
+    onBackgroundPlaybackChanged: (Boolean) -> Unit = {},
     playbackMode: PlaybackMode? = null,
     onPlaybackModeChanged: (PlaybackMode) -> Unit = {},
     onOpenQueue: (() -> Unit)? = null,
@@ -80,6 +94,10 @@ fun VideoPlayerScreen(
     val fullscreen by fullscreenController.isFullscreen.collectAsStateWithLifecycle()
     val hasShownVideoGestures by preferences.hasShownVideoGestures
         .collectAsStateWithLifecycle(initialValue = false)
+    val videoControlsAutoHide by preferences.videoControlsAutoHide
+        .collectAsStateWithLifecycle(
+            initialValue = VideoControlsAutoHide.THREE_SECONDS,
+        )
     val scope = rememberCoroutineScope()
     val volumeState by volumeController.state.collectAsStateWithLifecycle()
     var interaction by remember { mutableStateOf(VideoInteractionState()) }
@@ -115,9 +133,15 @@ fun VideoPlayerScreen(
         interaction.menuExpanded,
         interaction.scrubbing,
         interaction.feedback,
+        videoControlsAutoHide,
     ) {
-        if (VideoInteractionReducer.canAutoHide(state.status, interaction)) {
-            delay(3_000)
+        val autoHideDelayMs = VideoInteractionReducer.autoHideDelayMs(
+            playbackStatus = state.status,
+            interaction = interaction,
+            preference = videoControlsAutoHide,
+        )
+        if (autoHideDelayMs != null) {
+            delay(autoHideDelayMs)
             interaction = interaction.copy(controlsVisible = false)
         }
     }
@@ -145,24 +169,12 @@ fun VideoPlayerScreen(
     }
 
     MediaViewerTheme(darkTheme = true) {
-        Scaffold(
-            topBar = {
-                if (!fullscreen) {
-                    MediaTopAppBar(
-                        title = state.name,
-                        onBack = onBack,
-                    )
-                }
-            },
-        ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (fullscreen) Modifier else Modifier.padding(padding)),
+                .background(Color.Black)
+                .testTag("video_player_canvas"),
         ) {
-            Box(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-            ) {
                 VlcSurface(
                     controller = controller,
                     keepScreenOn = state.status == PlaybackStatus.PLAYING,
@@ -195,43 +207,67 @@ fun VideoPlayerScreen(
 
                     else -> Unit
                 }
+                VideoGestureLayer(
+                    enabled = !interaction.controlsLocked,
+                    extendedGesturesEnabled = fullscreen,
+                    durationMs = state.durationMs,
+                    positionMs = state.positionMs,
+                    volumeController = volumeController,
+                    brightnessController = brightnessController,
+                    onSingleTap = {
+                        interaction =
+                            VideoInteractionReducer.toggleControls(
+                                interaction,
+                            )
+                    },
+                    onDoubleTap = {
+                        revealControls()
+                        when (state.status) {
+                            PlaybackStatus.PLAYING,
+                            PlaybackStatus.BUFFERING,
+                            -> onPause()
+
+                            PlaybackStatus.ENDED -> onReplay()
+                            else -> onPlay()
+                        }
+                    },
+                    onSeekBack = {
+                        revealControls()
+                        onSeekBack()
+                    },
+                    onSeekForward = {
+                        revealControls()
+                        onSeekForward()
+                    },
+                    onBeginScrub = {
+                        revealControls()
+                        interaction = interaction.copy(scrubbing = true)
+                        onBeginScrub()
+                    },
+                    onPreviewScrub = onPreviewScrub,
+                    onCommitScrub = {
+                        interaction = interaction.copy(scrubbing = false)
+                        onCommitScrub()
+                    },
+                    feedback = interaction.feedback,
+                    onFeedback = { feedback ->
+                        revealControls()
+                        interaction = interaction.copy(feedback = feedback)
+                    },
+                )
                 if (fullscreen) {
-                    VideoGestureLayer(
-                        enabled = !interaction.controlsLocked,
-                        durationMs = state.durationMs,
-                        positionMs = state.positionMs,
-                        volumeController = volumeController,
-                        brightnessController = brightnessController,
-                        onSingleTap = {
-                            interaction = VideoInteractionReducer.toggleControls(interaction)
-                        },
-                        onSeekBack = {
-                            revealControls()
-                            onSeekBack()
-                        },
-                        onSeekForward = {
-                            revealControls()
-                            onSeekForward()
-                        },
-                        onBeginScrub = {
-                            revealControls()
-                            interaction = interaction.copy(scrubbing = true)
-                            onBeginScrub()
-                        },
-                        onPreviewScrub = onPreviewScrub,
-                        onCommitScrub = {
-                            interaction = interaction.copy(scrubbing = false)
-                            onCommitScrub()
-                        },
-                        feedback = interaction.feedback,
-                        onFeedback = { feedback ->
-                            revealControls()
-                            interaction = interaction.copy(feedback = feedback)
-                        },
-                    )
-                    if (interaction.controlsVisible || interaction.controlsLocked) {
+                    if (
+                        interaction.controlsVisible ||
+                        interaction.controlsLocked
+                    ) {
                         VideoControlsOverlay(
                             state = state,
+                            backgroundPlaybackEnabled =
+                                backgroundPlaybackEnabled,
+                            onBackgroundPlaybackChanged = {
+                                revealControls()
+                                onBackgroundPlaybackChanged(it)
+                            },
                             locked = interaction.controlsLocked,
                             onLock = {
                                 volumeExpanded = false
@@ -279,69 +315,125 @@ fun VideoPlayerScreen(
                             safeDrawingInsets = safeDrawingInsets,
                         )
                     }
-                }
-            }
-            if (!fullscreen) {
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                    val compact = maxWidth < 600.dp
-                    PlayerControls(
-                        state = state,
-                        onPlay = onPlay,
-                        onPause = onPause,
-                        onReplay = onReplay,
-                        onSeekBack = onSeekBack,
-                        onSeekForward = onSeekForward,
-                        onBeginScrub = onBeginScrub,
-                        onPreviewScrub = onPreviewScrub,
-                        onCommitScrub = onCommitScrub,
-                        onPrevious = onPrevious,
-                        onNext = onNext,
-                        onSpeedChanged = onSpeedChanged,
-                        playbackMode = playbackMode,
-                        onPlaybackModeChanged = onPlaybackModeChanged,
-                        showLowFrequencyControls = !compact,
-                    ) {
-                        PlaybackVolumeControl(
-                            state = volumeState,
-                            expanded = volumeExpanded,
-                            onExpandedChanged = ::setVolumeExpanded,
-                            onRefresh = volumeController::refresh,
-                            onToggleMute = volumeController::toggleMute,
-                            onVolumeChanged = volumeController::setFraction,
-                        )
-                        if (compact) {
+                } else if (interaction.controlsVisible) {
+                    MediaTopAppBar(
+                        title = state.name,
+                        onBack = onBack,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .testTag("video_top_controls_ordinary"),
+                        containerColor = OrdinaryControlsScrim,
+                        contentColor = Color.White,
+                        windowInsets = safeDrawingInsets.only(
+                            WindowInsetsSides.Top +
+                                WindowInsetsSides.Horizontal,
+                        ),
+                        actions = {
                             OrdinaryPlaybackSettingsMenu(
                                 state = state,
                                 playbackMode = playbackMode,
-                                onSpeedChanged = onSpeedChanged,
-                                onPlaybackModeChanged = onPlaybackModeChanged,
-                                onVideoScaleModeChanged = onVideoScaleModeChanged,
+                                backgroundPlaybackEnabled =
+                                    backgroundPlaybackEnabled,
+                                onBackgroundPlaybackChanged = {
+                                    revealControls()
+                                    onBackgroundPlaybackChanged(it)
+                                },
+                                onSpeedChanged = {
+                                    revealControls()
+                                    onSpeedChanged(it)
+                                },
+                                onPlaybackModeChanged = {
+                                    revealControls()
+                                    onPlaybackModeChanged(it)
+                                },
+                                onVideoScaleModeChanged = {
+                                    revealControls()
+                                    onVideoScaleModeChanged(it)
+                                },
                                 onExpandedChanged = { expanded ->
+                                    revealControls()
                                     interaction = interaction.copy(
                                         menuExpanded = expanded,
                                     )
                                 },
                             )
-                        } else {
-                            VideoScaleMenu(
-                                current = state.videoScaleMode,
-                                onSelected = onVideoScaleModeChanged,
+                        },
+                    )
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .windowInsetsPadding(
+                                safeDrawingInsets.only(
+                                    WindowInsetsSides.Bottom +
+                                        WindowInsetsSides.Horizontal,
+                                ),
                             )
-                        }
-                        onOpenQueue?.let { openQueue ->
-                            MediaIconButton(
-                                icon = MediaIcons.Queue,
-                                contentDescription = "打开队列",
-                                onClick = openQueue,
-                                modifier = Modifier.testTag("queue_entry_ordinary"),
-                            )
-                        }
-                        MediaIconButton(
-                            icon = Icons.Default.Fullscreen,
-                            contentDescription = "全屏",
-                            onClick = fullscreenController::enter,
-                        )
-                    }
+                            .testTag("video_bottom_controls_ordinary")
+                            .background(OrdinaryControlsScrim),
+                    ) {
+                        PlayerControls(
+                                state = state,
+                                onPlay = { revealControls(); onPlay() },
+                                onPause = { revealControls(); onPause() },
+                                onReplay = { revealControls(); onReplay() },
+                                onSeekBack = { revealControls(); onSeekBack() },
+                                onSeekForward = {
+                                    revealControls()
+                                    onSeekForward()
+                                },
+                                onBeginScrub = {
+                                    revealControls()
+                                    interaction = interaction.copy(
+                                        scrubbing = true,
+                                    )
+                                    onBeginScrub()
+                                },
+                                onPreviewScrub = onPreviewScrub,
+                                onCommitScrub = {
+                                    interaction = interaction.copy(
+                                        scrubbing = false,
+                                    )
+                                    onCommitScrub()
+                                },
+                                onPrevious = {
+                                    revealControls()
+                                    onPrevious()
+                                },
+                                onNext = { revealControls(); onNext() },
+                                onSpeedChanged = onSpeedChanged,
+                                playbackMode = playbackMode,
+                                onPlaybackModeChanged =
+                                    onPlaybackModeChanged,
+                                showLowFrequencyControls = false,
+                            ) {
+                                PlaybackVolumeControl(
+                                    state = volumeState,
+                                    expanded = volumeExpanded,
+                                    onExpandedChanged = ::setVolumeExpanded,
+                                    onRefresh = volumeController::refresh,
+                                    onToggleMute =
+                                        volumeController::toggleMute,
+                                    onVolumeChanged =
+                                        volumeController::setFraction,
+                                )
+                                onOpenQueue?.let { openQueue ->
+                                    MediaIconButton(
+                                        icon = MediaIcons.Queue,
+                                        contentDescription = "打开队列",
+                                        onClick = openQueue,
+                                        modifier = Modifier.testTag(
+                                            "queue_entry_ordinary",
+                                        ),
+                                    )
+                                }
+                                MediaIconButton(
+                                    icon = Icons.Default.Fullscreen,
+                                    contentDescription = "全屏",
+                                    onClick = fullscreenController::enter,
+                                )
+                            }
                 }
             }
         }
@@ -353,7 +445,7 @@ fun VideoPlayerScreen(
             title = { Text("视频手势") },
             text = {
                 Column {
-                    Text("左右双击：快退/快进 10 秒")
+                    Text("双击视频：播放或暂停")
                     Text("横向滑动：调整进度")
                     Text("左侧上下滑：亮度")
                     Text("右侧上下滑：音量")
@@ -364,8 +456,9 @@ fun VideoPlayerScreen(
             },
         )
     }
-    }
 }
+
+private val OrdinaryControlsScrim = Color.Black.copy(alpha = 0.58f)
 
 private enum class OrdinarySettingsPage {
     ROOT,
@@ -378,6 +471,8 @@ private enum class OrdinarySettingsPage {
 private fun OrdinaryPlaybackSettingsMenu(
     state: PlayerUiState,
     playbackMode: PlaybackMode?,
+    backgroundPlaybackEnabled: Boolean,
+    onBackgroundPlaybackChanged: (Boolean) -> Unit,
     onSpeedChanged: (Float) -> Unit,
     onPlaybackModeChanged: (PlaybackMode) -> Unit,
     onVideoScaleModeChanged: (VideoScaleMode) -> Unit,
@@ -400,37 +495,52 @@ private fun OrdinaryPlaybackSettingsMenu(
             },
         )
 
-        MediaOptionMenu(
+        DropdownMenu(
             expanded = page == OrdinarySettingsPage.ROOT,
-            options = buildList<MediaOption<OrdinarySettingsPage>> {
-                add(
-                    MediaOption(
-                        key = OrdinarySettingsPage.SPEED,
-                        label = "播放速度",
-                        icon = PlayerIcons.Speed,
-                    ),
-                )
-                if (playbackMode != null) {
-                    add(
-                        MediaOption(
-                            key = OrdinarySettingsPage.MODE,
-                            label = "播放模式",
-                            icon = PlayerIcons.Sequential,
-                        ),
-                    )
-                }
-                add(
-                    MediaOption(
-                        key = OrdinarySettingsPage.SCALE,
-                        label = "画面比例",
-                        icon = PlayerIcons.Scale,
-                    ),
-                )
-            },
-            selectedKey = null,
-            onSelect = { selected -> page = selected },
             onDismissRequest = ::closeMenu,
-        )
+        ) {
+            DropdownMenuItem(
+                text = { Text("后台播放") },
+                trailingIcon = {
+                    Checkbox(
+                        checked = backgroundPlaybackEnabled,
+                        onCheckedChange = null,
+                    )
+                },
+                onClick = {
+                    onBackgroundPlaybackChanged(
+                        !backgroundPlaybackEnabled,
+                    )
+                },
+                modifier = Modifier.semantics {
+                    role = Role.Checkbox
+                    toggleableState = if (backgroundPlaybackEnabled) {
+                        ToggleableState.On
+                    } else {
+                        ToggleableState.Off
+                    }
+                    stateDescription = if (backgroundPlaybackEnabled) {
+                        "已启用"
+                    } else {
+                        "未启用"
+                    }
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("播放速度") },
+                onClick = { page = OrdinarySettingsPage.SPEED },
+            )
+            if (playbackMode != null) {
+                DropdownMenuItem(
+                    text = { Text("播放模式") },
+                    onClick = { page = OrdinarySettingsPage.MODE },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("画面比例") },
+                onClick = { page = OrdinarySettingsPage.SCALE },
+            )
+        }
 
         MediaOptionMenu(
             expanded = page == OrdinarySettingsPage.SPEED,

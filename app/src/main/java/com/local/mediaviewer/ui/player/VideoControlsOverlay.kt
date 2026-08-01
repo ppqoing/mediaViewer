@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,16 +31,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerUiState
-import com.local.mediaviewer.playback.PlaybackSpeeds
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.queue.PlaybackMode
-import com.local.mediaviewer.ui.components.MediaOption
-import com.local.mediaviewer.ui.components.MediaOptionMenu
 import com.local.mediaviewer.ui.components.PlayerIconButton
 import com.local.mediaviewer.ui.icons.MediaIcons
 import com.local.mediaviewer.ui.theme.MediaTheme
@@ -48,6 +51,8 @@ private val FullscreenBottomScrimColor = Color(0xCC000000)
 @Composable
 fun VideoControlsOverlay(
     state: PlayerUiState,
+    backgroundPlaybackEnabled: Boolean,
+    onBackgroundPlaybackChanged: (Boolean) -> Unit,
     locked: Boolean,
     onLock: () -> Unit,
     onUnlock: () -> Unit,
@@ -191,6 +196,28 @@ fun VideoControlsOverlay(
                     onCommitScrub = onCommitScrub,
                 )
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("fullscreen_inline_playback_options"),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PlaybackSpeedMenu(
+                        current = state.playbackSpeed,
+                        onSpeedChanged = onSpeedChanged,
+                        onExpandedChanged = onMenuExpandedChanged,
+                    )
+                    PlaybackModeButton(
+                        mode = state.playbackMode,
+                        onModeChanged = onPlaybackModeChanged,
+                    )
+                    VideoScaleMenu(
+                        current = state.videoScaleMode,
+                        onSelected = onVideoScaleModeChanged,
+                        onExpandedChanged = onMenuExpandedChanged,
+                    )
+                }
+                Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -207,10 +234,10 @@ fun VideoControlsOverlay(
                         enabled = state.canSkipNext,
                     )
                     FullscreenPlaybackSettingsMenu(
-                        state = state,
-                        onSpeedChanged = onSpeedChanged,
-                        onPlaybackModeChanged = onPlaybackModeChanged,
-                        onVideoScaleModeChanged = onVideoScaleModeChanged,
+                        backgroundPlaybackEnabled =
+                            backgroundPlaybackEnabled,
+                        onBackgroundPlaybackChanged =
+                            onBackgroundPlaybackChanged,
                         onExpandedChanged = onMenuExpandedChanged,
                     )
                     PlaybackVolumeControl(
@@ -262,25 +289,16 @@ private fun PrimaryVideoControl(
     )
 }
 
-private enum class FullscreenSettingsPage {
-    ROOT,
-    SPEED,
-    MODE,
-    SCALE,
-}
-
 @Composable
 private fun FullscreenPlaybackSettingsMenu(
-    state: PlayerUiState,
-    onSpeedChanged: (Float) -> Unit,
-    onPlaybackModeChanged: (PlaybackMode) -> Unit,
-    onVideoScaleModeChanged: (VideoScaleMode) -> Unit,
+    backgroundPlaybackEnabled: Boolean,
+    onBackgroundPlaybackChanged: (Boolean) -> Unit,
     onExpandedChanged: (Boolean) -> Unit,
 ) {
-    var page by remember { mutableStateOf<FullscreenSettingsPage?>(null) }
+    var expanded by remember { mutableStateOf(false) }
 
     fun closeMenu() {
-        page = null
+        expanded = false
         onExpandedChanged(false)
     }
 
@@ -289,82 +307,43 @@ private fun FullscreenPlaybackSettingsMenu(
             icon = MediaIcons.More,
             contentDescription = "更多播放设置",
             onClick = {
-                page = FullscreenSettingsPage.ROOT
+                expanded = true
                 onExpandedChanged(true)
             },
             modifier = Modifier.testTag("fullscreen_options_menu"),
         )
 
-        MediaOptionMenu(
-            expanded = page == FullscreenSettingsPage.ROOT,
-            options = listOf(
-                MediaOption(
-                    key = FullscreenSettingsPage.SPEED,
-                    label = "播放速度",
-                    icon = PlayerIcons.Speed,
-                ),
-                MediaOption(
-                    key = FullscreenSettingsPage.MODE,
-                    label = "播放模式",
-                    icon = PlayerIcons.Sequential,
-                ),
-                MediaOption(
-                    key = FullscreenSettingsPage.SCALE,
-                    label = "画面比例",
-                    icon = PlayerIcons.Scale,
-                ),
-            ),
-            selectedKey = null,
-            onSelect = { selected -> page = selected },
+        DropdownMenu(
+            expanded = expanded,
             onDismissRequest = ::closeMenu,
-        )
-
-        MediaOptionMenu(
-            expanded = page == FullscreenSettingsPage.SPEED,
-            options = PlaybackSpeeds.supported.map { speed ->
-                MediaOption(
-                    key = speed,
-                    label = "${formatPlaybackSpeed(speed)} 倍",
-                )
-            },
-            selectedKey = state.playbackSpeed,
-            onSelect = { speed ->
-                onSpeedChanged(speed)
-                closeMenu()
-            },
-            onDismissRequest = ::closeMenu,
-        )
-
-        MediaOptionMenu(
-            expanded = page == FullscreenSettingsPage.MODE,
-            options = PlaybackMode.entries.map { mode ->
-                MediaOption(
-                    key = mode,
-                    label = mode.label(),
-                )
-            },
-            selectedKey = state.playbackMode,
-            onSelect = { mode ->
-                onPlaybackModeChanged(mode)
-                closeMenu()
-            },
-            onDismissRequest = ::closeMenu,
-        )
-
-        MediaOptionMenu(
-            expanded = page == FullscreenSettingsPage.SCALE,
-            options = VideoScaleMode.entries.map { mode ->
-                MediaOption(
-                    key = mode,
-                    label = videoScaleLabel(mode),
-                )
-            },
-            selectedKey = state.videoScaleMode,
-            onSelect = { mode ->
-                onVideoScaleModeChanged(mode)
-                closeMenu()
-            },
-            onDismissRequest = ::closeMenu,
-        )
+        ) {
+            DropdownMenuItem(
+                text = { Text("后台播放") },
+                trailingIcon = {
+                    Checkbox(
+                        checked = backgroundPlaybackEnabled,
+                        onCheckedChange = null,
+                    )
+                },
+                onClick = {
+                    onBackgroundPlaybackChanged(
+                        !backgroundPlaybackEnabled,
+                    )
+                },
+                modifier = Modifier.semantics {
+                    role = Role.Checkbox
+                    toggleableState = if (backgroundPlaybackEnabled) {
+                        ToggleableState.On
+                    } else {
+                        ToggleableState.Off
+                    }
+                    stateDescription = if (backgroundPlaybackEnabled) {
+                        "已启用"
+                    } else {
+                        "未启用"
+                    }
+                },
+            )
+        }
     }
 }

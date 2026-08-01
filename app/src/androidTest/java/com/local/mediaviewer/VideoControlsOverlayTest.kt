@@ -66,30 +66,35 @@ class VideoControlsOverlayTest {
     }
 
     @Test
-    fun bufferingControlsAutoHideAfterThreeSecondsWhenUnblocked() {
+    fun bufferingKeepsControlsAndNecessaryStatusVisible() {
         rule.mainClock.autoAdvance = false
         showFullscreen(
             hasShownGestureHint = true,
             stateProvider = { fullscreenState(PlaybackStatus.BUFFERING) },
         )
 
-        // 缓冲指示器的无限动画让 advanceTimeBy 按 16ms 帧对齐并可能过冲，
-        // 因此边界取 2983/3017，而不是整 3000。
-        rule.mainClock.advanceTimeBy(2_983)
+        rule.mainClock.advanceTimeBy(5_000)
         rule.onNodeWithTag("video_controls").assertIsDisplayed()
-        rule.mainClock.advanceTimeBy(34)
-        rule.onNodeWithTag("video_controls").assertDoesNotExist()
+        rule.onNodeWithTag("video_buffering_spinner").assertIsDisplayed()
     }
 
     @Test
-    fun pausedControlsRemainVisibleAndLockShowsOnlyUnlockAction() {
+    fun pausedControlsAutoHideAndLockShowsOnlyUnlockActionAfterReveal() {
         rule.mainClock.autoAdvance = false
         showFullscreen(
             hasShownGestureHint = true,
             stateProvider = { fullscreenState(PlaybackStatus.PAUSED) },
         )
 
-        rule.mainClock.advanceTimeBy(5_000)
+        rule.mainClock.advanceTimeBy(2_999)
+        rule.onNodeWithTag("video_controls").assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(2)
+        rule.onNodeWithTag("video_controls").assertDoesNotExist()
+        rule.onNodeWithTag("video_gesture_layer").performTouchInput {
+            down(Offset(width * 0.5f, height * 0.5f))
+            up()
+        }
+        rule.mainClock.advanceTimeBy(400)
         rule.onNodeWithTag("video_controls").assertIsDisplayed()
         rule.onNodeWithContentDescription("锁定控制").performClick()
         rule.mainClock.advanceTimeByFrame()
@@ -250,45 +255,52 @@ class VideoControlsOverlayTest {
         val controller = showFullscreen(hasShownGestureHint = true)
 
         rule.onNodeWithContentDescription("更多播放设置").performClick()
-        rule.onNodeWithText("播放速度").assertIsDisplayed()
+        rule.onNodeWithText("后台播放").assertIsDisplayed()
         Espresso.pressBack()
-        rule.onNodeWithText("播放速度").assertDoesNotExist()
+        rule.onNodeWithText("后台播放").assertDoesNotExist()
         rule.runOnIdle { assertEquals(0, controller.exitCalls) }
         Espresso.pressBack()
         rule.runOnIdle { assertEquals(1, controller.exitCalls) }
     }
 
     @Test
-    fun fullscreenLowFrequencyMenuContainsSpeedModeAndScale() {
+    fun fullscreenKeepsBackgroundInMenuAndOptionsBelowTimeline() {
         var selectedSpeed: Float? = null
         var selectedMode: PlaybackMode? = null
         var selectedScale: VideoScaleMode? = null
         showFullscreen(
             hasShownGestureHint = true,
+            backgroundPlaybackEnabled = false,
+            onBackgroundPlaybackChanged = {},
             onSpeedChanged = { selectedSpeed = it },
             onPlaybackModeChanged = { selectedMode = it },
             onVideoScaleModeChanged = { selectedScale = it },
         )
 
-        rule.onNodeWithTag("video_scale_menu").assertDoesNotExist()
+        rule.onNodeWithTag("video_scale_menu").assertIsDisplayed()
         rule.onNodeWithContentDescription("播放速度，当前 1.0 倍")
-            .assertDoesNotExist()
+            .assertIsDisplayed()
+        rule.onNodeWithTag("fullscreen_inline_playback_options")
+            .assertIsDisplayed()
         rule.onNodeWithContentDescription("更多播放设置").performClick()
-        rule.onNodeWithText("播放速度").assertIsDisplayed()
-        rule.onNodeWithText("播放模式").assertIsDisplayed()
-        rule.onNodeWithText("画面比例").assertIsDisplayed()
+        rule.onNodeWithText("后台播放").assertIsDisplayed()
+        rule.onNodeWithText("播放速度").assertDoesNotExist()
+        rule.onNodeWithText("播放模式").assertDoesNotExist()
+        rule.onNodeWithText("画面比例").assertDoesNotExist()
 
-        rule.onNodeWithText("播放速度").performClick()
+        Espresso.pressBack()
+        rule.onNodeWithContentDescription("播放速度，当前 1.0 倍")
+            .performClick()
         rule.onNodeWithText("1.5 倍").performClick()
         rule.runOnIdle { assertEquals(1.5f, selectedSpeed) }
 
-        rule.onNodeWithContentDescription("更多播放设置").performClick()
-        rule.onNodeWithText("播放模式").performClick()
-        rule.onNodeWithText("单曲循环").performClick()
-        rule.runOnIdle { assertEquals(PlaybackMode.REPEAT_ONE, selectedMode) }
+        rule.onNodeWithContentDescription("播放模式：顺序播放")
+            .performClick()
+        rule.runOnIdle {
+            assertEquals(PlaybackMode.REPEAT_ALL, selectedMode)
+        }
 
-        rule.onNodeWithContentDescription("更多播放设置").performClick()
-        rule.onNodeWithText("画面比例").performClick()
+        rule.onNodeWithContentDescription("画面比例").performClick()
         rule.onNodeWithText("裁剪铺满").performClick()
         rule.runOnIdle { assertEquals(VideoScaleMode.FILL_CROP, selectedScale) }
     }
@@ -400,6 +412,8 @@ class VideoControlsOverlayTest {
 
     private fun showFullscreen(
         hasShownGestureHint: Boolean,
+        backgroundPlaybackEnabled: Boolean = false,
+        onBackgroundPlaybackChanged: (Boolean) -> Unit = {},
         onOpenQueue: () -> Unit = {},
         safeDrawingInsets: WindowInsets = WindowInsets(
             left = 0.dp,
@@ -441,6 +455,10 @@ class VideoControlsOverlayTest {
                         onPrevious = {},
                         onNext = {},
                         onSpeedChanged = onSpeedChanged,
+                        backgroundPlaybackEnabled =
+                            backgroundPlaybackEnabled,
+                        onBackgroundPlaybackChanged =
+                            onBackgroundPlaybackChanged,
                         playbackMode = PlaybackMode.SEQUENTIAL,
                         onPlaybackModeChanged = onPlaybackModeChanged,
                         onOpenQueue = onOpenQueue,

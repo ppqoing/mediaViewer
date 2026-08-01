@@ -1,12 +1,77 @@
 package com.local.mediaviewer.player
 
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VideoInteractionReducerTest {
+    @Test
+    fun `播放和暂停按偏好隐藏而不隐藏返回空延迟`() {
+        val visible = VideoInteractionState(controlsVisible = true)
+
+        listOf(
+            PlaybackStatus.PLAYING,
+            PlaybackStatus.PAUSED,
+        ).forEach { status ->
+            assertEquals(
+                5_000L,
+                VideoInteractionReducer.autoHideDelayMs(
+                    status,
+                    visible,
+                    VideoControlsAutoHide.FIVE_SECONDS,
+                ),
+            )
+        }
+        assertNull(
+            VideoInteractionReducer.autoHideDelayMs(
+                PlaybackStatus.PAUSED,
+                visible,
+                VideoControlsAutoHide.NEVER,
+            ),
+        )
+    }
+
+    @Test
+    fun `菜单拖动反馈锁定隐藏和非播放暂停状态不启动计时`() {
+        val blockedInteractions = listOf(
+            VideoInteractionState(controlsVisible = false),
+            VideoInteractionState(controlsLocked = true),
+            VideoInteractionState(menuExpanded = true),
+            VideoInteractionState(scrubbing = true),
+            VideoInteractionState(
+                feedback = PlayerGestureFeedback.Volume(50, false),
+            ),
+        )
+        blockedInteractions.forEach { interaction ->
+            assertNull(
+                VideoInteractionReducer.autoHideDelayMs(
+                    PlaybackStatus.PLAYING,
+                    interaction,
+                    VideoControlsAutoHide.THREE_SECONDS,
+                ),
+            )
+        }
+        listOf(
+            PlaybackStatus.IDLE,
+            PlaybackStatus.OPENING,
+            PlaybackStatus.BUFFERING,
+            PlaybackStatus.ENDED,
+            PlaybackStatus.ERROR,
+        ).forEach { status ->
+            assertNull(
+                VideoInteractionReducer.autoHideDelayMs(
+                    status,
+                    VideoInteractionState(),
+                    VideoControlsAutoHide.THREE_SECONDS,
+                ),
+            )
+        }
+    }
+
     @Test
     fun `暂停结束错误菜单拖动和反馈都阻止普通自动隐藏`() {
         val blocked = listOf(

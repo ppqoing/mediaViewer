@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -26,6 +27,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.model.MediaKind
@@ -69,9 +71,115 @@ class PlayerScreenTest {
         showVideo(playerState(name = "movie.mp4", kind = MediaKind.VIDEO))
 
         rule.onAllNodesWithTag("vlc_surface").assertCountEquals(1)
+        rule.onNodeWithTag("video_top_controls_ordinary")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("video_bottom_controls_ordinary")
+            .assertIsDisplayed()
         rule.onNodeWithContentDescription("更多播放设置").performClick()
+        rule.onNodeWithText("后台播放").assertIsDisplayed()
         rule.onNodeWithText("播放速度").assertIsDisplayed()
+        rule.onNodeWithText("播放模式").assertIsDisplayed()
         rule.onNodeWithText("画面比例").assertIsDisplayed()
+    }
+
+    @Test
+    fun ordinaryVideoUsesStableCanvasAndTapTogglesOverlays() {
+        rule.mainClock.autoAdvance = false
+        showVideo(
+            playerState(
+                name = "movie.mp4",
+                kind = MediaKind.VIDEO,
+                status = PlaybackStatus.PAUSED,
+            ),
+        )
+
+        val visibleBounds = rule.onNodeWithTag("vlc_surface")
+            .fetchSemanticsNode().boundsInRoot
+        rule.onNodeWithTag("video_top_controls_ordinary")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("video_bottom_controls_ordinary")
+            .assertIsDisplayed()
+
+        rule.mainClock.advanceTimeBy(3_100L)
+        rule.onNodeWithTag("video_top_controls_ordinary")
+            .assertDoesNotExist()
+        rule.onNodeWithTag("video_bottom_controls_ordinary")
+            .assertDoesNotExist()
+        assertEquals(
+            visibleBounds,
+            rule.onNodeWithTag("vlc_surface")
+                .fetchSemanticsNode().boundsInRoot,
+        )
+
+        rule.onNodeWithTag("video_gesture_layer").performTouchInput {
+            down(Offset(width * 0.5f, height * 0.5f))
+            up()
+        }
+        rule.mainClock.advanceTimeBy(400L)
+        rule.onNodeWithTag("video_top_controls_ordinary")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("video_bottom_controls_ordinary")
+            .assertIsDisplayed()
+        assertEquals(
+            visibleBounds,
+            rule.onNodeWithTag("vlc_surface")
+                .fetchSemanticsNode().boundsInRoot,
+        )
+    }
+
+    @Test
+    fun ordinaryVideoDoubleTapTogglesPlayPauseWithoutSeek() {
+        var state by mutableStateOf(
+            playerState(
+                name = "movie.mp4",
+                kind = MediaKind.VIDEO,
+                status = PlaybackStatus.PAUSED,
+            ),
+        )
+        var playCalls = 0
+        var pauseCalls = 0
+        var seekBackCalls = 0
+        var seekForwardCalls = 0
+        showVideo(
+            stateProvider = { state },
+            onPlay = {
+                playCalls += 1
+                state = state.copy(status = PlaybackStatus.PLAYING)
+            },
+            onPause = {
+                pauseCalls += 1
+                state = state.copy(status = PlaybackStatus.PAUSED)
+            },
+            onSeekBack = { seekBackCalls += 1 },
+            onSeekForward = { seekForwardCalls += 1 },
+        )
+
+        fun doubleTap() {
+            rule.onNodeWithTag("video_gesture_layer")
+                .performTouchInput {
+                    down(Offset(width * 0.25f, height * 0.5f))
+                    up()
+                    advanceEventTime(100)
+                    down(Offset(width * 0.75f, height * 0.5f))
+                    up()
+                }
+        }
+
+        doubleTap()
+        rule.runOnIdle {
+            assertEquals(1, playCalls)
+            assertEquals(0, pauseCalls)
+            assertEquals(0, seekBackCalls)
+            assertEquals(0, seekForwardCalls)
+        }
+
+        doubleTap()
+        rule.runOnIdle {
+            assertEquals(1, playCalls)
+            assertEquals(1, pauseCalls)
+            assertEquals(0, seekBackCalls)
+            assertEquals(0, seekForwardCalls)
+        }
     }
 
     @Test
@@ -300,6 +408,8 @@ class PlayerScreenTest {
                     onPrevious = {},
                     onNext = {},
                     onSpeedChanged = {},
+                    backgroundPlaybackEnabled = false,
+                    onBackgroundPlaybackChanged = {},
                     onRetry = {},
                     onVideoScaleModeChanged = {
                         selectedMode = it
@@ -330,15 +440,17 @@ class PlayerScreenTest {
         rule.onNodeWithContentDescription("全屏")
             .performClick()
         rule.onNodeWithTag("video_scale_menu")
-            .assertDoesNotExist()
+            .assertIsDisplayed()
         rule.onNodeWithContentDescription("更多播放设置")
             .performClick()
-        rule.onNodeWithText("播放速度")
+        rule.onNodeWithText("后台播放").assertIsDisplayed()
+        rule.onNodeWithText("播放速度").assertDoesNotExist()
+        rule.onNodeWithText("播放模式").assertDoesNotExist()
+        rule.onNodeWithText("画面比例").assertDoesNotExist()
+        rule.onNodeWithTag("fullscreen_inline_playback_options")
             .assertIsDisplayed()
-        rule.onNodeWithText("播放模式")
-            .assertIsDisplayed()
-        rule.onNodeWithText("画面比例")
-            .assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        rule.onNodeWithContentDescription("画面比例")
             .performClick()
         rule.onNodeWithText("强制拉伸")
             .performClick()
@@ -615,6 +727,10 @@ class PlayerScreenTest {
     private fun showVideo(
         stateProvider: () -> PlayerUiState,
         darkTheme: Boolean? = null,
+        onPlay: () -> Unit = {},
+        onPause: () -> Unit = {},
+        onSeekBack: () -> Unit = {},
+        onSeekForward: () -> Unit = {},
     ) {
         rule.setContent {
             MediaViewerTheme(darkTheme = darkTheme ?: isSystemInDarkTheme()) {
@@ -627,11 +743,11 @@ class PlayerScreenTest {
                     ),
                     volumeController = ScreenFakeVolumeController(),
                     brightnessController = ScreenFakeBrightnessController(),
-                    onPlay = {},
-                    onPause = {},
+                    onPlay = onPlay,
+                    onPause = onPause,
                     onReplay = {},
-                    onSeekBack = {},
-                    onSeekForward = {},
+                    onSeekBack = onSeekBack,
+                    onSeekForward = onSeekForward,
                     onBeginScrub = {},
                     onPreviewScrub = {},
                     onCommitScrub = {},

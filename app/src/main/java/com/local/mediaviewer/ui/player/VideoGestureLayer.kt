@@ -2,6 +2,7 @@ package com.local.mediaviewer.ui.player
 
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -27,11 +28,13 @@ import kotlin.math.roundToInt
 @Composable
 fun VideoGestureLayer(
     enabled: Boolean,
+    extendedGesturesEnabled: Boolean,
     durationMs: Long,
     positionMs: Long,
     volumeController: PlayerVolumeController,
     brightnessController: PlayerBrightnessController,
     onSingleTap: () -> Unit,
+    onDoubleTap: () -> Unit,
     onSeekBack: () -> Unit,
     onSeekForward: () -> Unit,
     onBeginScrub: () -> Unit,
@@ -42,8 +45,7 @@ fun VideoGestureLayer(
     modifier: Modifier = Modifier,
 ) {
     val currentOnSingleTap by rememberUpdatedState(onSingleTap)
-    val currentOnSeekBack by rememberUpdatedState(onSeekBack)
-    val currentOnSeekForward by rememberUpdatedState(onSeekForward)
+    val currentOnDoubleTap by rememberUpdatedState(onDoubleTap)
     val currentOnBeginScrub by rememberUpdatedState(onBeginScrub)
     val currentOnPreviewScrub by rememberUpdatedState(onPreviewScrub)
     val currentOnCommitScrub by rememberUpdatedState(onCommitScrub)
@@ -55,7 +57,16 @@ fun VideoGestureLayer(
             .fillMaxSize()
             .testTag("video_gesture_layer")
             .then(
-                if (enabled) {
+                if (!enabled) {
+                    Modifier
+                } else if (!extendedGesturesEnabled) {
+                    Modifier.pointerInput(enabled) {
+                        detectTapGestures(
+                            onTap = { currentOnSingleTap() },
+                            onDoubleTap = { currentOnDoubleTap() },
+                        )
+                    }
+                } else {
                     Modifier.pointerInput(enabled, durationMs) {
                         var pendingTap: PendingTap? = null
                         var pendingTapJob: Job? = null
@@ -158,26 +169,10 @@ fun VideoGestureLayer(
                                         if (previous != null && elapsed <= viewConfiguration.doubleTapTimeoutMillis) {
                                             pendingTapJob?.cancel()
                                             pendingTap = null
-                                            if (previous.startX < size.width / 2f) {
-                                                currentOnSeekBack()
-                                                emitFeedback(
-                                                    PlayerGestureFeedback.Seek(
-                                                        (gesturePositionMs - DOUBLE_TAP_SEEK_MS).coerceAtLeast(0L),
-                                                        -DOUBLE_TAP_SEEK_MS,
-                                                    ),
-                                                )
-                                            } else {
-                                                currentOnSeekForward()
-                                                emitFeedback(
-                                                    PlayerGestureFeedback.Seek(
-                                                        (gesturePositionMs + DOUBLE_TAP_SEEK_MS).coerceAtMost(durationMs),
-                                                        DOUBLE_TAP_SEEK_MS,
-                                                    ),
-                                                )
-                                            }
+                                            currentOnDoubleTap()
                                         } else {
                                             pendingTapJob?.cancel()
-                                            pendingTap = PendingTap(down.position.x, upChange.uptimeMillis)
+                                            pendingTap = PendingTap(upChange.uptimeMillis)
                                             pendingTapJob = launch {
                                                 delay(viewConfiguration.doubleTapTimeoutMillis)
                                                 if (pendingTap?.upTime == upChange.uptimeMillis) {
@@ -202,8 +197,6 @@ fun VideoGestureLayer(
                             }
                         }
                     }
-                } else {
-                    Modifier
                 },
             ),
         contentAlignment = Alignment.Center,
@@ -213,7 +206,6 @@ fun VideoGestureLayer(
 }
 
 private data class PendingTap(
-    val startX: Float,
     val upTime: Long,
 )
 
@@ -272,5 +264,3 @@ private fun previewTarget(
         .toLong()
         .coerceIn(0L, durationMs)
 }
-
-private const val DOUBLE_TAP_SEEK_MS = 10_000L

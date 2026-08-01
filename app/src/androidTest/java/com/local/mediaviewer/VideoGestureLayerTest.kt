@@ -32,12 +32,14 @@ class VideoGestureLayerTest {
     val rule = createComposeRule()
 
     @Test
-    fun doubleTapUsesFirstTapSideAndDoesNotAlsoTriggerSingleTap() {
+    fun doubleTapInvokesPlaybackToggleWithoutSingleTapOrSeek() {
         var singleTapCalls = 0
+        var doubleTapCalls = 0
         var seekBackCalls = 0
         var seekForwardCalls = 0
         setGestureLayer(
             onSingleTap = { singleTapCalls++ },
+            onDoubleTap = { doubleTapCalls++ },
             onSeekBack = { seekBackCalls++ },
             onSeekForward = { seekForwardCalls++ },
         )
@@ -50,7 +52,9 @@ class VideoGestureLayerTest {
             up()
         }
         rule.runOnIdle {
-            assertEquals(1, seekBackCalls)
+            assertEquals(1, doubleTapCalls)
+            assertEquals(0, seekBackCalls)
+            assertEquals(0, seekForwardCalls)
             assertEquals(0, singleTapCalls)
         }
 
@@ -62,7 +66,9 @@ class VideoGestureLayerTest {
             up()
         }
         rule.runOnIdle {
-            assertEquals(1, seekForwardCalls)
+            assertEquals(2, doubleTapCalls)
+            assertEquals(0, seekBackCalls)
+            assertEquals(0, seekForwardCalls)
             assertEquals(0, singleTapCalls)
         }
     }
@@ -90,6 +96,37 @@ class VideoGestureLayerTest {
             assertEquals(1, beginCalls)
             assertTrue(previewCalls >= 2)
             assertEquals(1, commitCalls)
+        }
+    }
+
+    @Test
+    fun ordinaryModeDisablesExtendedDragsWithoutTurningDragIntoTap() {
+        var singleTapCalls = 0
+        var doubleTapCalls = 0
+        var beginCalls = 0
+        var previewCalls = 0
+        var commitCalls = 0
+        setGestureLayer(
+            extendedGesturesEnabled = false,
+            onSingleTap = { singleTapCalls++ },
+            onDoubleTap = { doubleTapCalls++ },
+            onBeginScrub = { beginCalls++ },
+            onPreviewScrub = { previewCalls++ },
+            onCommitScrub = { commitCalls++ },
+        )
+
+        rule.onNodeWithTag("video_gesture_layer").performTouchInput {
+            down(Offset(width * 0.8f, height * 0.5f))
+            moveTo(Offset(width * 0.2f, height * 0.5f))
+            up()
+        }
+
+        rule.runOnIdle {
+            assertEquals(0, singleTapCalls)
+            assertEquals(0, doubleTapCalls)
+            assertEquals(0, beginCalls)
+            assertEquals(0, previewCalls)
+            assertEquals(0, commitCalls)
         }
     }
 
@@ -181,7 +218,9 @@ class VideoGestureLayerTest {
     private fun setGestureLayer(
         volumeController: PlayerVolumeController = FakeVolumeController(5, 10),
         brightnessController: PlayerBrightnessController = FakeBrightnessController(0.5f),
+        extendedGesturesEnabled: Boolean = true,
         onSingleTap: () -> Unit = {},
+        onDoubleTap: () -> Unit = {},
         onSeekBack: () -> Unit = {},
         onSeekForward: () -> Unit = {},
         onBeginScrub: () -> Unit = {},
@@ -196,11 +235,13 @@ class VideoGestureLayerTest {
                 }
                 VideoGestureLayer(
                     enabled = true,
+                    extendedGesturesEnabled = extendedGesturesEnabled,
                     durationMs = 100_000L,
                     positionMs = 50_000L,
                     volumeController = volumeController,
                     brightnessController = brightnessController,
                     onSingleTap = onSingleTap,
+                    onDoubleTap = onDoubleTap,
                     onSeekBack = onSeekBack,
                     onSeekForward = onSeekForward,
                     onBeginScrub = onBeginScrub,
