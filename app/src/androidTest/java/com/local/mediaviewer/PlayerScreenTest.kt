@@ -83,6 +83,75 @@ class PlayerScreenTest {
     }
 
     @Test
+    fun ordinaryVideoGroupsQueueAndVolumeOppositeFullscreen() {
+        showVideo(playerState(name = "movie.mp4", kind = MediaKind.VIDEO))
+
+        assertControlInsideGroup("打开队列", "player_utility_start_group")
+        assertControlInsideGroup(
+            "音量，当前 50%，未静音",
+            "player_utility_start_group",
+        )
+        assertControlInsideGroup("全屏", "player_utility_end_group")
+
+        val queueCenter = rule.onNodeWithContentDescription("打开队列")
+            .fetchSemanticsNode().boundsInRoot.center.x
+        val fullscreenCenter = rule.onNodeWithContentDescription("全屏")
+            .fetchSemanticsNode().boundsInRoot.center.x
+        assertTrue(queueCenter < fullscreenCenter)
+    }
+
+    @Test
+    fun audioGroupsPlaybackOptionsOppositeQueueAndVolume() {
+        rule.setContent {
+            MaterialTheme {
+                AudioPlayerScreen(
+                    state = PlayerUiState(
+                        name = "音乐.flac",
+                        kind = MediaKind.AUDIO,
+                        status = PlaybackStatus.PAUSED,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                    ),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                    playbackMode = PlaybackMode.SEQUENTIAL,
+                    onPlaybackModeChanged = {},
+                    onOpenQueue = {},
+                    onRetry = {},
+                    volumeController = ScreenFakeVolumeController(),
+                    onBack = {},
+                )
+            }
+        }
+
+        assertControlInsideGroup(
+            "播放速度，当前 1.0 倍",
+            "player_utility_start_group",
+        )
+        assertControlInsideGroup(
+            "播放模式：顺序播放",
+            "player_utility_start_group",
+        )
+        assertControlInsideGroup("打开队列", "player_utility_end_group")
+        assertControlInsideGroup(
+            "音量，当前 50%，未静音",
+            "player_utility_end_group",
+        )
+        rule.onNodeWithContentDescription("画面比例").assertDoesNotExist()
+        rule.onNodeWithContentDescription("全屏").assertDoesNotExist()
+        rule.onNodeWithContentDescription("锁定控制").assertDoesNotExist()
+    }
+
+    @Test
     fun ordinaryVideoUsesStableCanvasAndTapTogglesOverlays() {
         rule.mainClock.autoAdvance = false
         showVideo(
@@ -825,6 +894,24 @@ class PlayerScreenTest {
             "ordinary player must keep the dark player canvas in light theme " +
                 "(average controls-region luminance=$averageLuminance)",
             averageLuminance < 0.5,
+        )
+    }
+
+    private fun assertControlInsideGroup(
+        contentDescription: String,
+        groupTag: String,
+    ) {
+        val control = rule.onNodeWithContentDescription(contentDescription)
+            .fetchSemanticsNode().boundsInRoot
+        val group = rule.onNodeWithTag(groupTag)
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "$contentDescription should be inside $groupTag: " +
+                "control=$control group=$group",
+            control.left >= group.left &&
+                control.top >= group.top &&
+                control.right <= group.right &&
+                control.bottom <= group.bottom,
         )
     }
 }

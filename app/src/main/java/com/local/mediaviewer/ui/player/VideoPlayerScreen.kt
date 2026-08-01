@@ -374,40 +374,53 @@ fun VideoPlayerScreen(
                             .background(OrdinaryControlsScrim),
                     ) {
                         PlayerControls(
-                                state = state,
-                                onPlay = { revealControls(); onPlay() },
-                                onPause = { revealControls(); onPause() },
-                                onReplay = { revealControls(); onReplay() },
-                                onSeekBack = { revealControls(); onSeekBack() },
-                                onSeekForward = {
-                                    revealControls()
-                                    onSeekForward()
-                                },
-                                onBeginScrub = {
-                                    revealControls()
-                                    interaction = interaction.copy(
-                                        scrubbing = true,
+                            state = state,
+                            onPlay = { revealControls(); onPlay() },
+                            onPause = { revealControls(); onPause() },
+                            onReplay = { revealControls(); onReplay() },
+                            onSeekBack = { revealControls(); onSeekBack() },
+                            onSeekForward = {
+                                revealControls()
+                                onSeekForward()
+                            },
+                            onBeginScrub = {
+                                revealControls()
+                                interaction = interaction.copy(
+                                    scrubbing = true,
+                                )
+                                onBeginScrub()
+                            },
+                            onPreviewScrub = onPreviewScrub,
+                            onCommitScrub = {
+                                interaction = interaction.copy(
+                                    scrubbing = false,
+                                )
+                                onCommitScrub()
+                            },
+                            onPrevious = {
+                                revealControls()
+                                onPrevious()
+                            },
+                            onNext = { revealControls(); onNext() },
+                            onSpeedChanged = onSpeedChanged,
+                            playbackMode = playbackMode,
+                            onPlaybackModeChanged =
+                                onPlaybackModeChanged,
+                            showLowFrequencyControls = false,
+                            leadingUtilityControls = {
+                                onOpenQueue?.let { openQueue ->
+                                    MediaIconButton(
+                                        icon = MediaIcons.Queue,
+                                        contentDescription = "打开队列",
+                                        onClick = {
+                                            revealControls()
+                                            openQueue()
+                                        },
+                                        modifier = Modifier.testTag(
+                                            "queue_entry_ordinary",
+                                        ),
                                     )
-                                    onBeginScrub()
-                                },
-                                onPreviewScrub = onPreviewScrub,
-                                onCommitScrub = {
-                                    interaction = interaction.copy(
-                                        scrubbing = false,
-                                    )
-                                    onCommitScrub()
-                                },
-                                onPrevious = {
-                                    revealControls()
-                                    onPrevious()
-                                },
-                                onNext = { revealControls(); onNext() },
-                                onSpeedChanged = onSpeedChanged,
-                                playbackMode = playbackMode,
-                                onPlaybackModeChanged =
-                                    onPlaybackModeChanged,
-                                showLowFrequencyControls = false,
-                            ) {
+                                }
                                 PlaybackVolumeControl(
                                     state = volumeState,
                                     expanded = volumeExpanded,
@@ -418,26 +431,22 @@ fun VideoPlayerScreen(
                                     onVolumeChanged =
                                         volumeController::setFraction,
                                 )
-                                onOpenQueue?.let { openQueue ->
-                                    MediaIconButton(
-                                        icon = MediaIcons.Queue,
-                                        contentDescription = "打开队列",
-                                        onClick = openQueue,
-                                        modifier = Modifier.testTag(
-                                            "queue_entry_ordinary",
-                                        ),
-                                    )
-                                }
+                            },
+                            secondaryControls = {
                                 MediaIconButton(
                                     icon = Icons.Default.Fullscreen,
                                     contentDescription = "全屏",
-                                    onClick = fullscreenController::enter,
+                                    onClick = {
+                                        revealControls()
+                                        fullscreenController.enter()
+                                    },
                                 )
-                            }
+                            },
+                        )
+                    }
                 }
             }
         }
-    }
 
     if (gestureHintVisible) {
         AlertDialog(
