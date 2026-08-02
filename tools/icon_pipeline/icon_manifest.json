@@ -1,0 +1,40 @@
+{
+  "common": {
+    "rows": 4,
+    "columns": 5,
+    "icons": [
+      "back", "forward", "home", "chevron_right", "more",
+      "close", "search", "refresh", "settings", "add",
+      "recent", "grid", "check", "info", "error",
+      "offline", "empty", "connected", "sort"
+    ]
+  },
+  "media": {
+    "rows": 3,
+    "columns": 4,
+    "icons": [
+      "network_share", "folder", "video", "audio",
+      "image", "gif", "unknown_file", "reader_mode",
+      "play_now", "play_next", "add_queue"
+    ]
+  },
+  "player": {
+    "rows": 5,
+    "columns": 5,
+    "icons": [
+      "play", "pause", "replay", "back_10", "forward_10",
+      "previous", "next", "queue", "delete", "drag",
+      "volume", "muted", "brightness", "lock", "unlock",
+      "fullscreen_enter", "fullscreen_exit", "speed", "scale", "sequential",
+      "repeat_all", "repeat_one", "shuffle", "playing", "background_play"
+    ]
+  },
+  "reader": {
+    "rows": 2,
+    "columns": 3,
+    "icons": [
+      "zoom_out", "zoom_in", "fit_screen",
+      "image_mode", "gif_mode", "comic_mode"
+    ]
+  }
+}

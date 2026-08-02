@@ -1,0 +1,551 @@
+[
+  {
+    "name": "back",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.12391493055555555
+  },
+  {
+    "name": "forward",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": -4.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.1291232638888889
+  },
+  {
+    "name": "home",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.1967230902777778
+  },
+  {
+    "name": "chevron_right",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 2.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.08881293402777778
+  },
+  {
+    "name": "more",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.0727267795138889
+  },
+  {
+    "name": "close",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.19224717881944445
+  },
+  {
+    "name": "search",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 4.0,
+    "foreground_ratio": 0.1538357204861111
+  },
+  {
+    "name": "refresh",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.1902398003472222
+  },
+  {
+    "name": "settings",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.22007921006944445
+  },
+  {
+    "name": "add",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.11827256944444445
+  },
+  {
+    "name": "recent",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 2.0,
+    "foreground_ratio": 0.1818305121527778
+  },
+  {
+    "name": "grid",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.2996419270833333
+  },
+  {
+    "name": "check",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.09312608506944445
+  },
+  {
+    "name": "info",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.17903645833333334
+  },
+  {
+    "name": "error",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.16886393229166666
+  },
+  {
+    "name": "offline",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 2.0,
+    "center_dy": -1.0,
+    "foreground_ratio": 0.16593424479166666
+  },
+  {
+    "name": "empty",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.13734266493055555
+  },
+  {
+    "name": "connected",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 4.0,
+    "foreground_ratio": 0.1320529513888889
+  },
+  {
+    "name": "sort",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.1672092013888889
+  },
+  {
+    "name": "network_share",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": -4.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.1435275607638889
+  },
+  {
+    "name": "folder",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.1538628472222222
+  },
+  {
+    "name": "video",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.2361111111111111
+  },
+  {
+    "name": "audio",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": -4.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.1937934027777778
+  },
+  {
+    "name": "image",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 2.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.2707790798611111
+  },
+  {
+    "name": "gif",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.23621961805555555
+  },
+  {
+    "name": "unknown_file",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.1738552517361111
+  },
+  {
+    "name": "reader_mode",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.23158094618055555
+  },
+  {
+    "name": "play_now",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.19007703993055555
+  },
+  {
+    "name": "play_next",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.2784830729166667
+  },
+  {
+    "name": "add_queue",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 4.0,
+    "foreground_ratio": 0.1222873263888889
+  },
+  {
+    "name": "play",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.2633463541666667
+  },
+  {
+    "name": "pause",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.22989908854166666
+  },
+  {
+    "name": "replay",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.1487087673611111
+  },
+  {
+    "name": "back_10",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 2.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.2060275607638889
+  },
+  {
+    "name": "forward_10",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.2077094184027778
+  },
+  {
+    "name": "previous",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": -3.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.2739800347222222
+  },
+  {
+    "name": "next",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.2695855034722222
+  },
+  {
+    "name": "queue",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.19154188368055555
+  },
+  {
+    "name": "delete",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 2.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.2206759982638889
+  },
+  {
+    "name": "drag",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.1615939670138889
+  },
+  {
+    "name": "volume",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.221923828125
+  },
+  {
+    "name": "muted",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 2.0,
+    "foreground_ratio": 0.2513292100694444
+  },
+  {
+    "name": "brightness",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.1570095486111111
+  },
+  {
+    "name": "lock",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.17857530381944445
+  },
+  {
+    "name": "unlock",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 3.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.1748589409722222
+  },
+  {
+    "name": "fullscreen_enter",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.14827473958333334
+  },
+  {
+    "name": "fullscreen_exit",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.1574435763888889
+  },
+  {
+    "name": "speed",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.1892632378472222
+  },
+  {
+    "name": "scale",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.2726508246527778
+  },
+  {
+    "name": "sequential",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 4.0,
+    "foreground_ratio": 0.17830403645833334
+  },
+  {
+    "name": "repeat_all",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 0.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.15953233506944445
+  },
+  {
+    "name": "repeat_one",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.1796332465277778
+  },
+  {
+    "name": "shuffle",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": -4.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.16007486979166666
+  },
+  {
+    "name": "playing",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 2.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.2177191840277778
+  },
+  {
+    "name": "background_play",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 2.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.1935492621527778
+  },
+  {
+    "name": "zoom_out",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 3.0,
+    "foreground_ratio": 0.15714518229166666
+  },
+  {
+    "name": "zoom_in",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 4.0,
+    "center_dy": 3.0,
+    "foreground_ratio": 0.175048828125
+  },
+  {
+    "name": "fit_screen",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": 1.0,
+    "center_dy": 1.0,
+    "foreground_ratio": 0.1698676215277778
+  },
+  {
+    "name": "image_mode",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": -1.0,
+    "center_dy": -4.0,
+    "foreground_ratio": 0.2588975694444444
+  },
+  {
+    "name": "gif_mode",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": -1.0,
+    "center_dy": 2.0,
+    "foreground_ratio": 0.2002224392361111
+  },
+  {
+    "name": "comic_mode",
+    "width": 192,
+    "height": 192,
+    "corner_alpha": 0,
+    "center_dx": -2.0,
+    "center_dy": 0.0,
+    "foreground_ratio": 0.2007107204861111
+  }
+]
