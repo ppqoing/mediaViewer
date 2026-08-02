@@ -517,6 +517,66 @@ class ImageReaderScreenTest {
     }
 
     @Test
+    fun pinchToSinglePointerHandoffDoesNotPanOrPage() {
+        val anchors = mutableListOf<String>()
+        setScreen(
+            state = contentState(ImageReaderMode.SINGLE),
+            onAnchorChanged = anchors::add,
+        )
+        rule.onNodeWithTag("media_image")
+            .performTouchInput {
+                val middle = center
+                down(0, middle + Offset(-40f, 0f))
+                down(1, middle + Offset(40f, 0f))
+                moveTo(
+                    0,
+                    middle + Offset(-150f, 0f),
+                    delayMillis = 120L,
+                )
+                moveTo(
+                    1,
+                    middle + Offset(150f, 0f),
+                    delayMillis = 120L,
+                )
+                up(0)
+            }
+        rule.waitForIdle()
+
+        val handoff = rule.onNodeWithTag("media_image")
+            .fetchSemanticsNode().config
+        val handoffX = handoff[SingleImageOffsetXSemanticsKey]
+        val handoffY = handoff[SingleImageOffsetYSemanticsKey]
+
+        rule.onNodeWithTag("media_image")
+            .performTouchInput {
+                moveTo(
+                    1,
+                    center + Offset(280f, 90f),
+                    delayMillis = 200L,
+                )
+                up(1)
+            }
+        rule.waitForIdle()
+
+        val after = rule.onNodeWithTag("media_image")
+            .fetchSemanticsNode().config
+        assertEquals(
+            handoffX,
+            after[SingleImageOffsetXSemanticsKey],
+            0.001f,
+        )
+        assertEquals(
+            handoffY,
+            after[SingleImageOffsetYSemanticsKey],
+            0.001f,
+        )
+        assertEquals(
+            "http://media.example/pik/b.png",
+            anchors.last(),
+        )
+    }
+
+    @Test
     fun tapTogglesImmersiveToolbar() {
         setScreen(contentState(ImageReaderMode.SINGLE))
         rule.onNodeWithTag("image_reader_scrim").assertIsDisplayed()
