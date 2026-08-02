@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -31,6 +32,7 @@ import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.image.ImageReaderUiState
 import com.local.mediaviewer.image.ImageSortOrder
+import com.local.mediaviewer.image.ZoomTransform
 import com.local.mediaviewer.ui.components.MediaAction
 import com.local.mediaviewer.ui.components.MediaStateKind
 import com.local.mediaviewer.ui.components.MediaStatePanel
@@ -176,8 +178,36 @@ private fun ImageReaderContent(
     var toolbarVisible by rememberSaveable {
         mutableStateOf(true)
     }
+    var singleImageZoom by remember {
+        mutableStateOf(ZoomTransform())
+    }
+    var zoomCommandId by rememberSaveable {
+        mutableStateOf(0)
+    }
+    var zoomCommand by remember {
+        mutableStateOf<SingleImageZoomCommand?>(null)
+    }
     val onToggleToolbar = { toolbarVisible = !toolbarVisible }
-    Box(modifier = Modifier.fillMaxSize()) {
+    val currentIndex = state.images
+        .indexOfFirst {
+            it.logicalUrl == current.logicalUrl
+        }
+        .coerceAtLeast(0)
+    val sendZoomCommand: (SingleImageZoomAction) -> Unit = {
+            action,
+        ->
+        zoomCommandId += 1
+        zoomCommand = SingleImageZoomCommand(
+            id = zoomCommandId,
+            targetLogicalUrl = current.logicalUrl,
+            action = action,
+        )
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("image_reader_root"),
+    ) {
         if (state.mode == ImageReaderMode.COMIC) {
             ComicReader(
                 images = state.images,
@@ -222,6 +252,15 @@ private fun ImageReaderContent(
                     onImageLoadSuccess,
                 onRetryImage = onRetryImage,
                 onToggleToolbar = onToggleToolbar,
+                zoomCommand = zoomCommand,
+                onZoomCommandHandled = { handledId ->
+                    if (zoomCommand?.id == handledId) {
+                        zoomCommand = null
+                    }
+                },
+                onCurrentZoomChanged = {
+                    singleImageZoom = it
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -234,12 +273,6 @@ private fun ImageReaderContent(
                 horizontalAlignment =
                     Alignment.CenterHorizontally,
             ) {
-                val currentIndex = state.images
-                    .indexOfFirst {
-                        it.logicalUrl ==
-                            current.logicalUrl
-                    }
-                    .coerceAtLeast(0)
                 ImageReaderToolbar(
                     title = current.name,
                     currentIndex = currentIndex,
@@ -256,6 +289,75 @@ private fun ImageReaderContent(
                     EndpointRefreshChip()
                 }
             }
+            ImageReaderOverlayControls(
+                currentIndex = currentIndex,
+                totalCount = state.images.size,
+                currentItemName = current.name,
+                mode = state.mode,
+                scale = singleImageZoom.scale,
+                onPrevious = {
+                    state.images
+                        .getOrNull(currentIndex - 1)
+                        ?.let {
+                            onAnchorChanged(it.logicalUrl)
+                        }
+                },
+                onNext = {
+                    state.images
+                        .getOrNull(currentIndex + 1)
+                        ?.let {
+                            onAnchorChanged(it.logicalUrl)
+                        }
+                },
+                onZoomOut = {
+                    sendZoomCommand(
+                        SingleImageZoomAction.ZOOM_OUT,
+                    )
+                },
+                onZoomIn = {
+                    sendZoomCommand(
+                        SingleImageZoomAction.ZOOM_IN,
+                    )
+                },
+                onFitScreen = {
+                    sendZoomCommand(
+                        SingleImageZoomAction.FIT_SCREEN,
+                    )
+                },
+                onModeChanged = onModeChanged,
+                hasStaticImages = state.images.any {
+                    !isAnimatedGifName(it.name)
+                },
+                hasAnimatedGifs = state.images.any {
+                    isAnimatedGifName(it.name)
+                },
+                onSingleContentTypeSelected = {
+                        animatedGif,
+                    ->
+                    nearestSingleImageIndex(
+                        itemNames = state.images.map {
+                            it.name
+                        },
+                        currentIndex = currentIndex,
+                        animatedGif = animatedGif,
+                    )?.let { targetIndex ->
+                        state.images[targetIndex].let {
+                            if (
+                                it.logicalUrl !=
+                                current.logicalUrl
+                            ) {
+                                onAnchorChanged(
+                                    it.logicalUrl,
+                                )
+                            }
+                        }
+                    }
+                    if (state.mode != ImageReaderMode.SINGLE) {
+                        onModeChanged(ImageReaderMode.SINGLE)
+                    }
+                },
+                safeDrawingInsets = safeDrawingInsets,
+            )
         }
     }
 }

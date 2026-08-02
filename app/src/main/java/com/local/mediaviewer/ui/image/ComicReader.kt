@@ -26,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -47,6 +46,7 @@ import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.ImageSortOrder
 import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.image.classifyImageLoadFailure
+import com.local.mediaviewer.ui.theme.MediaTheme
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -80,6 +80,7 @@ fun ComicReader(
     refreshingImageLogicalUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
+    val playerColors = MediaTheme.playerColors
     val deviceBitmapLimits = remember {
         queryDeviceBitmapLimits()
     }
@@ -101,7 +102,7 @@ fun ComicReader(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(playerColors.canvas),
     ) {
         val viewportWidthPx =
             constraints.maxWidth.coerceAtLeast(1)

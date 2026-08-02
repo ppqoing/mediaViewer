@@ -17,6 +17,7 @@ import com.local.mediaviewer.image.ImageItemFailure
 import com.local.mediaviewer.image.ImageLoadFailureKind
 import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.ImageSequence
+import com.local.mediaviewer.image.ZoomTransform
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
@@ -34,6 +35,9 @@ fun SingleImagePager(
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
     onToggleToolbar: () -> Unit,
+    zoomCommand: SingleImageZoomCommand? = null,
+    onZoomCommandHandled: (Int) -> Unit = {},
+    onCurrentZoomChanged: (ZoomTransform) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (images.isEmpty()) {
@@ -53,17 +57,26 @@ fun SingleImagePager(
         initialPage = initialPage,
         pageCount = images::size,
     )
-    val zoomedItems = remember {
-        mutableStateMapOf<String, Boolean>()
+    val zoomTransforms = remember {
+        mutableStateMapOf<String, ZoomTransform>()
     }
     val currentOnAnchorChanged by
         rememberUpdatedState(onAnchorChanged)
     val currentItem = images.getOrNull(
         pagerState.currentPage,
     )
-    val currentPageZoomed = currentItem?.let {
-        zoomedItems[it.logicalUrl]
-    } == true
+    val currentTransform = currentItem?.let {
+        zoomTransforms[it.logicalUrl]
+    } ?: ZoomTransform()
+    val currentPageZoomed =
+        currentTransform.scale > 1.001f
+
+    LaunchedEffect(
+        currentItem?.logicalUrl,
+        currentTransform,
+    ) {
+        onCurrentZoomChanged(currentTransform)
+    }
 
     LaunchedEffect(pagerState, imageKeys) {
         snapshotFlow { pagerState.settledPage }
@@ -111,8 +124,20 @@ fun SingleImagePager(
             onRetryImage = onRetryImage,
             onToggleToolbar = onToggleToolbar,
             onZoomedChanged = { zoomed ->
-                zoomedItems[item.logicalUrl] = zoomed
+                if (!zoomed) {
+                    zoomTransforms[item.logicalUrl] =
+                        ZoomTransform()
+                }
             },
+            onZoomChanged = { transform ->
+                zoomTransforms[item.logicalUrl] = transform
+                if (page == pagerState.currentPage) {
+                    onCurrentZoomChanged(transform)
+                }
+            },
+            zoomCommand = zoomCommand,
+            onZoomCommandHandled =
+                onZoomCommandHandled,
             refreshingImageLogicalUrl =
                 refreshingImageLogicalUrl,
             modifier = Modifier.fillMaxSize(),

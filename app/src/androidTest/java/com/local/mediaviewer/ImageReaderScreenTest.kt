@@ -34,6 +34,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
@@ -179,6 +180,174 @@ class ImageReaderScreenTest {
     fun singleModeUsesSingleReader() {
         setScreen(contentState(ImageReaderMode.SINGLE))
         rule.onNodeWithTag("media_image")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun singleImageShowsEdgeNavigationZoomToolbarAndModeSegments() {
+        setScreen(contentState(ImageReaderMode.SINGLE))
+
+        rule.onNodeWithContentDescription("上一张")
+            .assertIsDisplayed()
+        rule.onNodeWithContentDescription("下一张")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_zoom_toolbar")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_modes")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("segment_image")
+            .assertIsSelected()
+        rule.onNodeWithTag("segment_gif")
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun controlsStayInsideDisplayCutoutSafeArea() {
+        setScreen(
+            state = contentState(ImageReaderMode.SINGLE),
+            safeDrawingInsets = WindowInsets(
+                left = 14.dp,
+                top = 48.dp,
+                right = 18.dp,
+                bottom = 28.dp,
+            ),
+        )
+
+        val root = rule.onNodeWithTag("image_reader_root")
+            .fetchSemanticsNode().boundsInRoot
+        val controls = rule
+            .onNodeWithTag("image_reader_controls")
+            .fetchSemanticsNode().boundsInRoot
+        with(rule.density) {
+            assertTrue(
+                controls.left >= root.left + 14.dp.toPx(),
+            )
+            assertTrue(
+                controls.right <= root.right - 18.dp.toPx(),
+            )
+            assertTrue(
+                controls.top >= root.top + 48.dp.toPx(),
+            )
+            assertTrue(
+                controls.bottom <= root.bottom - 28.dp.toPx(),
+            )
+        }
+    }
+
+    @Test
+    fun zoomCommandIsConsumedAndNewPageReportsItsOwnScale() {
+        rule.setContent {
+            var state by remember {
+                mutableStateOf(
+                    contentState(ImageReaderMode.SINGLE),
+                )
+            }
+            MediaViewerTheme(darkTheme = true) {
+                ImageReaderScreen(
+                    state = state,
+                    imageLoader = loader,
+                    onModeChanged = {
+                        state = state.copy(mode = it)
+                    },
+                    onSortChanged = {},
+                    onAnchorChanged = {
+                        state = state.copy(
+                            anchorLogicalUrl = it,
+                        )
+                    },
+                    onRetryDirectory = {},
+                    onImageLoadError = { _, _ -> },
+                    onImageLoadSuccess = {},
+                    onRetryImage = {},
+                    onBack = {},
+                    safeDrawingInsets = WindowInsets(0),
+                )
+            }
+        }
+
+        rule.onNodeWithContentDescription("放大")
+            .performClick()
+        rule.onNodeWithText("125%").assertIsDisplayed()
+        rule.onNodeWithContentDescription("下一张")
+            .performClick()
+        rule.onNodeWithText("100%").assertIsDisplayed()
+
+        rule.onNodeWithTag("reader_mode_toggle")
+            .performClick()
+        rule.onNodeWithTag("reader_mode_toggle")
+            .performClick()
+        rule.onNodeWithText("100%").assertIsDisplayed()
+    }
+
+    @Test
+    fun gifSegmentNavigatesOnlyWhenGifContentIsAvailable() {
+        val base = contentState(ImageReaderMode.SINGLE)
+        val gif = base.images.last().copy(name = "c.gif")
+        var anchor = base.anchorLogicalUrl
+        setScreen(
+            state = base.copy(
+                images = base.images.dropLast(1) + gif,
+            ),
+            onAnchorChanged = { anchor = it },
+        )
+
+        rule.onNodeWithTag("segment_gif")
+            .assertIsDisplayed()
+            .performClick()
+        rule.runOnIdle {
+            assertEquals(gif.logicalUrl, anchor)
+        }
+    }
+
+    @Test
+    fun modeSegmentsRemainReachableAt320DpWithTwoXFont() {
+        val base = contentState(ImageReaderMode.SINGLE)
+        val state = base.copy(
+            images = base.images.mapIndexed { index, item ->
+                if (index == 2) {
+                    item.copy(name = "c.gif")
+                } else {
+                    item
+                }
+            },
+        )
+        rule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(1f, 2f),
+            ) {
+                Box(
+                    Modifier
+                        .size(320.dp, 568.dp)
+                        .testTag("compact_reader_window"),
+                ) {
+                    MediaViewerTheme(darkTheme = true) {
+                        ImageReaderScreen(
+                            state = state,
+                            imageLoader = loader,
+                            onModeChanged = {},
+                            onSortChanged = {},
+                            onAnchorChanged = {},
+                            onRetryDirectory = {},
+                            onImageLoadError = { _, _ -> },
+                            onImageLoadSuccess = {},
+                            onRetryImage = {},
+                            onBack = {},
+                            safeDrawingInsets = WindowInsets(0),
+                        )
+                    }
+                }
+            }
+        }
+
+        val window = rule
+            .onNodeWithTag("compact_reader_window")
+            .fetchSemanticsNode().boundsInRoot
+        val modes = rule.onNodeWithTag("image_reader_modes")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(modes.left >= window.left)
+        assertTrue(modes.right <= window.right)
+        rule.onNodeWithTag("segment_comic")
+            .performScrollTo()
             .assertIsDisplayed()
     }
 
@@ -862,6 +1031,7 @@ class ImageReaderScreenTest {
             { _, _ -> },
         onImageLoadSuccess: (String) -> Unit = {},
         onRetryImage: (String) -> Unit = {},
+        safeDrawingInsets: WindowInsets = WindowInsets(0),
     ) {
         rule.setContent {
             MediaViewerTheme(darkTheme = true) {
@@ -878,6 +1048,7 @@ class ImageReaderScreenTest {
                         onImageLoadSuccess,
                     onRetryImage = onRetryImage,
                     onBack = {},
+                    safeDrawingInsets = safeDrawingInsets,
                 )
             }
         }

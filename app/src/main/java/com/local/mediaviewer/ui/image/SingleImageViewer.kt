@@ -15,7 +15,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -24,7 +24,6 @@ import androidx.compose.ui.platform.testTag
 import coil3.ImageLoader
 import coil3.compose.SubcomposeAsyncImage
 import coil3.compose.SubcomposeAsyncImageContent
-import com.local.mediaviewer.image.ImageDecodePolicy
 import com.local.mediaviewer.image.ImageItemFailure
 import com.local.mediaviewer.image.ImageLoadFailureKind
 import com.local.mediaviewer.image.ImageReaderItem
@@ -32,6 +31,19 @@ import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.image.ZoomReducer
 import com.local.mediaviewer.image.ZoomTransform
 import com.local.mediaviewer.image.classifyImageLoadFailure
+import com.local.mediaviewer.ui.theme.MediaTheme
+
+enum class SingleImageZoomAction {
+    ZOOM_OUT,
+    ZOOM_IN,
+    FIT_SCREEN,
+}
+
+data class SingleImageZoomCommand(
+    val id: Int,
+    val targetLogicalUrl: String,
+    val action: SingleImageZoomAction,
+)
 
 @Composable
 fun SingleImageViewer(
@@ -45,6 +57,9 @@ fun SingleImageViewer(
     onRetryImage: (String) -> Unit,
     onToggleToolbar: () -> Unit = {},
     onZoomedChanged: (Boolean) -> Unit = {},
+    onZoomChanged: (ZoomTransform) -> Unit = {},
+    zoomCommand: SingleImageZoomCommand? = null,
+    onZoomCommandHandled: (Int) -> Unit = {},
     refreshingImageLogicalUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -55,9 +70,41 @@ fun SingleImageViewer(
         rememberUpdatedState(onToggleToolbar)
     val currentOnZoomedChanged by
         rememberUpdatedState(onZoomedChanged)
+    val currentOnZoomChanged by
+        rememberUpdatedState(onZoomChanged)
+    val currentOnZoomCommandHandled by
+        rememberUpdatedState(onZoomCommandHandled)
     val isZoomed = zoom.scale > 1.001f
-    LaunchedEffect(item.logicalUrl, isZoomed) {
+    LaunchedEffect(item.logicalUrl, zoom) {
         currentOnZoomedChanged(isZoomed)
+        currentOnZoomChanged(zoom)
+    }
+    LaunchedEffect(
+        item.logicalUrl,
+        zoomCommand?.id,
+    ) {
+        val command = zoomCommand
+        if (command?.targetLogicalUrl == item.logicalUrl) {
+            zoom = when (command.action) {
+                SingleImageZoomAction.ZOOM_OUT ->
+                    ZoomReducer.gesture(
+                        current = zoom,
+                        zoomChange = 0.8f,
+                        panChange = Offset.Zero,
+                    )
+
+                SingleImageZoomAction.ZOOM_IN ->
+                    ZoomReducer.gesture(
+                        current = zoom,
+                        zoomChange = 1.25f,
+                        panChange = Offset.Zero,
+                    )
+
+                SingleImageZoomAction.FIT_SCREEN ->
+                    ZoomReducer.reset()
+            }
+            currentOnZoomCommandHandled(command.id)
+        }
     }
     val transformableState = rememberTransformableState {
             zoomChange,
@@ -71,14 +118,18 @@ fun SingleImageViewer(
         )
     }
     val context = LocalContext.current
+    val playerColors = MediaTheme.playerColors
     val deviceBitmapLimits = remember {
         queryDeviceBitmapLimits()
+    }
+    val animatedGif = remember(item.name) {
+        isAnimatedGifName(item.name)
     }
 
     BoxWithConstraints(
         modifier = modifier
             .clipToBounds()
-            .background(Color.Black)
+            .background(playerColors.canvas)
             .testTag("media_image"),
     ) {
         if (failure != null) {
@@ -99,16 +150,23 @@ fun SingleImageViewer(
             constraints.maxWidth.coerceAtLeast(1)
         val viewportHeightPx =
             constraints.maxHeight.coerceAtLeast(1)
+        val decodeScale = if (animatedGif) {
+            1f
+        } else {
+            zoom.scale
+        }
         val decodeSize = remember(
             viewportWidthPx,
             viewportHeightPx,
             deviceBitmapLimits,
-            zoom.scale,
+            decodeScale,
+            animatedGif,
         ) {
-            ImageDecodePolicy.target(
+            SingleImageDecodePolicy.target(
                 viewportWidthPx = viewportWidthPx,
                 viewportHeightPx = viewportHeightPx,
-                scale = zoom.scale,
+                scale = decodeScale,
+                animatedGif = animatedGif,
                 maxBitmapWidthPx =
                     deviceBitmapLimits.maxWidthPx,
                 maxBitmapHeightPx =
