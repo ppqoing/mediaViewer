@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.scrollBy
@@ -229,14 +230,15 @@ private fun PdfContent(
                     zoom,
                 ->
                     val current = transform
-                    val gestureCentroid = centroid - pan
-                    val updated = reducePdfScreenGesture(
+                    val update = reducePdfScreenGesture(
                         current = current,
                         zoomChange = zoom,
-                        panXPx = pan.x,
-                        currentCentroidXPx = centroid.x,
+                        pan = pan,
+                        previousCentroid = centroid,
                         viewportWidthPx = viewportWidthPx.toFloat(),
                     )
+                    val updated = update.transform
+                    val gestureCentroid = update.anchorCentroid
                     if (updated.scale != current.scale) {
                         listState.pageAt(
                             pageSizes = state.pageSizes,
@@ -479,10 +481,9 @@ private fun Modifier.pdfTransformGestures(
                 val event = awaitPointerEvent()
                 val pressed = event.changes.filter { it.pressed }
                 if (pressed.size >= 2) {
-                    val centroid = pressed
-                        .fold(Offset.Zero) { total, change ->
-                            total + change.position
-                        } / pressed.size.toFloat()
+                    val centroid = event.calculateCentroid(
+                        useCurrent = false,
+                    )
                     val zoom = event.calculateZoom()
                     val pan = event.calculatePan()
                     if (
@@ -501,15 +502,23 @@ private fun Modifier.pdfTransformGestures(
 internal fun reducePdfScreenGesture(
     current: PdfTransform,
     zoomChange: Float,
-    panXPx: Float,
-    currentCentroidXPx: Float,
+    pan: Offset,
+    previousCentroid: Offset,
     viewportWidthPx: Float,
-): PdfTransform = PdfTransformReducer.gesture(
-    current = current,
-    zoomChange = zoomChange,
-    panXPx = panXPx,
-    centroidXPx = currentCentroidXPx - panXPx,
-    viewportWidthPx = viewportWidthPx,
+): PdfScreenGestureUpdate = PdfScreenGestureUpdate(
+    transform = PdfTransformReducer.gesture(
+        current = current,
+        zoomChange = zoomChange,
+        panXPx = pan.x,
+        centroidXPx = previousCentroid.x,
+        viewportWidthPx = viewportWidthPx,
+    ),
+    anchorCentroid = previousCentroid,
+)
+
+internal data class PdfScreenGestureUpdate(
+    val transform: PdfTransform,
+    val anchorCentroid: Offset,
 )
 
 private data class ZoomAnchor(

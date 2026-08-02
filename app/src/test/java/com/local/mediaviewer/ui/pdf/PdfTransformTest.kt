@@ -1,5 +1,6 @@
 package com.local.mediaviewer.ui.pdf
 
+import androidx.compose.ui.geometry.Offset
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -80,23 +81,25 @@ class PdfTransformTest {
     }
 
     @Test
-    fun `屏幕手势适配在非对称平移缩放时使用变化前中心`() {
-        val transformed = reducePdfScreenGesture(
+    fun `第三指加入时屏幕适配保持精确变化前中心`() {
+        val previousCentroid = Offset(400f, 300f)
+        val update = reducePdfScreenGesture(
             current = PdfTransform(
                 scale = 2f,
                 horizontalOffsetPx = 100f,
             ),
             zoomChange = 1.5f,
-            panXPx = 40f,
-            currentCentroidXPx = 440f,
+            pan = Offset(40f, 12f),
+            previousCentroid = previousCentroid,
             viewportWidthPx = 1_000f,
         )
 
-        assertEquals(3f, transformed.scale, 0.001f)
+        assertEquals(3f, update.transform.scale, 0.001f)
         assertEquals(
             240f,
-            transformed.horizontalOffsetPx,
+            update.transform.horizontalOffsetPx,
             0.001f,
         )
+        assertEquals(previousCentroid, update.anchorCentroid)
     }
 }
