@@ -24,6 +24,7 @@ import com.local.mediaviewer.network.ConnectionTestResult
 import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
 import com.local.mediaviewer.playback.MediaViewerDatabase
 import com.local.mediaviewer.playback.PlaybackEngine
+import com.local.mediaviewer.playback.PlaybackEngineFactory
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.RoomPlaybackPositionStore
 import com.local.mediaviewer.player.Media3PlaybackController
@@ -54,7 +55,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 
 @UnstableApi
-class BackgroundPlaybackTestHarness : Closeable {
+class BackgroundPlaybackTestHarness(
+    private val playbackEngineFactory: PlaybackEngineFactory? = null,
+) : Closeable {
     val application =
         ApplicationProvider.getApplicationContext<MediaViewerApplication>()
     private val originalContainer = application.container
@@ -74,6 +77,7 @@ class BackgroundPlaybackTestHarness : Closeable {
     val container = BackgroundPlaybackAppContainer(
         context = application,
         requestBaseUrl = server.url("/").trimEnd('/'),
+        playbackEngineFactory = playbackEngineFactory,
     )
     private var closed = false
 
@@ -250,6 +254,7 @@ class TestMediaControllerConnection internal constructor(
 class BackgroundPlaybackAppContainer(
     context: android.content.Context,
     requestBaseUrl: String,
+    private val playbackEngineFactory: PlaybackEngineFactory? = null,
 ) : AppContainer, Closeable {
     private val delegate = FakeAppContainer(context)
     private val appContext = context.applicationContext
@@ -307,7 +312,8 @@ class BackgroundPlaybackAppContainer(
     ): PlaybackCoordinator {
         playbackEngineCreationCount += 1
         val engine = CountingPlaybackEngine(
-            AndroidVlcPlaybackEngine(appContext),
+            playbackEngineFactory?.create()
+                ?: AndroidVlcPlaybackEngine(appContext),
         ) {
             playbackEngineCloseCount += 1
         }

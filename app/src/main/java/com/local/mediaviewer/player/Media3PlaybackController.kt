@@ -24,6 +24,7 @@ import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.queue.PlaybackNotice
 import com.local.mediaviewer.queue.PlaybackSessionState
 import com.local.mediaviewer.queue.QueueMediaItem
+import com.local.mediaviewer.service.ACTION_GET_EXACT_PLAYBACK_POSITION
 import com.local.mediaviewer.service.ACTION_LOCAL_VIDEO_OUTPUT
 import com.local.mediaviewer.service.ACTION_PLAYBACK_NOTICE
 import com.local.mediaviewer.service.ACTION_RELOAD_CURRENT
@@ -31,9 +32,11 @@ import com.local.mediaviewer.service.ACTION_RETRY_PERSISTENCE
 import com.local.mediaviewer.service.LocalVideoOutputBinder
 import com.local.mediaviewer.service.MediaItemMapper
 import com.local.mediaviewer.service.PlaybackNoticeCodec
+import com.local.mediaviewer.service.PlaybackPositionSnapshotCodec
 import com.local.mediaviewer.service.PlaybackService
 import com.local.mediaviewer.service.toMedia3Item
 import java.util.IdentityHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -95,6 +98,11 @@ class Media3PlaybackController(
             requestConnection = ::requestMediaController,
             release = ::releaseControllerHandle,
         )
+    private val exactPositionStore = ExactPlaybackPositionStore()
+    private val exactPositionCommand = SessionCommand(
+        ACTION_GET_EXACT_PLAYBACK_POSITION,
+        Bundle.EMPTY,
+    )
     private var positionObserver: Job? = null
     private var positionObserverOwner: MediaControllerHandle? = null
     private var closed = false
@@ -387,6 +395,7 @@ class Media3PlaybackController(
     override fun close() {
         if (closed) return
         closed = true
+        exactPositionStore.clear()
         detachVideoOutput()
         connectionMachine.close()
         connectionJobs.values.toList().forEach(Job::cancel)
@@ -465,14 +474,31 @@ class Media3PlaybackController(
     private fun startPositionObserver(handle: MediaControllerHandle) {
         positionObserver?.cancel()
         positionObserverOwner = handle
+        exactPositionStore.clear()
         positionObserver = scope.launch {
-            while (
-                isActive &&
-                !closed &&
-                connectionMachine.isCurrent(handle)
-            ) {
-                delay(POSITION_OBSERVER_INTERVAL_MS)
+            while (isActive && !closed && connectionMachine.isCurrent(handle)) {
+                val result = try {
+                    handle.controller.sendCustomCommand(
+                        exactPositionCommand,
+                        Bundle.EMPTY,
+                    ).await()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
+                if (!connectionMachine.isCurrent(handle)) break
+                if (result?.resultCode == SessionResult.RESULT_SUCCESS) {
+                    PlaybackPositionSnapshotCodec.decode(result.extras)
+                        ?.let { snapshot ->
+                            exactPositionStore.accept(
+                                handle.controller.currentMediaItem?.mediaId,
+                                snapshot,
+                            )
+                        }
+                }
                 publish(handle.controller)
+                delay(POSITION_OBSERVER_INTERVAL_MS)
             }
         }
     }
@@ -484,6 +510,7 @@ class Media3PlaybackController(
             positionObserver?.cancel()
             positionObserver = null
             positionObserverOwner = null
+            exactPositionStore.clear()
         }
         releaseAttempt(handle.attempt)
     }
@@ -542,29 +569,34 @@ class Media3PlaybackController(
             getMediaItemAt(it).mediaId == mediaKey
         }
 
-    private fun Player.snapshot(): Media3StateSnapshot = Media3StateSnapshot(
-        playbackState = playbackState,
-        playWhenReady = playWhenReady,
-        isPlaying = isPlaying,
-        positionMs = currentPosition,
-        durationMs = duration,
-        bufferedPositionMs = bufferedPosition,
-        isSeekable = isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM),
-        errorMessage = playerError?.message,
-        items = (0 until mediaItemCount).map {
-            MediaItemMapper.fromMedia3(getMediaItemAt(it))
-        },
-        currentMediaItemIndex = currentMediaItemIndex,
-        canSkipPrevious = isCommandAvailable(
-            Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
-        ),
-        canSkipNext = isCommandAvailable(
-            Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
-        ),
-        repeatMode = repeatMode,
-        shuffleModeEnabled = shuffleModeEnabled,
-        playbackSpeed = playbackParameters.speed,
-    )
+    private fun Player.snapshot(): Media3StateSnapshot {
+        val currentMediaKey = currentMediaItem?.mediaId
+        return Media3StateSnapshot(
+            playbackState = playbackState,
+            playWhenReady = playWhenReady,
+            isPlaying = isPlaying,
+            positionMs = exactPositionStore.positionFor(currentMediaKey),
+            durationMs = duration,
+            bufferedPositionMs = bufferedPosition,
+            isSeekable = isCommandAvailable(
+                Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
+            ),
+            errorMessage = playerError?.message,
+            items = (0 until mediaItemCount).map {
+                MediaItemMapper.fromMedia3(getMediaItemAt(it))
+            },
+            currentMediaItemIndex = currentMediaItemIndex,
+            canSkipPrevious = isCommandAvailable(
+                Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+            ),
+            canSkipNext = isCommandAvailable(
+                Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+            ),
+            repeatMode = repeatMode,
+            shuffleModeEnabled = shuffleModeEnabled,
+            playbackSpeed = playbackParameters.speed,
+        )
+    }
 
     private data class MediaControllerHandle(
         val controller: MediaController,

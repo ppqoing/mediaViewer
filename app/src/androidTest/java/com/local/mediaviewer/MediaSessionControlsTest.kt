@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Parcelable
+import android.view.ViewGroup
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -23,7 +24,11 @@ import com.local.mediaviewer.navigation.ACTION_OPEN_CURRENT_PLAYER
 import com.local.mediaviewer.navigation.EXTRA_OPEN_CURRENT_PLAYER
 import com.local.mediaviewer.player.Media3PlaybackController
 import com.local.mediaviewer.player.VideoOutputConnectionState
+import com.local.mediaviewer.playback.PlaybackEngine
+import com.local.mediaviewer.playback.PlaybackEngineFactory
+import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.queue.PlaybackNoticeKind
 import com.local.mediaviewer.service.ACTION_STOP_AND_RELEASE
@@ -32,6 +37,9 @@ import com.local.mediaviewer.ui.player.VlcSurface
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -49,6 +57,75 @@ import org.junit.runners.model.Statement
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
 class MediaSessionControlsTest {
+    @Test
+    fun appProgressUsesFrozenEnginePositionAfterPauseResumeAndAtDoubleSpeed() {
+        val engine = FrozenPositionEngine()
+        BackgroundPlaybackTestHarness(
+            playbackEngineFactory = PlaybackEngineFactory { engine },
+        ).use { harness ->
+            val appController =
+                harness.container.playbackController as Media3PlaybackController
+            harness.connectController().use { systemController ->
+                systemController.run {
+                    setMediaItems(harness.videoQueue())
+                    prepare()
+                    play()
+                }
+                harness.waitUntil("queue reaches app controller") {
+                    appController.sessionState.value.currentItem != null
+                }
+
+                engine.emit(
+                    PlaybackState(
+                        status = PlaybackStatus.PLAYING,
+                        positionMs = 8_000L,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                        playbackSpeed = 1f,
+                    ),
+                )
+                harness.waitUntil("first frozen position reaches app controller") {
+                    appController.state.value.positionMs in 8_000L..8_250L
+                }
+                Thread.sleep(750L)
+                assertEquals(8_000L, appController.state.value.positionMs)
+
+                systemController.run { setPlaybackSpeed(2f) }
+                engine.emit(
+                    PlaybackState(
+                        status = PlaybackStatus.PLAYING,
+                        positionMs = 12_000L,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                        playbackSpeed = 2f,
+                    ),
+                )
+                harness.waitUntil("double speed snapshot reaches app controller") {
+                    appController.state.value.positionMs in 12_000L..12_250L
+                }
+                Thread.sleep(500L)
+                assertEquals(12_000L, appController.state.value.positionMs)
+
+                systemController.run { pause() }
+                engine.emit(
+                    engine.state.value.copy(status = PlaybackStatus.PAUSED),
+                )
+                harness.waitUntil("pause reaches app controller") {
+                    appController.state.value.status == PlaybackStatus.PAUSED
+                }
+                systemController.run { play() }
+                engine.emit(
+                    engine.state.value.copy(status = PlaybackStatus.PLAYING),
+                )
+                harness.waitUntil("resume reaches app controller") {
+                    appController.state.value.status == PlaybackStatus.PLAYING
+                }
+                Thread.sleep(750L)
+                assertEquals(12_000L, appController.state.value.positionMs)
+            }
+        }
+    }
+
     @Test
     fun systemCommandsStayInSyncWithAppControllerAndNotification() {
         BackgroundPlaybackTestHarness().use { harness ->
@@ -533,5 +610,56 @@ class MediaSessionControlsTest {
             notification != null
         }
         return requireNotNull(notification)
+    }
+
+    private class FrozenPositionEngine : PlaybackEngine {
+        private val mutableState = MutableStateFlow(PlaybackState())
+        override val state: StateFlow<PlaybackState> = mutableState.asStateFlow()
+
+        fun emit(state: PlaybackState) {
+            mutableState.value = state
+        }
+
+        override fun prepare(url: String) {
+            mutableState.value = PlaybackState(
+                status = PlaybackStatus.PAUSED,
+                durationMs = 60_000L,
+                isSeekable = true,
+            )
+        }
+
+        override fun attachVideoOutput(host: ViewGroup) = Unit
+
+        override fun detachVideoOutput() = Unit
+
+        override fun setVideoScaleMode(mode: VideoScaleMode) = Unit
+
+        override fun setPlaybackSpeed(speed: Float) {
+            mutableState.value = mutableState.value.copy(playbackSpeed = speed)
+        }
+
+        override fun play() {
+            mutableState.value = mutableState.value.copy(
+                status = PlaybackStatus.PLAYING,
+            )
+        }
+
+        override fun pause() {
+            mutableState.value = mutableState.value.copy(
+                status = PlaybackStatus.PAUSED,
+            )
+        }
+
+        override fun stop() {
+            mutableState.value = PlaybackState()
+        }
+
+        override fun seekTo(positionMs: Long) {
+            mutableState.value = mutableState.value.copy(
+                positionMs = positionMs.coerceAtLeast(0L),
+            )
+        }
+
+        override fun close() = Unit
     }
 }
