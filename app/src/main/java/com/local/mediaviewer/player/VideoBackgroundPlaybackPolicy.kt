@@ -106,7 +106,7 @@ object VideoBackgroundPlaybackPolicy {
         reason: VideoSessionExitReason,
     ): Boolean = reason == VideoSessionExitReason.NAVIGATE_AWAY
 
-    @Deprecated("Remove after MediaViewerApp lifecycle migration")
+    // Temporary compile bridge; remove when MediaViewerApp adopts lifecycle state.
     fun shouldStopAndClear(
         enabled: Boolean,
         reason: VideoSessionExitReason,
