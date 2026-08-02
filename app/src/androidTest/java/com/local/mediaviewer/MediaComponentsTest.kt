@@ -4,12 +4,15 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.platform.LocalDensity
 import com.local.mediaviewer.ui.components.MediaAction
 import com.local.mediaviewer.ui.components.MediaIconButton
 import com.local.mediaviewer.ui.components.MediaPrimaryButton
@@ -18,12 +21,33 @@ import com.local.mediaviewer.ui.components.MediaStatePanel
 import com.local.mediaviewer.ui.icons.MediaIcons
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
 class MediaComponentsTest {
     @get:Rule
     val rule = createComposeRule()
+
+    @Test
+    fun generatedIconButtonKeepsTouchTargetAndDescription() {
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f)) {
+                MediaViewerTheme {
+                    MediaIconButton(
+                        icon = MediaIcons.Search,
+                        contentDescription = "搜索",
+                        onClick = {},
+                    )
+                }
+            }
+        }
+
+        val bounds = rule.onNodeWithContentDescription("搜索")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(bounds.width >= 48f)
+        assertTrue(bounds.height >= 48f)
+    }
 
     @Test
     fun loadingButtonIsDisabledAndExposesState() {

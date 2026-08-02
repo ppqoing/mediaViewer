@@ -1,7 +1,7 @@
 package com.local.mediaviewer.ui.player
 
-import androidx.compose.ui.graphics.vector.ImageVector
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.ui.icons.MediaIcon
 
 enum class PlaybackPrimaryCommand {
     PLAY,
@@ -12,7 +12,7 @@ enum class PlaybackPrimaryCommand {
 
 data class PlaybackPrimaryAction(
     val command: PlaybackPrimaryCommand,
-    val icon: ImageVector,
+    val icon: MediaIcon,
     val contentDescription: String,
     val stateDescription: String? = null,
     val enabled: Boolean = true,

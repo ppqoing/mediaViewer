@@ -16,18 +16,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import com.local.mediaviewer.ui.icons.MediaIcon
 
 @Composable
 fun VerticalLevelIndicator(
     fraction: Float,
     label: String,
-    icon: ImageVector,
+    icon: MediaIcon,
     fillColor: Color,
     modifier: Modifier = Modifier,
 ) {

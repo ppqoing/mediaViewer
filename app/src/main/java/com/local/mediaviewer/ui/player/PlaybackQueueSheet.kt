@@ -22,14 +22,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.Icons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -74,6 +70,8 @@ import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.queue.PlaybackQueue
 import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.ui.components.MediaBottomSheet
+import com.local.mediaviewer.ui.icons.MediaIconImage
+import com.local.mediaviewer.ui.icons.MediaIcons
 import com.local.mediaviewer.ui.theme.LocalPlayerColors
 import com.local.mediaviewer.ui.theme.MediaTheme
 import com.local.mediaviewer.ui.theme.surfacePlayerColors
@@ -251,7 +249,11 @@ fun PlaybackQueueSheet(
                 enabled = queue.items.size > 1,
             ) { Text("清空其他") }
             IconButton(onClick = { menuExpanded = true }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "更多队列操作")
+                MediaIconImage(
+                    icon = MediaIcons.More,
+                    contentDescription = "更多队列操作",
+                    tint = androidx.compose.material3.LocalContentColor.current,
+                )
             }
             DropdownMenu(
                 expanded = menuExpanded,
@@ -266,7 +268,11 @@ fun PlaybackQueueSheet(
                 )
             }
             IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.Close, contentDescription = "关闭播放队列")
+                MediaIconImage(
+                    icon = MediaIcons.Close,
+                    contentDescription = "关闭播放队列",
+                    tint = androidx.compose.material3.LocalContentColor.current,
+                )
             }
         },
     ) {

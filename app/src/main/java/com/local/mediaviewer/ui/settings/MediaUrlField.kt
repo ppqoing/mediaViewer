@@ -2,7 +2,6 @@ package com.local.mediaviewer.ui.settings
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -14,6 +13,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.icons.MediaIconImage
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 enum class MediaUrlFieldState { IDLE, TESTING, SUCCESS, ERROR }
@@ -43,14 +43,14 @@ fun MediaUrlField(
         ),
         trailingIcon = {
             when (state) {
-                MediaUrlFieldState.SUCCESS -> Icon(
-                    imageVector = MediaIcons.Connected,
+                MediaUrlFieldState.SUCCESS -> MediaIconImage(
+                    icon = MediaIcons.Connected,
                     contentDescription = null,
                     tint = MediaTheme.extendedColors.success,
                 )
 
-                MediaUrlFieldState.ERROR -> Icon(
-                    imageVector = MediaIcons.Error,
+                MediaUrlFieldState.ERROR -> MediaIconImage(
+                    icon = MediaIcons.Error,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
                 )

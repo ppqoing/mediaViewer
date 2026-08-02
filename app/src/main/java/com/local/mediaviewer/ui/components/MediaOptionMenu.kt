@@ -5,25 +5,26 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.icons.MediaIcon
+import com.local.mediaviewer.ui.icons.MediaIconImage
 
 @Immutable
 data class MediaOption<T>(
     val key: T,
     val label: String,
-    val icon: ImageVector? = null,
+    val icon: MediaIcon? = null,
     val enabled: Boolean = true,
 )
 
@@ -47,14 +48,18 @@ fun <T> MediaOptionMenu(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         when {
                             option.icon != null -> {
-                                Icon(option.icon, contentDescription = null)
+                                MediaIconImage(
+                                    icon = option.icon,
+                                    contentDescription = null,
+                                    tint = LocalContentColor.current,
+                                )
                                 Spacer(Modifier.width(12.dp))
                             }
                             option.key == selectedKey -> {
                                 // 规格 §7.1：菜单负责可见勾选；
                                 // 选中语义之外必须有非颜色选择标记。
-                                Icon(
-                                    MediaIcons.Check,
+                                MediaIconImage(
+                                    icon = MediaIcons.Check,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.testTag(

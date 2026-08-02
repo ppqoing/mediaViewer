@@ -4,14 +4,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.local.mediaviewer.ui.icons.MediaIcon
+import com.local.mediaviewer.ui.icons.MediaIconImage
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 internal val NeonCyan = Color(0xFF48E7FF)
@@ -32,7 +32,7 @@ internal fun neonPlayerIconVisualState(
 
 @Composable
 fun NeonPlayerIcon(
-    icon: ImageVector,
+    icon: MediaIcon,
     contentDescription: String?,
     active: Boolean = false,
     enabled: Boolean = true,
@@ -47,15 +47,15 @@ fun NeonPlayerIcon(
     }
     Box(modifier = modifier) {
         if (visualState.showActiveAccent) {
-            Icon(
-                icon,
+            MediaIconImage(
+                icon = icon,
                 contentDescription = null,
                 tint = colors.accent.copy(alpha = 0.55f),
                 modifier = Modifier.matchParentSize().offset(1.dp, 1.dp),
             )
         }
-        Icon(
-            icon,
+        MediaIconImage(
+            icon = icon,
             contentDescription = contentDescription,
             tint = foreground,
             modifier = Modifier.matchParentSize(),

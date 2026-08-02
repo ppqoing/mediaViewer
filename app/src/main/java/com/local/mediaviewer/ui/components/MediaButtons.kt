@@ -8,18 +8,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import com.local.mediaviewer.ui.icons.MediaIcon
+import com.local.mediaviewer.ui.icons.MediaIconImage
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
@@ -29,7 +30,7 @@ fun MediaPrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     loading: Boolean = false,
-    icon: ImageVector? = null,
+    icon: MediaIcon? = null,
 ) {
     MediaButton(
         kind = MediaButtonKind.PRIMARY,
@@ -49,7 +50,7 @@ fun MediaSecondaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     loading: Boolean = false,
-    icon: ImageVector? = null,
+    icon: MediaIcon? = null,
 ) {
     MediaButton(
         kind = MediaButtonKind.SECONDARY,
@@ -69,7 +70,7 @@ fun MediaDestructiveButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     loading: Boolean = false,
-    icon: ImageVector? = null,
+    icon: MediaIcon? = null,
 ) {
     MediaButton(
         kind = MediaButtonKind.DESTRUCTIVE,
@@ -96,7 +97,7 @@ private fun MediaButton(
     modifier: Modifier,
     enabled: Boolean,
     loading: Boolean,
-    icon: ImageVector?,
+    icon: MediaIcon?,
 ) {
     val semanticsModifier = Modifier.semantics(mergeDescendants = true) {
         contentDescription = if (loading) {
@@ -154,7 +155,7 @@ private fun MediaButton(
 private fun MediaButtonContent(
     label: String,
     loading: Boolean,
-    icon: ImageVector?,
+    icon: MediaIcon?,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (loading) {
@@ -165,9 +166,10 @@ private fun MediaButtonContent(
             Spacer(Modifier.width(MediaTheme.spacing.xs))
         } else {
             icon?.let {
-                Icon(
-                    imageVector = it,
+                MediaIconImage(
+                    icon = it,
                     contentDescription = null,
+                    tint = LocalContentColor.current,
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(MediaTheme.spacing.xs))

@@ -6,10 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +19,7 @@ import com.local.mediaviewer.model.ServerShare
 import com.local.mediaviewer.model.ShareAuthenticationMode
 import com.local.mediaviewer.ui.components.MediaGlyph
 import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.icons.MediaIconImage
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
@@ -72,8 +70,8 @@ fun ShareCard(
                 }
             }
             if (unavailableReason == null) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                MediaIconImage(
+                    icon = MediaIcons.Forward,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

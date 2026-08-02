@@ -18,7 +18,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import com.local.mediaviewer.browser.BrowserPlaybackAction
 import com.local.mediaviewer.model.DirectoryEntry
@@ -28,6 +27,7 @@ import com.local.mediaviewer.ui.components.MediaIconButton
 import com.local.mediaviewer.ui.components.MediaOption
 import com.local.mediaviewer.ui.components.MediaOptionMenu
 import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.icons.MediaIcon
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
@@ -115,13 +115,13 @@ private fun PlaybackActionsMenu(
     }
 }
 
-private val MediaKind.icon: ImageVector
+private val MediaKind.icon: MediaIcon
     get() = when (this) {
         MediaKind.DIRECTORY -> MediaIcons.Folder
         MediaKind.VIDEO -> MediaIcons.Video
         MediaKind.AUDIO -> MediaIcons.Audio
         MediaKind.IMAGE -> MediaIcons.Image
-        MediaKind.UNKNOWN -> MediaIcons.File
+        MediaKind.UNKNOWN -> MediaIcons.UnknownFile
     }
 
 private val MediaKind.contentDescription: String
@@ -152,7 +152,7 @@ private val BrowserPlaybackAction.label: String
         BrowserPlaybackAction.ADD_TO_QUEUE -> "添加到队列"
     }
 
-private val BrowserPlaybackAction.icon: ImageVector
+private val BrowserPlaybackAction.icon: MediaIcon
     get() = when (this) {
         BrowserPlaybackAction.PLAY_DIRECTORY -> MediaIcons.PlayNow
         BrowserPlaybackAction.PLAY_NEXT -> MediaIcons.PlayNext

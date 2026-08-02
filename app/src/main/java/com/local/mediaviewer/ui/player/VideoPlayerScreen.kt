@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -410,7 +408,7 @@ fun VideoPlayerScreen(
                             leadingUtilityControls = {
                                 onOpenQueue?.let { openQueue ->
                                     MediaIconButton(
-                                        icon = MediaIcons.Queue,
+                                        icon = PlayerIcons.Queue,
                                         contentDescription = "打开队列",
                                         onClick = {
                                             revealControls()
@@ -434,7 +432,7 @@ fun VideoPlayerScreen(
                             },
                             secondaryControls = {
                                 MediaIconButton(
-                                    icon = Icons.Default.Fullscreen,
+                                    icon = PlayerIcons.FullscreenEnter,
                                     contentDescription = "全屏",
                                     onClick = {
                                         revealControls()

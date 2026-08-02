@@ -3,23 +3,23 @@ package com.local.mediaviewer.ui.components
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import com.local.mediaviewer.ui.icons.MediaIcon
+import com.local.mediaviewer.ui.icons.MediaIconImage
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
 fun MediaIconButton(
-    icon: ImageVector,
+    icon: MediaIcon,
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -47,7 +47,7 @@ fun MediaIconButton(
 
 @Composable
 fun PlayerIconButton(
-    icon: ImageVector,
+    icon: MediaIcon,
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -75,7 +75,7 @@ fun PlayerIconButton(
 
 @Composable
 private fun SemanticIconButton(
-    icon: ImageVector,
+    icon: MediaIcon,
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier,
@@ -113,8 +113,8 @@ private fun SemanticIconButton(
                 strokeWidth = 2.dp,
             )
         } else {
-            Icon(
-                imageVector = icon,
+            MediaIconImage(
+                icon = icon,
                 contentDescription = null,
                 tint = tint,
             )

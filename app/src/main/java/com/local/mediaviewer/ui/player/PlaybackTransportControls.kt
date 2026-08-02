@@ -10,12 +10,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.ui.components.PlayerIconButton
+import com.local.mediaviewer.ui.icons.MediaIcon
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
@@ -73,7 +73,7 @@ fun PlaybackTransportControls(
 @Composable
 private fun ControlButton(
     description: String,
-    icon: ImageVector,
+    icon: MediaIcon,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {

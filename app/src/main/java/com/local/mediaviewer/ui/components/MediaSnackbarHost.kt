@@ -3,9 +3,6 @@ package com.local.mediaviewer.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
@@ -20,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.icons.MediaIcon
+import com.local.mediaviewer.ui.icons.MediaIconImage
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 enum class MediaSnackbarKind { INFO, SUCCESS, ERROR }
@@ -67,8 +66,8 @@ fun MediaSnackbarHost(
                 horizontalArrangement = Arrangement.spacedBy(MediaTheme.spacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = icon,
+                MediaIconImage(
+                    icon = icon,
                     contentDescription = null,
                     tint = tint,
                     modifier = Modifier.size(20.dp),
@@ -80,9 +79,9 @@ fun MediaSnackbarHost(
 }
 
 @Composable
-private fun snackbarGlyph(kind: MediaSnackbarKind): Pair<androidx.compose.ui.graphics.vector.ImageVector, Color> =
+private fun snackbarGlyph(kind: MediaSnackbarKind): Pair<MediaIcon, Color> =
     when (kind) {
-        MediaSnackbarKind.INFO -> Icons.Filled.Info to MaterialTheme.colorScheme.primary
+        MediaSnackbarKind.INFO -> MediaIcons.Info to MaterialTheme.colorScheme.primary
         MediaSnackbarKind.SUCCESS -> MediaIcons.Connected to MediaTheme.extendedColors.success
         MediaSnackbarKind.ERROR -> MediaIcons.Error to MaterialTheme.colorScheme.error
     }

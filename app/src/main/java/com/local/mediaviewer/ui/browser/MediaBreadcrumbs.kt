@@ -4,9 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -18,6 +16,8 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.local.mediaviewer.browser.Breadcrumb
+import com.local.mediaviewer.ui.icons.MediaIconImage
+import com.local.mediaviewer.ui.icons.MediaIcons
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
@@ -37,9 +37,10 @@ fun MediaBreadcrumbs(
     ) {
         itemsIndexed(breadcrumbs) { index, breadcrumb ->
             if (index > 0) {
-                Icon(
-                    imageVector = Icons.Filled.ChevronRight,
+                MediaIconImage(
+                    icon = MediaIcons.ChevronRight,
                     contentDescription = null,
+                    tint = LocalContentColor.current,
                     modifier = Modifier.clearAndSetSemantics {},
                 )
             }

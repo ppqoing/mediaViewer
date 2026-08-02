@@ -24,7 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -40,6 +39,7 @@ import com.local.mediaviewer.queue.QueueMediaItem
 import com.local.mediaviewer.ui.components.MediaGlyph
 import com.local.mediaviewer.ui.components.PlayerIconButton
 import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.icons.MediaIcon
 import com.local.mediaviewer.ui.theme.LocalPlayerColors
 import com.local.mediaviewer.ui.theme.MediaTheme
 import com.local.mediaviewer.ui.theme.surfacePlayerColors
@@ -230,13 +230,13 @@ private fun NowPlayingBarContent(
     }
 }
 
-private val MediaKind.glyph: ImageVector
+private val MediaKind.glyph: MediaIcon
     get() = when (this) {
         MediaKind.DIRECTORY -> MediaIcons.Folder
         MediaKind.VIDEO -> MediaIcons.Video
         MediaKind.AUDIO -> MediaIcons.Audio
         MediaKind.IMAGE -> MediaIcons.Image
-        MediaKind.UNKNOWN -> MediaIcons.File
+        MediaKind.UNKNOWN -> MediaIcons.UnknownFile
     }
 
 private val MediaKind.label: String

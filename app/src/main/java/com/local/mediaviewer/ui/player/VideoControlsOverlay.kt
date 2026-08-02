@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -126,7 +124,7 @@ fun VideoControlsOverlay(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 PlayerIconButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    icon = MediaIcons.Back,
                     contentDescription = "返回",
                     onClick = onBack,
                 )

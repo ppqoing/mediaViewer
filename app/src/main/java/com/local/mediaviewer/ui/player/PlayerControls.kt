@@ -79,7 +79,7 @@ fun PlayerControls(
             endContent = {
                 onOpenQueue?.let { openQueue ->
                     MediaIconButton(
-                        icon = MediaIcons.Queue,
+                        icon = PlayerIcons.Queue,
                         contentDescription = "打开队列",
                         onClick = openQueue,
                     )
