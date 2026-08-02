@@ -33,7 +33,8 @@ class DefaultDirectoryJsonParser(
     ): AppResult<List<DirectoryEntry>> = try {
         val logicalBase = logicalDirectoryUrl.toHttpUrl()
         val requestBase = requestDirectoryUrl.toHttpUrl()
-        val entries = jsonCodec.decodeFromString<List<CaddyEntryDto>>(json)
+        val entries = jsonCodec.decodeFromString<List<CaddyEntryDto>?>(json)
+            .orEmpty()
             .map { dto ->
                 val logical = logicalBase.resolve(dto.url)
                     ?: throw IllegalArgumentException("invalid logical relative URL")

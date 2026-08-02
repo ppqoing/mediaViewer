@@ -59,6 +59,32 @@ class CaddyDirectoryClientTest {
     }
 
     @Test
+    fun `Caddy null 正文经过完整客户端链路返回空目录`() = runTest {
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .addHeader("Content-Type", "application/json")
+                .body("null")
+                .build(),
+        )
+        val client = DefaultCaddyDirectoryClient(
+            client = OkHttpClient(),
+            parser = DefaultDirectoryJsonParser(),
+            dispatchers = dispatchers,
+        )
+
+        val result = client.listDirectory(
+            logicalDirectoryUrl = "http://media.example/middle/",
+            requestDirectoryUrl = server.url("/middle/").toString(),
+        )
+
+        assertEquals(
+            AppResult.Success(emptyList<DirectoryEntry>()),
+            result,
+        )
+    }
+
+    @Test
     fun `Ayame 只含子目录的完整请求链返回两个目录`() = runTest {
         server.enqueue(
             MockResponse.Builder()

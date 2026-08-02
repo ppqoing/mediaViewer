@@ -88,6 +88,20 @@ class DirectoryJsonParserTest {
     }
 
     @Test
+    fun `Caddy null 响应解析为成功空目录`() {
+        val result = parser.parse(
+            "null",
+            "http://media.example/middle/",
+            "http://192.0.2.1/middle/",
+        )
+
+        assertEquals(
+            AppResult.Success(emptyList<DirectoryEntry>()),
+            result,
+        )
+    }
+
+    @Test
     fun `空数组成功而缺字段和无效时间失败`() {
         val empty = parser.parse(
             "[]",
