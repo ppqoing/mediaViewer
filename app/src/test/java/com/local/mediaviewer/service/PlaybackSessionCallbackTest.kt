@@ -305,47 +305,49 @@ class PlaybackSessionCallbackTest {
         val controller = controllerInfo()
         val command = SessionCommand(ACTION_GET_EXACT_PLAYBACK_POSITION, Bundle.EMPTY)
 
-        assertTrue(
-            callback.onConnect(sessionFixture.session, controller)
-                .availableSessionCommands.contains(command),
-        )
-        assertEquals(
-            SessionError.ERROR_INVALID_STATE,
-            callback.onCustomCommand(
+        try {
+            assertTrue(
+                callback.onConnect(sessionFixture.session, controller)
+                    .availableSessionCommands.contains(command),
+            )
+            assertEquals(
+                SessionError.ERROR_INVALID_STATE,
+                callback.onCustomCommand(
+                    sessionFixture.session,
+                    controller,
+                    command,
+                    Bundle.EMPTY,
+                ).get().resultCode,
+            )
+
+            coordinator.replaceQueue(listOf(serviceTestItem("video-a")), "video-a")
+            advanceUntilIdle()
+            engine.emit(
+                PlaybackState(
+                    status = PlaybackStatus.PLAYING,
+                    positionMs = 12_500L,
+                    durationMs = 60_000L,
+                    isSeekable = true,
+                ),
+            )
+            advanceUntilIdle()
+
+            val result = callback.onCustomCommand(
                 sessionFixture.session,
                 controller,
                 command,
                 Bundle.EMPTY,
-            ).get().resultCode,
-        )
-
-        coordinator.replaceQueue(listOf(serviceTestItem("video-a")), "video-a")
-        advanceUntilIdle()
-        engine.emit(
-            PlaybackState(
-                status = PlaybackStatus.PLAYING,
-                positionMs = 12_500L,
-                durationMs = 60_000L,
-                isSeekable = true,
-            ),
-        )
-        advanceUntilIdle()
-
-        val result = callback.onCustomCommand(
-            sessionFixture.session,
-            controller,
-            command,
-            Bundle.EMPTY,
-        ).get()
-        assertEquals(SessionResult.RESULT_SUCCESS, result.resultCode)
-        assertEquals(
-            PlaybackPositionSnapshot("video-a", 12_500L, 60_000L),
-            PlaybackPositionSnapshotCodec.decode(result.extras),
-        )
-
-        sessionFixture.session.release()
-        sessionFixture.player.release()
-        coordinator.close()
+            ).get()
+            assertEquals(SessionResult.RESULT_SUCCESS, result.resultCode)
+            assertEquals(
+                PlaybackPositionSnapshot("video-a", 12_500L, 60_000L),
+                PlaybackPositionSnapshotCodec.decode(result.extras),
+            )
+        } finally {
+            sessionFixture.session.release()
+            sessionFixture.player.release()
+            coordinator.close()
+        }
     }
 
     private fun mediaSession(
