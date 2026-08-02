@@ -33,6 +33,41 @@ class MediaScaffoldTest {
     val rule = createComposeRule()
 
     @Test
+    fun screenScaffoldKeepsTopActionsInsideSafeDrawing() {
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f)) {
+                MediaViewerTheme {
+                    Box(Modifier.size(360.dp, 640.dp).testTag("safe_root")) {
+                        MediaScreenScaffold(
+                            title = "安全区",
+                            actions = {
+                                Box(
+                                    Modifier
+                                        .size(48.dp)
+                                        .testTag("top_action_more"),
+                                )
+                            },
+                            contentWindowInsets = WindowInsets(
+                                left = 12.dp,
+                                top = 42.dp,
+                                right = 18.dp,
+                                bottom = 24.dp,
+                            ),
+                        ) { }
+                    }
+                }
+            }
+        }
+
+        val root = rule.onNodeWithTag("safe_root")
+            .fetchSemanticsNode().boundsInRoot
+        val action = rule.onNodeWithTag("top_action_more")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(action.top >= root.top + 42f)
+        assertTrue(action.right <= root.right - 18f)
+    }
+
+    @Test
     fun bottomBarParticipatesInLayoutInsteadOfCoveringTheLastItem() {
         rule.setContent {
             MediaViewerTheme {

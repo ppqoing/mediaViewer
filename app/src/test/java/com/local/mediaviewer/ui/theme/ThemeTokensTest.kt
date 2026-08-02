@@ -13,11 +13,15 @@ import org.junit.Test
 
 class ThemeTokensTest {
     @Test
-    fun `brand colors use approved light dark and video mappings`() {
-        assertEquals(Color(0xFF67D9F0), DarkMediaColorScheme.primary)
-        assertEquals(Color(0xFF006878), LightMediaColorScheme.primary)
-        assertEquals(Color(0xFF67D9F0), DefaultPlayerColors.active)
-        assertEquals(Color(0xFFF5FAFF), DefaultPlayerColors.control)
+    fun `theme uses approved warm paper palette`() {
+        assertEquals(Color(0xFFF5EAD3), LightMediaColorScheme.background)
+        assertEquals(Color(0xFFFFF7E8), LightMediaColorScheme.surface)
+        assertEquals(Color(0xFFC96B2C), LightMediaColorScheme.primary)
+        assertEquals(Color(0xFF2E2118), LightMediaColorScheme.onBackground)
+        assertEquals(Color(0xFF77835F), LightMediaExtendedColors.folder)
+        assertEquals(Color(0xB82E2118), DefaultPlayerColors.bottomScrimEnd)
+        assertEquals(RoundedCornerShape(16.dp), MediaShapes.medium)
+        assertEquals(RoundedCornerShape(24.dp), MediaShapes.large)
     }
 
     @Test
@@ -49,10 +53,10 @@ class ThemeTokensTest {
         assertEquals(48f, DefaultMediaSizing.minimumTouchTarget.value)
         assertEquals(64f, DefaultMediaSizing.listRowMinHeight.value)
         assertEquals(72f, DefaultMediaSizing.miniPlayerHeight.value)
-        assertEquals(RoundedCornerShape(8.dp), MediaShapes.small)
-        assertEquals(RoundedCornerShape(12.dp), MediaShapes.medium)
-        assertEquals(RoundedCornerShape(16.dp), MediaShapes.large)
-        assertEquals(RoundedCornerShape(24.dp), MediaShapes.extraLarge)
+        assertEquals(RoundedCornerShape(14.dp), MediaShapes.small)
+        assertEquals(RoundedCornerShape(16.dp), MediaShapes.medium)
+        assertEquals(RoundedCornerShape(24.dp), MediaShapes.large)
+        assertEquals(RoundedCornerShape(28.dp), MediaShapes.extraLarge)
         assertEquals(RoundedCornerShape(percent = 50), MediaPillShape)
         assertEquals(22.sp, MediaTypography.titleLarge.fontSize)
         assertEquals(28.sp, MediaTypography.titleLarge.lineHeight)
