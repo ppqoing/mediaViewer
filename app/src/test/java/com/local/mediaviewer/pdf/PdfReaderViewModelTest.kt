@@ -5,6 +5,7 @@ import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.core.DispatcherProvider
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -82,6 +83,44 @@ class PdfReaderViewModelTest {
             assertTrue(content.pages.isEmpty())
             assertEquals(0, content.currentPageIndex)
             assertEquals(listOf(LOGICAL_URL), files.acquiredLogicalUrls)
+        }
+
+    @Test
+    fun `close during download cancels acquire and cleans partial file`() =
+        runTest(dispatcher) {
+            val acquireGate = CompletableDeferred<Unit>()
+            val events = mutableListOf<String>()
+            val files = FakePdfTemporaryFileRepository(
+                events = events,
+                acquireGate = acquireGate,
+            )
+            val viewModel = viewModel(
+                files = files,
+                documents = FakePdfDocumentFactory(
+                    results = ArrayDeque(
+                        listOf(
+                            AppResult.Success(FakePdfDocumentHandle(pageCount = 3)),
+                        ),
+                    ),
+                    events = events,
+                ),
+            )
+            runCurrent()
+            assertEquals(1, files.partialFiles.size)
+
+            viewModel.closeForTest()
+            runCurrent()
+            val cancelledAcquires = files.cancelledAcquires
+            val cleanedPartialFiles = files.cleanedPartialFiles.toList()
+            acquireGate.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(1, cancelledAcquires)
+            assertEquals(listOf(File("build/tmp/pdf-reader-test.part")), cleanedPartialFiles)
+            assertTrue(files.partialFiles.isEmpty())
+            assertEquals(listOf("acquire", "cancel-acquire", "clean-part"), events)
+            assertFalse(viewModel.uiState.value is PdfReaderUiState.Content)
+            assertTrue(files.releasedFiles.isEmpty())
         }
 
     @Test
@@ -382,13 +421,33 @@ private class FakePdfTemporaryFileRepository(
             ),
         ),
     private val events: MutableList<String>? = null,
+    private val acquireGate: CompletableDeferred<Unit>? = null,
 ) : PdfTemporaryFileRepository {
     val acquiredLogicalUrls = mutableListOf<String>()
     val releasedFiles = mutableListOf<PdfTemporaryFile>()
+    val partialFiles = mutableListOf<File>()
+    val cleanedPartialFiles = mutableListOf<File>()
+    var cancelledAcquires = 0
+        private set
 
     override suspend fun acquire(logicalUrl: String): AppResult<PdfTemporaryFile> {
         events?.add("acquire")
         acquiredLogicalUrls += logicalUrl
+        if (acquireGate != null) {
+            val partialFile = File("build/tmp/pdf-reader-test.part")
+            partialFiles += partialFile
+            try {
+                acquireGate.await()
+                partialFiles -= partialFile
+            } catch (cancelled: CancellationException) {
+                cancelledAcquires += 1
+                events?.add("cancel-acquire")
+                partialFiles -= partialFile
+                cleanedPartialFiles += partialFile
+                events?.add("clean-part")
+                throw cancelled
+            }
+        }
         return if (acquireResults.size > 1) {
             acquireResults.removeFirst()
         } else {

@@ -135,54 +135,54 @@ class PdfReaderViewModel(
             previousRenderJobs.joinAll()
             releaseDocumentResources()
             if (!isCurrent(loadGeneration)) return@launch
-            val acquired = withContext(NonCancellable) {
-                files.acquire(logicalUrl)
-            }
-            when (acquired) {
-                is AppResult.Failure -> {
-                    if (isCurrent(loadGeneration)) {
-                        mutableUiState.value = PdfReaderUiState.Error(
-                            fileName = fileName,
-                            message = acquired.error.userMessage,
-                        )
+            val acquired = files.acquire(logicalUrl)
+            withContext(NonCancellable) {
+                when (acquired) {
+                    is AppResult.Failure -> {
+                        if (isCurrent(loadGeneration)) {
+                            mutableUiState.value = PdfReaderUiState.Error(
+                                fileName = fileName,
+                                message = acquired.error.userMessage,
+                            )
+                        }
                     }
-                }
 
-                is AppResult.Success -> {
-                    if (!isCurrent(loadGeneration)) {
-                        files.release(acquired.value)
-                        return@launch
-                    }
-                    temporaryFile = acquired.value
-                    mutableUiState.value = PdfReaderUiState.Loading(
-                        fileName = fileName,
-                        phase = PdfLoadPhase.OPENING,
-                    )
-                    withContext(NonCancellable) {
-                        when (val opened = documents.open(acquired.value.file)) {
-                            is AppResult.Failure -> {
-                                if (isCurrent(loadGeneration)) {
-                                    releaseTemporaryFile()
-                                    mutableUiState.value = PdfReaderUiState.Error(
-                                        fileName = fileName,
-                                        message = opened.error.userMessage,
-                                    )
-                                }
-                            }
-
-                            is AppResult.Success -> {
-                                if (!isCurrent(loadGeneration)) {
-                                    withContext(dispatchers.io) {
-                                        opened.value.close()
+                    is AppResult.Success -> {
+                        if (!isCurrent(loadGeneration)) {
+                            files.release(acquired.value)
+                        } else {
+                            temporaryFile = acquired.value
+                            mutableUiState.value = PdfReaderUiState.Loading(
+                                fileName = fileName,
+                                phase = PdfLoadPhase.OPENING,
+                            )
+                            withContext(NonCancellable) {
+                                when (val opened = documents.open(acquired.value.file)) {
+                                    is AppResult.Failure -> {
+                                        if (isCurrent(loadGeneration)) {
+                                            releaseTemporaryFile()
+                                            mutableUiState.value = PdfReaderUiState.Error(
+                                                fileName = fileName,
+                                                message = opened.error.userMessage,
+                                            )
+                                        }
                                     }
-                                } else {
-                                    document = opened.value
-                                    mutableUiState.value = PdfReaderUiState.Content(
-                                        fileName = fileName,
-                                        pageSizes = opened.value.pageSizes,
-                                        pages = emptyMap(),
-                                        currentPageIndex = 0,
-                                    )
+
+                                    is AppResult.Success -> {
+                                        if (!isCurrent(loadGeneration)) {
+                                            withContext(dispatchers.io) {
+                                                opened.value.close()
+                                            }
+                                        } else {
+                                            document = opened.value
+                                            mutableUiState.value = PdfReaderUiState.Content(
+                                                fileName = fileName,
+                                                pageSizes = opened.value.pageSizes,
+                                                pages = emptyMap(),
+                                                currentPageIndex = 0,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
