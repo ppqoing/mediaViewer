@@ -17,6 +17,19 @@ import com.local.mediaviewer.ui.icons.MediaIcon
 import com.local.mediaviewer.ui.icons.MediaIconImage
 import com.local.mediaviewer.ui.theme.MediaTheme
 
+internal data class MediaIconButtonVisualState(
+    val isEnabled: Boolean,
+    val iconAlpha: Float,
+)
+
+internal fun mediaIconButtonVisualState(
+    enabled: Boolean,
+    loading: Boolean,
+): MediaIconButtonVisualState = MediaIconButtonVisualState(
+    isEnabled = enabled && !loading,
+    iconAlpha = if (enabled) 1f else 0.38f,
+)
+
 @Composable
 fun MediaIconButton(
     icon: MediaIcon,
@@ -85,6 +98,7 @@ private fun SemanticIconButton(
     stateDescription: String?,
     tint: Color,
 ) {
+    val visualState = mediaIconButtonVisualState(enabled, loading)
     val effectiveStateDescription = stateDescription ?: if (loading) {
         "正在处理"
     } else {
@@ -92,7 +106,7 @@ private fun SemanticIconButton(
     }
     IconButton(
         onClick = onClick,
-        enabled = enabled && !loading,
+        enabled = visualState.isEnabled,
         modifier = modifier
             .sizeIn(
                 minWidth = MediaTheme.sizing.minimumTouchTarget,
@@ -116,7 +130,7 @@ private fun SemanticIconButton(
             MediaIconImage(
                 icon = icon,
                 contentDescription = null,
-                tint = tint,
+                tint = tint.copy(alpha = tint.alpha * visualState.iconAlpha),
             )
         }
     }
