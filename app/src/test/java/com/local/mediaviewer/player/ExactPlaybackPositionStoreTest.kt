@@ -8,8 +8,12 @@ import org.junit.Test
 
 class ExactPlaybackPositionStoreTest {
     @Test
-    fun `拒绝非当前媒体快照并且不写入位置`() {
+    fun `拒绝非当前媒体快照并保持当前媒体的已有位置`() {
         val store = ExactPlaybackPositionStore()
+        store.accept(
+            "video-b",
+            PlaybackPositionSnapshot("video-b", 12_000L, 60_000L),
+        )
 
         assertFalse(
             store.accept(
@@ -18,20 +22,43 @@ class ExactPlaybackPositionStoreTest {
             ),
         )
 
-        assertEquals(0L, store.positionFor("video-b"))
+        assertEquals(12_000L, store.positionFor("video-b"))
     }
 
     @Test
-    fun `媒体切换时清除旧媒体位置`() {
+    fun `当前媒体切换后拒绝候选会清除旧媒体位置`() {
         val store = ExactPlaybackPositionStore()
         store.accept(
-            "video-b",
-            PlaybackPositionSnapshot("video-b", 12_000L, 60_000L),
+            "video-a",
+            PlaybackPositionSnapshot("video-a", 12_000L, 60_000L),
         )
 
-        assertEquals(12_000L, store.positionFor("video-b"))
-        assertEquals(0L, store.positionFor("video-c"))
-        assertEquals(0L, store.positionFor("video-b"))
+        assertFalse(
+            store.accept(
+                "video-b",
+                PlaybackPositionSnapshot("video-a", 9_000L, 60_000L),
+            ),
+        )
+
+        assertEquals(0L, store.positionFor("video-a"))
+    }
+
+    @Test
+    fun `当前媒体为空后拒绝候选会清除旧媒体位置`() {
+        val store = ExactPlaybackPositionStore()
+        store.accept(
+            "video-a",
+            PlaybackPositionSnapshot("video-a", 12_000L, 60_000L),
+        )
+
+        assertFalse(
+            store.accept(
+                null,
+                PlaybackPositionSnapshot("video-a", 9_000L, 60_000L),
+            ),
+        )
+
+        assertEquals(0L, store.positionFor("video-a"))
     }
 
     @Test

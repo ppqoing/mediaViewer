@@ -10,6 +10,9 @@ internal class ExactPlaybackPositionStore {
         candidate: PlaybackPositionSnapshot,
     ): Boolean {
         if (currentMediaKey == null || candidate.mediaKey != currentMediaKey) {
+            if (currentMediaKey == null || latest?.mediaKey != currentMediaKey) {
+                latest = null
+            }
             return false
         }
         latest = candidate
