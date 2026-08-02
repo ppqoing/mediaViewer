@@ -463,9 +463,9 @@
     "width": 192,
     "height": 192,
     "corner_alpha": 0,
-    "center_dx": 1.0,
-    "center_dy": 1.0,
-    "foreground_ratio": 0.1796332465277778
+    "center_dx": -1.0,
+    "center_dy": -3.0,
+    "foreground_ratio": 0.1725531684027778
   },
   {
     "name": "shuffle",
