@@ -122,7 +122,7 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun `paused video starts playback before refreshing output`() =
+    fun `paused video resumes without refreshing output`() =
         runTest(dispatcher) {
             val controller = FakePlaybackController()
             val viewModel = PlayerViewModel(
@@ -137,8 +137,8 @@ class PlayerViewModelTest {
 
             viewModel.play()
 
-            assertEquals(listOf("play", "refresh"), controller.playCommands)
-            assertEquals(1, controller.refreshVideoOutputCalls)
+            assertEquals(listOf("play"), controller.playCommands)
+            assertEquals(0, controller.refreshVideoOutputCalls)
         }
 
     @Test
@@ -800,7 +800,8 @@ class PlayerViewModelTest {
             runCurrent()
 
             assertEquals(1, controller.playCalls)
-            assertEquals(listOf("play", "refresh"), controller.playCommands)
+            assertEquals(listOf("play"), controller.playCommands)
+            assertEquals(0, controller.refreshVideoOutputCalls)
             assertNull(viewModel.uiState.value.seekSync.pending)
         }
 
