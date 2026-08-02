@@ -82,13 +82,22 @@ class PdfReaderScreenTest {
             ),
         )
 
-        val first = rule.onNodeWithTag("pdf_page_0")
+        val first = rule.onNodeWithTag(
+            "pdf_page_0",
+            useUnmergedTree = true,
+        )
             .assertIsDisplayed()
             .fetchSemanticsNode().boundsInRoot
-        val second = rule.onNodeWithTag("pdf_page_1")
+        val second = rule.onNodeWithTag(
+            "pdf_page_1",
+            useUnmergedTree = true,
+        )
             .assertIsDisplayed()
             .fetchSemanticsNode().boundsInRoot
-        val third = rule.onNodeWithTag("pdf_page_2")
+        val third = rule.onNodeWithTag(
+            "pdf_page_2",
+            useUnmergedTree = true,
+        )
             .assertIsDisplayed()
             .fetchSemanticsNode().boundsInRoot
 
@@ -114,9 +123,15 @@ class PdfReaderScreenTest {
 
         rule.onNodeWithText("第 2 页渲染失败")
             .assertIsDisplayed()
-        rule.onNodeWithTag("pdf_page_0")
+        rule.onNodeWithTag(
+            "pdf_page_0",
+            useUnmergedTree = true,
+        )
             .assertIsDisplayed()
-        rule.onNodeWithTag("pdf_page_2")
+        rule.onNodeWithTag(
+            "pdf_page_2",
+            useUnmergedTree = true,
+        )
             .assertIsDisplayed()
         rule.onNodeWithTag("pdf_page_retry_1")
             .performClick()
@@ -262,7 +277,10 @@ class PdfReaderScreenTest {
         }
 
         val centroidY = 300f
-        val before = rule.onNodeWithTag("pdf_page_1")
+        val before = rule.onNodeWithTag(
+            "pdf_page_1",
+            useUnmergedTree = true,
+        )
             .fetchSemanticsNode().boundsInRoot
         val beforeRatio =
             (centroidY - before.top) / before.height
@@ -287,7 +305,10 @@ class PdfReaderScreenTest {
             }
         rule.waitForIdle()
 
-        val after = rule.onNodeWithTag("pdf_page_1")
+        val after = rule.onNodeWithTag(
+            "pdf_page_1",
+            useUnmergedTree = true,
+        )
             .fetchSemanticsNode().boundsInRoot
         val afterRatio =
             (centroidY - after.top) / after.height
@@ -297,6 +318,7 @@ class PdfReaderScreenTest {
 
     @Test
     fun verticalSwipeStillScrollsWhileTapAndTransformGesturesAreInstalled() {
+        var reportedPageIndex = 0
         rule.setContent {
             var state by remember {
                 mutableStateOf(
@@ -308,6 +330,7 @@ class PdfReaderScreenTest {
                     state = state,
                     onViewportChanged =
                         { page, _, _, _ ->
+                            reportedPageIndex = page
                             state = state.copy(
                                 currentPageIndex = page,
                             )
@@ -324,10 +347,7 @@ class PdfReaderScreenTest {
         rule.onNodeWithTag("pdf_reader_list")
             .performTouchInput { swipeUp() }
         rule.waitUntil(timeoutMillis = 5_000) {
-            runCatching {
-                rule.onNodeWithText("2 / 3")
-                    .fetchSemanticsNode()
-            }.isSuccess
+            reportedPageIndex > 0
         }
         rule.onNodeWithTag("pdf_reader_list")
             .performTouchInput { click(center) }
