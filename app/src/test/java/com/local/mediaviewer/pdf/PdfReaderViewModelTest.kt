@@ -18,6 +18,8 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -165,6 +167,47 @@ class PdfReaderViewModelTest {
             assertEquals(
                 setOf(1 to 900, 2 to 900, 3 to 900),
                 handle.renderRequests.toSet(),
+            )
+        }
+
+    @Test
+    fun `new current page runs before obsolete prefetch after active native render`() =
+        runTest(dispatcher) {
+            val handle = BlockingSerialPdfDocumentHandle(pageCount = 7)
+            val viewModel = loadedViewModel(handle)
+            viewModel.updateViewport(
+                currentPageIndex = 0,
+                visiblePageIndices = setOf(0),
+                viewportWidthPx = 1080,
+                renderScale = 1f,
+            )
+            runCurrent()
+            assertEquals(listOf(0), handle.startedPages)
+
+            viewModel.updateViewport(
+                currentPageIndex = 5,
+                visiblePageIndices = setOf(5),
+                viewportWidthPx = 1080,
+                renderScale = 1f,
+            )
+            runCurrent()
+            handle.releaseFirstRender.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(listOf(0, 5), handle.startedPages.take(2))
+            assertFalse(1 in handle.startedPages)
+            val oldBitmap = handle.bitmaps.getValue(0 to 1080)
+            val currentBitmap = handle.bitmaps.getValue(5 to 1080)
+            val content = viewModel.uiState.value as PdfReaderUiState.Content
+            assertTrue(oldBitmap.isRecycled)
+            assertNull(content.pages[0]?.bitmap)
+            assertSame(currentBitmap, content.pages.getValue(5).bitmap)
+            assertFalse(currentBitmap.isRecycled)
+            assertTrue(
+                handle.bitmaps
+                    .filterKeys { it.first != 0 }
+                    .values
+                    .none(Bitmap::isRecycled),
             )
         }
 
@@ -375,7 +418,7 @@ class PdfReaderViewModelTest {
         }
 
     private suspend fun loadedViewModel(
-        handle: FakePdfDocumentHandle,
+        handle: PdfDocumentHandle,
         files: FakePdfTemporaryFileRepository = FakePdfTemporaryFileRepository(),
         bitmapCacheBytes: Int = 32 * 1024 * 1024,
     ): PdfReaderViewModel {
@@ -402,6 +445,35 @@ class PdfReaderViewModelTest {
         dispatchers = dispatchers,
         bitmapCacheBytes = bitmapCacheBytes,
     )
+}
+
+private class BlockingSerialPdfDocumentHandle(
+    override val pageCount: Int,
+) : PdfDocumentHandle {
+    override val pageSizes = (0 until pageCount).map { pageIndex ->
+        PdfPageSize(pageIndex, 600, 800)
+    }
+    private val nativeRender = Mutex()
+    val releaseFirstRender = CompletableDeferred<Unit>()
+    val startedPages = mutableListOf<Int>()
+    val bitmaps = mutableMapOf<Pair<Int, Int>, Bitmap>()
+
+    override suspend fun renderPage(
+        pageIndex: Int,
+        targetWidthPx: Int,
+    ): AppResult<Bitmap> = nativeRender.withLock {
+        startedPages += pageIndex
+        if (startedPages.size == 1) releaseFirstRender.await()
+        val bitmap = Bitmap.createBitmap(
+            targetWidthPx,
+            1,
+            Bitmap.Config.ARGB_8888,
+        )
+        bitmaps[pageIndex to targetWidthPx] = bitmap
+        AppResult.Success(bitmap)
+    }
+
+    override fun close() = Unit
 }
 
 private const val FILE_NAME = "示例.pdf"

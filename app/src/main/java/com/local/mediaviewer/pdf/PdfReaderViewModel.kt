@@ -9,11 +9,12 @@ import com.local.mediaviewer.core.DispatcherProvider
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,8 +35,7 @@ class PdfReaderViewModel(
     )
     val uiState: StateFlow<PdfReaderUiState> = mutableUiState.asStateFlow()
 
-    private val renderJobs = mutableMapOf<Int, Job>()
-    private val requestedWidths = mutableMapOf<Int, Int>()
+    private val pendingRenders = mutableMapOf<Int, ScheduledRender>()
     private val pageRequestIds = mutableMapOf<Int, Long>()
     private val pageRequests = mutableMapOf<Int, PageRequest>()
     private val cleanupScope = CoroutineScope(SupervisorJob() + dispatchers.main)
@@ -49,7 +49,10 @@ class PdfReaderViewModel(
     private var document: PdfDocumentHandle? = null
     private var generation = 0L
     private var nextPageRequestId = 0L
+    private var nextRenderSequence = 0L
     private var closed = false
+    private var activeRender: ScheduledRender? = null
+    private var renderPumpJob: Job? = null
     private var viewportPageIndices = emptySet<Int>()
     private var preservedBitmaps = emptyMap<Int, Bitmap>()
 
@@ -77,24 +80,43 @@ class PdfReaderViewModel(
         val targetWidthPx = (
             viewportWidthPx * renderScale.coerceIn(1f, 2f)
             ).roundToInt().coerceAtLeast(1)
-        val pagesToRender = buildSet {
-            (visiblePageIndices + safeCurrentPageIndex)
-                .filter { it in 0..lastPageIndex }
-                .forEach { pageIndex ->
-                    add(pageIndex)
-                    if (pageIndex > 0) add(pageIndex - 1)
-                    if (pageIndex < lastPageIndex) add(pageIndex + 1)
-                }
+        val visiblePages = visiblePageIndices
+            .filter { it in 0..lastPageIndex }
+        val primaryPages = buildList {
+            add(safeCurrentPageIndex)
+            visiblePages.forEach { pageIndex ->
+                if (pageIndex != safeCurrentPageIndex) add(pageIndex)
+            }
         }
-        viewportPageIndices = pagesToRender
-        pagesToRender.forEach { pageIndex ->
+        val neighborPages = buildList {
+            primaryPages.forEach { pageIndex ->
+                if (pageIndex > 0) add(pageIndex - 1)
+                if (pageIndex < lastPageIndex) add(pageIndex + 1)
+            }
+        }.filter { it !in primaryPages }.distinct()
+        val orderedPages = primaryPages + neighborPages
+        viewportPageIndices = orderedPages.toSet()
+        replaceViewportQueue(
+            desiredPages = viewportPageIndices,
+            targetWidthPx = targetWidthPx,
+        )
+        orderedPages.forEach { pageIndex ->
             val request = PageRequest(
                 viewportWidthPx = viewportWidthPx,
                 targetWidthPx = targetWidthPx,
             )
             pageRequests[pageIndex] = request
-            requestPage(pageIndex, request)
+            requestPage(
+                pageIndex = pageIndex,
+                request = request,
+                priority = when {
+                    pageIndex == safeCurrentPageIndex -> 0
+                    pageIndex in visiblePages -> 1
+                    else -> 2
+                },
+            )
         }
+        startRenderPump()
     }
 
     fun retryDocument() {
@@ -108,7 +130,13 @@ class PdfReaderViewModel(
         val page = content.pages[pageIndex] ?: return
         if (page.errorMessage == null) return
         val request = pageRequests[pageIndex] ?: return
-        requestPage(pageIndex, request, force = true)
+        requestPage(
+            pageIndex = pageIndex,
+            request = request,
+            priority = if (pageIndex == content.currentPageIndex) 0 else 1,
+            force = true,
+        )
+        startRenderPump()
     }
 
     internal fun closeForTest() {
@@ -195,6 +223,7 @@ class PdfReaderViewModel(
     private fun requestPage(
         pageIndex: Int,
         request: PageRequest,
+        priority: Int,
         force: Boolean = false,
     ) {
         val content = mutableUiState.value as? PdfReaderUiState.Content ?: return
@@ -208,11 +237,28 @@ class PdfReaderViewModel(
             bitmapCache.get(pageIndex)
             return
         }
-        val pendingWidth = requestedWidths[pageIndex]
-        if (!force && pendingWidth != null && pendingWidth >= request.targetWidthPx) return
-
-        renderJobs.remove(pageIndex)?.cancel()
-        requestedWidths[pageIndex] = request.targetWidthPx
+        val active = activeRender?.takeIf { it.pageIndex == pageIndex }
+        if (
+            !force &&
+            active != null &&
+            pageRequestIds[pageIndex] == active.pageRequestId &&
+            active.request.targetWidthPx >= request.targetWidthPx
+        ) {
+            return
+        }
+        val pending = pendingRenders[pageIndex]
+        if (
+            !force &&
+            pending != null &&
+            pending.request.targetWidthPx == request.targetWidthPx
+        ) {
+            pendingRenders[pageIndex] = pending.copy(
+                priority = priority,
+                sequence = ++nextRenderSequence,
+            )
+            return
+        }
+        invalidateRequest(pageIndex)
         val pageRequestId = ++nextPageRequestId
         pageRequestIds[pageIndex] = pageRequestId
         setPageState(
@@ -221,68 +267,125 @@ class PdfReaderViewModel(
         )
         val renderGeneration = generation
         val renderDocument = document ?: return
-        val job = viewModelScope.launch(
-            context = dispatchers.main,
-            start = CoroutineStart.LAZY,
-        ) {
-            try {
-                val initialResult = withContext(NonCancellable) {
-                    renderDocument.renderPage(
-                        pageIndex = pageIndex,
-                        targetWidthPx = request.targetWidthPx,
-                    )
-                }
-                if (
-                    !isCurrent(renderGeneration) ||
-                    document !== renderDocument ||
-                    pageRequestIds[pageIndex] != pageRequestId
-                ) {
-                    recycleSuccess(initialResult)
-                    return@launch
-                }
-                val result = if (
-                    initialResult is AppResult.Failure &&
-                    request.targetWidthPx > request.viewportWidthPx
-                ) {
-                    clearDistantBitmaps()
-                    withContext(NonCancellable) {
-                        renderDocument.renderPage(
-                            pageIndex = pageIndex,
-                            targetWidthPx = request.viewportWidthPx,
-                        )
-                    }
-                } else {
-                    initialResult
-                }
-                val renderedWidthPx = if (
-                    initialResult is AppResult.Failure &&
-                    request.targetWidthPx > request.viewportWidthPx
-                ) {
-                    request.viewportWidthPx
-                } else {
-                    request.targetWidthPx
-                }
-                publishRenderResult(
-                    pageIndex = pageIndex,
-                    renderedWidthPx = renderedWidthPx,
-                    renderGeneration = renderGeneration,
-                    renderDocument = renderDocument,
-                    pageRequestId = pageRequestId,
-                    result = result,
-                )
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } finally {
-                if (pageRequestIds[pageIndex] == pageRequestId) {
-                    requestedWidths.remove(pageIndex)
-                    pageRequestIds.remove(pageIndex)
-                    renderJobs.remove(pageIndex)
-                }
+        pendingRenders[pageIndex] = ScheduledRender(
+            pageIndex = pageIndex,
+            request = request,
+            priority = priority,
+            sequence = ++nextRenderSequence,
+            renderGeneration = renderGeneration,
+            renderDocument = renderDocument,
+            pageRequestId = pageRequestId,
+        )
+    }
+
+    private fun replaceViewportQueue(
+        desiredPages: Set<Int>,
+        targetWidthPx: Int,
+    ) {
+        pendingRenders.keys.toList().forEach(::invalidateRequest)
+        activeRender?.let { active ->
+            if (
+                active.pageIndex !in desiredPages ||
+                active.request.targetWidthPx < targetWidthPx
+            ) {
+                invalidateRequest(active.pageIndex)
             }
         }
-        renderJobs[pageIndex] = job
-        job.start()
     }
+
+    private fun invalidateRequest(pageIndex: Int) {
+        pendingRenders.remove(pageIndex)
+        pageRequestIds.remove(pageIndex)
+        val page = currentPageState(pageIndex)
+        if (page.isLoading) {
+            setPageState(pageIndex, page.copy(isLoading = false))
+        }
+    }
+
+    private fun startRenderPump() {
+        if (renderPumpJob?.isActive == true || pendingRenders.isEmpty()) return
+        renderPumpJob = viewModelScope.launch(dispatchers.main) {
+            try {
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    val scheduled = pendingRenders.values.minWithOrNull(
+                        compareBy<ScheduledRender> { it.priority }
+                            .thenBy { it.sequence },
+                    ) ?: break
+                    pendingRenders.remove(scheduled.pageIndex)
+                    activeRender = scheduled
+                    renderScheduled(scheduled)
+                    if (activeRender?.pageRequestId == scheduled.pageRequestId) {
+                        activeRender = null
+                    }
+                }
+            } finally {
+                renderPumpJob = null
+                activeRender = null
+            }
+        }
+    }
+
+    private suspend fun renderScheduled(scheduled: ScheduledRender) {
+        var unclaimedResult: AppResult<Bitmap>? = null
+        try {
+            withContext(NonCancellable) {
+                unclaimedResult = scheduled.renderDocument.renderPage(
+                    pageIndex = scheduled.pageIndex,
+                    targetWidthPx = scheduled.request.targetWidthPx,
+                )
+            }
+            val initialResult = checkNotNull(unclaimedResult)
+            if (!isScheduledRequestCurrent(scheduled)) {
+                return
+            }
+            currentCoroutineContext().ensureActive()
+            val result = if (
+                initialResult is AppResult.Failure &&
+                scheduled.request.targetWidthPx > scheduled.request.viewportWidthPx
+            ) {
+                clearDistantBitmaps()
+                withContext(NonCancellable) {
+                    unclaimedResult = scheduled.renderDocument.renderPage(
+                        pageIndex = scheduled.pageIndex,
+                        targetWidthPx = scheduled.request.viewportWidthPx,
+                    )
+                }
+                checkNotNull(unclaimedResult)
+            } else {
+                initialResult
+            }
+            val renderedWidthPx = if (
+                initialResult is AppResult.Failure &&
+                scheduled.request.targetWidthPx > scheduled.request.viewportWidthPx
+            ) {
+                scheduled.request.viewportWidthPx
+            } else {
+                scheduled.request.targetWidthPx
+            }
+            publishRenderResult(
+                pageIndex = scheduled.pageIndex,
+                renderedWidthPx = renderedWidthPx,
+                renderGeneration = scheduled.renderGeneration,
+                renderDocument = scheduled.renderDocument,
+                pageRequestId = scheduled.pageRequestId,
+                result = result,
+            )
+            unclaimedResult = null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } finally {
+            unclaimedResult?.let(::recycleSuccess)
+            if (pageRequestIds[scheduled.pageIndex] == scheduled.pageRequestId) {
+                pageRequestIds.remove(scheduled.pageIndex)
+            }
+        }
+    }
+
+    private fun isScheduledRequestCurrent(scheduled: ScheduledRender): Boolean =
+        isCurrent(scheduled.renderGeneration) &&
+            document === scheduled.renderDocument &&
+            pageRequestIds[scheduled.pageIndex] == scheduled.pageRequestId
 
     private fun publishRenderResult(
         pageIndex: Int,
@@ -375,14 +478,15 @@ class PdfReaderViewModel(
     }
 
     private fun cancelRenderJobs(): List<Job> {
-        val jobs = renderJobs.values.toList()
-        jobs.forEach(Job::cancel)
-        renderJobs.clear()
-        requestedWidths.clear()
-        pageRequestIds.clear()
+        val renderJob = renderPumpJob
+        renderJob?.cancel()
+        (pendingRenders.keys + listOfNotNull(activeRender?.pageIndex))
+            .toSet()
+            .forEach(::invalidateRequest)
+        pendingRenders.clear()
         pageRequests.clear()
         viewportPageIndices = emptySet()
-        return jobs
+        return listOfNotNull(renderJob)
     }
 
     private suspend fun releaseDocumentResources() {
@@ -424,6 +528,16 @@ class PdfReaderViewModel(
     private data class PageRequest(
         val viewportWidthPx: Int,
         val targetWidthPx: Int,
+    )
+
+    private data class ScheduledRender(
+        val pageIndex: Int,
+        val request: PageRequest,
+        val priority: Int,
+        val sequence: Long,
+        val renderGeneration: Long,
+        val renderDocument: PdfDocumentHandle,
+        val pageRequestId: Long,
     )
 }
 
