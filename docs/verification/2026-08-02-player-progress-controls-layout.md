@@ -96,3 +96,5 @@ assembleDebug
 - arm64 真机安装和播放：**NOT RUN**
 
 构建脚本要求干净工作树。构建前只临时 stash 精确列出的 17 个未跟踪文件；构建完成后已恢复全部文件并删除临时 stash。旧同名 APK 和 `.sha256` 被本次已确认的 Release 产物替换，其他 `dist` 文件未删除或移动。
+
+`19fb089` 的会话侧修复未覆盖 MediaController 客户端外推，后续修复及结果见新文档。
