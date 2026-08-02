@@ -53,6 +53,7 @@ androidx-media3-common = { module = "androidx.media3:media3-common", version.ref
 androidx-media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-gif = { module = "io.coil-kt.coil3:coil-gif", version.ref = "coil" }
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
 libvlc = { module = "org.videolan.android:libvlc-all", version.ref = "libvlc" }
 junit4 = { module = "junit:junit", version.ref = "junit4" }

@@ -2,6 +2,7 @@ package com.local.mediaviewer.image
 
 import android.content.Context
 import coil3.ImageLoader
+import coil3.gif.AnimatedImageDecoder
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.CachePolicy
@@ -26,6 +27,7 @@ object MediaImageLoaderFactory {
             .diskCache(null)
             .diskCachePolicy(CachePolicy.DISABLED)
             .components {
+                add(AnimatedImageDecoder.Factory())
                 add(
                     OkHttpNetworkFetcherFactory(
                         callFactory = { callFactory },
