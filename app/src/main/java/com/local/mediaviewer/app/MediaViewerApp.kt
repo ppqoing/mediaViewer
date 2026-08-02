@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,6 +56,9 @@ import com.local.mediaviewer.navigation.ImageReaderRoute
 import com.local.mediaviewer.navigation.PLAYER_ENTRY_WAIT_TIMEOUT_MS
 import com.local.mediaviewer.navigation.PlayerEntryState
 import com.local.mediaviewer.navigation.PlayerRoute
+import com.local.mediaviewer.navigation.PlayerRouteExitAction
+import com.local.mediaviewer.navigation.PlayerRouteLifecyclePolicy
+import com.local.mediaviewer.navigation.PlayerRouteLifecycleState
 import com.local.mediaviewer.navigation.SettingsRoute
 import com.local.mediaviewer.navigation.leavePlayerSafely
 import com.local.mediaviewer.navigation.resolvePlayerEntryState
@@ -500,6 +504,48 @@ fun MediaViewerApp(
             var waitExpired by rememberSaveable(route.mediaKey) {
                 mutableStateOf(false)
             }
+            var lastPresentedMediaKind by rememberSaveable(entry.id) {
+                mutableStateOf<MediaKind?>(null)
+            }
+            var videoBackgroundPlaybackEnabled by rememberSaveable(entry.id) {
+                mutableStateOf(false)
+            }
+            val routeLifecycleState = PlayerRouteLifecycleState(
+                lastPresentedKind = lastPresentedMediaKind,
+            )
+            val latestVideoBackgroundLifecycleState by rememberUpdatedState(
+                videoBackgroundLifecycleState,
+            )
+            val latestActiveVideoEntryId by rememberUpdatedState(
+                activeVideoEntryId,
+            )
+
+            DisposableEffect(entry.id) {
+                onDispose {
+                    videoBackgroundLifecycleState =
+                        VideoBackgroundPlaybackPolicy.clearPending(
+                            latestVideoBackgroundLifecycleState,
+                        )
+                    if (latestActiveVideoEntryId == entry.id) {
+                        activeVideoEntryId = null
+                        activeVideoBackgroundPlaybackEnabled = false
+                    }
+                }
+            }
+
+            val leaveBootstrap = {
+                if (
+                    PlayerRouteLifecyclePolicy.exitAction(routeLifecycleState) ==
+                    PlayerRouteExitAction.STOP_AND_CLEAR
+                ) {
+                    videoBackgroundLifecycleState =
+                        VideoBackgroundPlaybackPolicy.clearPending(
+                            videoBackgroundLifecycleState,
+                        )
+                    playbackController.clearAll()
+                }
+                navController.leavePlayerSafely()
+            }
 
             // 有限等待随 destination 离开而取消：
             // Connecting 中返回后不再由 timeout 触发导航。
@@ -520,10 +566,11 @@ fun MediaViewerApp(
             ) {
                 is PlayerEntryState.Ready -> {
                     val item = playerEntryState.item
-                    var videoBackgroundPlaybackEnabled by
-                        rememberSaveable(entry.id) {
-                            mutableStateOf(false)
-                        }
+                    val readyRouteLifecycleState =
+                        PlayerRouteLifecyclePolicy.observeCurrentItem(
+                            state = routeLifecycleState,
+                            currentKind = item.kind,
+                        )
                     LaunchedEffect(item.mediaKey) {
                         hasPresentedItem = true
                     }
@@ -557,28 +604,42 @@ fun MediaViewerApp(
                             fullscreenController.close()
                         }
                     }
-                    val leave = {
-                        player.leave {
-                            navController.leavePlayerSafely()
-                        }
-                    }
-
-                    if (state.kind == MediaKind.VIDEO) {
-                        SideEffect {
+                    SideEffect {
+                        lastPresentedMediaKind =
+                            readyRouteLifecycleState.lastPresentedKind
+                        if (
+                            readyRouteLifecycleState.lastPresentedKind ==
+                            MediaKind.VIDEO
+                        ) {
                             activeVideoEntryId = entry.id
                             activeVideoBackgroundPlaybackEnabled =
                                 videoBackgroundPlaybackEnabled
+                        } else if (activeVideoEntryId == entry.id) {
+                            videoBackgroundLifecycleState =
+                                VideoBackgroundPlaybackPolicy.clearPending(
+                                    videoBackgroundLifecycleState,
+                                )
+                            activeVideoEntryId = null
+                            activeVideoBackgroundPlaybackEnabled = false
                         }
-                        DisposableEffect(entry.id) {
-                            onDispose {
-                                videoBackgroundLifecycleState =
-                                    VideoBackgroundPlaybackPolicy.clearPending(
-                                        videoBackgroundLifecycleState,
-                                    )
-                                if (activeVideoEntryId == entry.id) {
-                                    activeVideoEntryId = null
-                                    activeVideoBackgroundPlaybackEnabled = false
-                                }
+                    }
+
+                    val leave = {
+                        if (
+                            PlayerRouteLifecyclePolicy.exitAction(
+                                readyRouteLifecycleState,
+                            ) == PlayerRouteExitAction.STOP_AND_CLEAR
+                        ) {
+                            videoBackgroundLifecycleState =
+                                VideoBackgroundPlaybackPolicy.clearPending(
+                                    videoBackgroundLifecycleState,
+                                )
+                            player.stopAndClear {
+                                navController.leavePlayerSafely()
+                            }
+                        } else {
+                            player.leave {
+                                navController.leavePlayerSafely()
                             }
                         }
                     }
@@ -607,22 +668,6 @@ fun MediaViewerApp(
                             onBack = leave,
                         )
                     } else {
-                        val leaveVideo = {
-                            videoBackgroundLifecycleState =
-                                VideoBackgroundPlaybackPolicy.clearPending(
-                                    videoBackgroundLifecycleState,
-                                )
-                            if (
-                                VideoBackgroundPlaybackPolicy
-                                    .shouldStopAndClear(
-                                        VideoSessionExitReason.NAVIGATE_AWAY,
-                                    )
-                            ) {
-                                player.stopAndClear {
-                                    navController.leavePlayerSafely()
-                                }
-                            }
-                        }
                         val brightnessController = remember(activity) {
                             WindowBrightnessController(activity)
                         }
@@ -660,7 +705,7 @@ fun MediaViewerApp(
                             onResumeHintShown = player::onResumeHintShown,
                             onVideoScaleModeChanged =
                                 player::setVideoScaleMode,
-                            onBack = leaveVideo,
+                            onBack = leave,
                         )
                     }
                 }
@@ -672,12 +717,12 @@ fun MediaViewerApp(
                     PlayerBootstrapContent(
                         state = playerEntryState,
                         onReconnect = playbackController::reconnect,
-                        onBack = { navController.leavePlayerSafely() },
+                        onBack = leaveBootstrap,
                     )
                     if (playerEntryState == PlayerEntryState.Empty) {
                         // 当前项由非空变空：单次安全退出，effect 只执行一次。
                         LaunchedEffect(playerEntryState) {
-                            navController.leavePlayerSafely()
+                            leaveBootstrap()
                         }
                     }
                 }
