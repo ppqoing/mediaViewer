@@ -38,6 +38,10 @@ class PlaybackSessionCallback(
         ACTION_RETRY_PERSISTENCE,
         Bundle.EMPTY,
     )
+    private val exactPositionCommand = SessionCommand(
+        ACTION_GET_EXACT_PLAYBACK_POSITION,
+        Bundle.EMPTY,
+    )
 
     override fun onConnect(
         mediaSession: MediaSession,
@@ -50,6 +54,7 @@ class PlaybackSessionCallback(
                     .add(stopAndReleaseCommand)
                     .add(reloadCurrentCommand)
                     .add(retryPersistenceCommand)
+                    .add(exactPositionCommand)
                     .build(),
             )
             .build()
@@ -93,6 +98,21 @@ class PlaybackSessionCallback(
             ACTION_RETRY_PERSISTENCE -> scope.future {
                 coordinator.saveCurrentSnapshot()
                 SessionResult(SessionResult.RESULT_SUCCESS)
+            }
+
+            ACTION_GET_EXACT_PLAYBACK_POSITION -> {
+                val snapshot = coordinator.sessionState.value
+                    .toPlaybackPositionSnapshot()
+                Futures.immediateFuture(
+                    if (snapshot == null) {
+                        SessionResult(SessionResult.RESULT_ERROR_INVALID_STATE)
+                    } else {
+                        SessionResult(
+                            SessionResult.RESULT_SUCCESS,
+                            PlaybackPositionSnapshotCodec.encode(snapshot),
+                        )
+                    },
+                )
             }
 
             else -> Futures.immediateFuture(

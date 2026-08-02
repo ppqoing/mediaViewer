@@ -48,6 +48,10 @@ internal class ServiceTestEngine : PlaybackEngine {
     var playCalls = 0
     var refreshVideoOutputCalls = 0
 
+    fun emit(state: PlaybackState) {
+        mutableState.value = state
+    }
+
     override fun prepare(url: String) {
         prepareCalls += 1
     }

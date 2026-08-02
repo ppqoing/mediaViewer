@@ -8,6 +8,8 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import androidx.test.core.app.ApplicationProvider
+import com.local.mediaviewer.playback.PlaybackState
+import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.queue.PlaybackQueue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
@@ -291,6 +293,58 @@ class PlaybackSessionCallbackTest {
             fixture.player.release()
             coordinator.close()
         }
+    }
+
+    @Test
+    fun `exact position command returns coordinator snapshot and rejects empty queue`() = runTest {
+        val engine = ServiceTestEngine()
+        val coordinator = serviceTestCoordinator(scope = this, engine = engine)
+        val callback = PlaybackSessionCallback(coordinator, this)
+        val sessionFixture = mediaSession(coordinator, this)
+        val controller = controllerInfo()
+        val command = SessionCommand(ACTION_GET_EXACT_PLAYBACK_POSITION, Bundle.EMPTY)
+
+        assertTrue(
+            callback.onConnect(sessionFixture.session, controller)
+                .availableSessionCommands.contains(command),
+        )
+        assertEquals(
+            SessionResult.RESULT_ERROR_INVALID_STATE,
+            callback.onCustomCommand(
+                sessionFixture.session,
+                controller,
+                command,
+                Bundle.EMPTY,
+            ).get().resultCode,
+        )
+
+        coordinator.replaceQueue(listOf(serviceTestItem("video-a")), "video-a")
+        advanceUntilIdle()
+        engine.emit(
+            PlaybackState(
+                status = PlaybackStatus.PLAYING,
+                positionMs = 12_500L,
+                durationMs = 60_000L,
+                isSeekable = true,
+            ),
+        )
+        advanceUntilIdle()
+
+        val result = callback.onCustomCommand(
+            sessionFixture.session,
+            controller,
+            command,
+            Bundle.EMPTY,
+        ).get()
+        assertEquals(SessionResult.RESULT_SUCCESS, result.resultCode)
+        assertEquals(
+            PlaybackPositionSnapshot("video-a", 12_500L, 60_000L),
+            PlaybackPositionSnapshotCodec.decode(result.extras),
+        )
+
+        sessionFixture.session.release()
+        sessionFixture.player.release()
+        coordinator.close()
     }
 
     private fun mediaSession(
