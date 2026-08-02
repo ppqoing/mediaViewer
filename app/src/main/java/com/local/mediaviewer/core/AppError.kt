@@ -53,4 +53,24 @@ sealed interface AppError {
     data object ImageLoadFailure : AppError {
         override val userMessage = "图片加载失败"
     }
+
+    data object PdfCacheSpaceInsufficient : AppError {
+        override val userMessage = "缓存空间不足，无法打开 PDF"
+    }
+
+    data class PdfCacheFailure(val detail: String) : AppError {
+        override val userMessage = "PDF 临时文件写入失败：$detail"
+    }
+
+    data object InvalidPdfDocument : AppError {
+        override val userMessage = "PDF 文件无效或已损坏"
+    }
+
+    data object EncryptedPdfDocument : AppError {
+        override val userMessage = "当前版本暂不支持加密 PDF"
+    }
+
+    data class PdfPageRenderFailure(val pageNumber: Int) : AppError {
+        override val userMessage = "第 $pageNumber 页渲染失败"
+    }
 }
