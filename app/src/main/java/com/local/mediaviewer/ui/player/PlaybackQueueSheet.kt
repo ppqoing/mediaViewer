@@ -582,6 +582,7 @@ private fun QueueMediaItem.compactSubtitle(): String {
         MediaKind.VIDEO -> "视频"
         MediaKind.AUDIO -> "音频"
         MediaKind.IMAGE -> "图片"
+        MediaKind.PDF -> "PDF"
         MediaKind.UNKNOWN -> "文件"
     }
     val finalPathSegment = runCatching {

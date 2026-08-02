@@ -223,7 +223,9 @@ private fun BrowserFilterChips(
     onFilterSelected: (BrowserFilter) -> Unit,
 ) {
     LazyRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("browser_filter_list"),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
             horizontal = MediaTheme.spacing.md,
         ),
@@ -278,6 +280,7 @@ private val BrowserFilter.label: String
         BrowserFilter.AUDIO -> "音频"
         BrowserFilter.IMAGE -> "图片"
         BrowserFilter.GIF -> "动图"
+        BrowserFilter.PDF -> "PDF"
     }
 
 private val BrowserFilter.icon: MediaIcon?
@@ -288,6 +291,7 @@ private val BrowserFilter.icon: MediaIcon?
         BrowserFilter.AUDIO -> MediaIcons.Audio
         BrowserFilter.IMAGE -> MediaIcons.Image
         BrowserFilter.GIF -> MediaIcons.Gif
+        BrowserFilter.PDF -> MediaIcons.Pdf
     }
 
 private val BrowserFilter.testTag: String
@@ -298,6 +302,7 @@ private val BrowserFilter.testTag: String
         BrowserFilter.AUDIO -> "browser_filter_audio"
         BrowserFilter.IMAGE -> "browser_filter_image"
         BrowserFilter.GIF -> "browser_filter_gif"
+        BrowserFilter.PDF -> "browser_filter_pdf"
     }
 
 @Composable

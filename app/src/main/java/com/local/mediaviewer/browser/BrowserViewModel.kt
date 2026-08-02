@@ -61,7 +61,7 @@ class BrowserViewModel(
         val current = pages.lastOrNull() ?: return
         if (entry.kind != MediaKind.DIRECTORY) {
             viewModelScope.launch {
-                if (entry.kind == MediaKind.IMAGE) {
+                if (entry.kind == MediaKind.IMAGE || entry.kind == MediaKind.PDF) {
                     mutableMediaLaunches.emit(
                         MediaLaunchRequest(
                             name = entry.name,

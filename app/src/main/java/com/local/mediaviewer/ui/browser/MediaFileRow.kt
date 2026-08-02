@@ -124,6 +124,7 @@ private val DirectoryEntry.icon: MediaIcon
             MediaKind.VIDEO -> MediaIcons.Video
             MediaKind.AUDIO -> MediaIcons.Audio
             MediaKind.IMAGE -> MediaIcons.Image
+            MediaKind.PDF -> MediaIcons.Pdf
             MediaKind.UNKNOWN -> MediaIcons.UnknownFile
         }
     }
@@ -137,6 +138,7 @@ private val DirectoryEntry.contentDescription: String
             MediaKind.VIDEO -> "视频"
             MediaKind.AUDIO -> "音频"
             MediaKind.IMAGE -> "图片"
+            MediaKind.PDF -> "PDF 文档"
             MediaKind.UNKNOWN -> "文件"
         }
     }
@@ -147,6 +149,7 @@ private val MediaKind.tint: Color
         MediaKind.VIDEO -> MediaTheme.extendedColors.video
         MediaKind.AUDIO -> MediaTheme.extendedColors.audio
         MediaKind.IMAGE -> MediaTheme.extendedColors.image
+        MediaKind.PDF -> MaterialTheme.colorScheme.error
         MediaKind.UNKNOWN -> MediaTheme.extendedColors.unknown
     }
 

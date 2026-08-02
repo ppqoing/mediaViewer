@@ -10,6 +10,7 @@ class MediaClassifierTest {
         assertEquals(MediaKind.VIDEO, MediaClassifier.classify("电影.MKV", false))
         assertEquals(MediaKind.AUDIO, MediaClassifier.classify("音轨.FlAc", false))
         assertEquals(MediaKind.IMAGE, MediaClassifier.classify("海报.WeBp", false))
+        assertEquals(MediaKind.PDF, MediaClassifier.classify("说明书.PdF", false))
         assertEquals(MediaKind.UNKNOWN, MediaClassifier.classify("archive.bin", false))
         assertEquals(MediaKind.UNKNOWN, MediaClassifier.classify("README", false))
         assertEquals(MediaKind.DIRECTORY, MediaClassifier.classify("folder.mp4", true))

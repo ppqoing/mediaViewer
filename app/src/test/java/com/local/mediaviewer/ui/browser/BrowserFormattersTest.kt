@@ -44,6 +44,7 @@ class BrowserFormattersTest {
         val audio = browserEntry("song.flac", MediaKind.AUDIO)
         val image = browserEntry("cover.jpg", MediaKind.IMAGE)
         val gif = browserEntry("motion.GIF", MediaKind.IMAGE)
+        val pdf = browserEntry("manual.pdf", MediaKind.PDF)
 
         assertTrue(BrowserFilter.ALL.accepts(folder))
         assertTrue(BrowserFilter.ALL.accepts(video))
@@ -57,6 +58,9 @@ class BrowserFormattersTest {
         assertFalse(BrowserFilter.IMAGE.accepts(gif))
         assertTrue(BrowserFilter.GIF.accepts(gif))
         assertFalse(BrowserFilter.GIF.accepts(image))
+        assertTrue(BrowserFilter.PDF.accepts(pdf))
+        assertFalse(BrowserFilter.PDF.accepts(image))
+        assertTrue(BrowserFilter.ALL.accepts(pdf))
     }
 }
 

@@ -28,6 +28,7 @@ object MediaIcons {
     val Audio = MediaIcon(R.drawable.ic_wp_audio)
     val Image = MediaIcon(R.drawable.ic_wp_image)
     val Gif = MediaIcon(R.drawable.ic_wp_gif)
+    val Pdf = MediaIcon(R.drawable.ic_wp_pdf)
     val UnknownFile = MediaIcon(R.drawable.ic_wp_unknown_file)
     val ReaderMode = MediaIcon(R.drawable.ic_wp_reader_mode)
     val PlayNow = MediaIcon(R.drawable.ic_wp_play_now)
@@ -43,7 +44,7 @@ object MediaIcons {
     val all = listOf(
         Back, Forward, Home, ChevronRight, More, Close, Search, Refresh, Settings, Add,
         Recent, Grid, Check, Info, Error, Offline, Empty, Connected, Sort,
-        NetworkShare, Folder, Video, Audio, Image, Gif, UnknownFile, ReaderMode, PlayNow,
+        NetworkShare, Folder, Video, Audio, Image, Gif, Pdf, UnknownFile, ReaderMode, PlayNow,
         PlayNext, AddQueue, ZoomOut, ZoomIn, FitScreen, ImageMode, GifMode, ComicMode,
     )
 }

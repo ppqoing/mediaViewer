@@ -8,5 +8,6 @@ enum class MediaKind {
     VIDEO,
     AUDIO,
     IMAGE,
+    PDF,
     UNKNOWN,
 }

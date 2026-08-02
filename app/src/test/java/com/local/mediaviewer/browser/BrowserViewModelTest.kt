@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -51,6 +52,12 @@ class BrowserViewModelTest {
             requestUrl = "http://192.0.2.1:8080/middle/sub/page.png",
             kind = MediaKind.IMAGE,
         )
+        val pdf = entry(
+            name = "manual.pdf",
+            logicalUrl = "${subUrl}manual.pdf",
+            requestUrl = "http://192.0.2.1:8080/middle/sub/manual.pdf",
+            kind = MediaKind.PDF,
+        )
         val video = entry(
             name = "movie.mp4",
             logicalUrl = "${subUrl}movie.mp4",
@@ -75,7 +82,7 @@ class BrowserViewModelTest {
         )
         val subPage = page(
             subUrl,
-            listOf(directory, image, video, audio, unknown),
+            listOf(directory, image, pdf, video, audio, unknown),
             listOf(
                 Breadcrumb("MiddleDir", rootUrl),
                 Breadcrumb("sub", subUrl),
@@ -113,6 +120,22 @@ class BrowserViewModelTest {
             subUrl,
             imageLaunch.directoryLogicalUrl,
         )
+
+        var playbackRequestCount = 0
+        val playbackJob = backgroundScope.launch {
+            viewModel.playbackRequests.collect {
+                playbackRequestCount += 1
+            }
+        }
+        val mediaLaunchDeferred = async { viewModel.mediaLaunches.first() }
+        runCurrent()
+        viewModel.open(pdf)
+        val launch = mediaLaunchDeferred.await()
+        assertEquals(MediaKind.PDF, launch.kind)
+        assertEquals(pdf.logicalUrl, launch.logicalUrl)
+        assertEquals(subUrl, launch.directoryLogicalUrl)
+        assertEquals(0, playbackRequestCount)
+        playbackJob.cancel()
 
         viewModel.openBreadcrumb(0)
         assertEquals(rootUrl, currentPage(viewModel).logicalDirectoryUrl)

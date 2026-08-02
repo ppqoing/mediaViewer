@@ -5,12 +5,14 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -279,6 +281,33 @@ class BrowserScreenTest {
         rule.onNodeWithTag("browser_filter_video").performClick()
         rule.onNodeWithText("clip.mp4").assertIsDisplayed()
         rule.onNodeWithText("cover.jpg").assertDoesNotExist()
+    }
+
+    @Test
+    fun pdfFilterShowsOnlyPdfAndHasNoPlaybackMenu() {
+        rule.setContent {
+            BrowserScreen(
+                state = BrowserUiState.Content(
+                    browserPage(
+                        entries = listOf(
+                            browserEntry("manual.pdf", MediaKind.PDF),
+                            browserEntry("clip.mp4", MediaKind.VIDEO),
+                        ),
+                    ),
+                ),
+                onEntryClick = {},
+                onBreadcrumbClick = {},
+                onRetry = {},
+                onBack = {},
+            )
+        }
+
+        rule.onNodeWithTag("browser_filter_list")
+            .performScrollToNode(hasTestTag("browser_filter_pdf"))
+        rule.onNodeWithTag("browser_filter_pdf").performClick()
+        rule.onNodeWithText("manual.pdf").assertIsDisplayed()
+        rule.onNodeWithText("clip.mp4").assertDoesNotExist()
+        rule.onNodeWithContentDescription("更多播放操作：manual.pdf").assertDoesNotExist()
     }
 
     @Test

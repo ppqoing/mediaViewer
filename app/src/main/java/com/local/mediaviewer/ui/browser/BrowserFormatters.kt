@@ -14,6 +14,7 @@ enum class BrowserFilter {
     AUDIO,
     IMAGE,
     GIF,
+    PDF,
     ;
 
     fun accepts(entry: DirectoryEntry): Boolean = when (this) {
@@ -23,6 +24,7 @@ enum class BrowserFilter {
         AUDIO -> entry.kind == MediaKind.AUDIO
         IMAGE -> entry.kind == MediaKind.IMAGE && !entry.isGif()
         GIF -> entry.kind == MediaKind.IMAGE && entry.isGif()
+        PDF -> entry.kind == MediaKind.PDF
     }
 }
 
