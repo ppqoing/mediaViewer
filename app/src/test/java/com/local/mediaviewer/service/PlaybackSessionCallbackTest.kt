@@ -6,6 +6,7 @@ import android.os.Looper
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
 import androidx.test.core.app.ApplicationProvider
 import com.local.mediaviewer.playback.PlaybackState
@@ -309,7 +310,7 @@ class PlaybackSessionCallbackTest {
                 .availableSessionCommands.contains(command),
         )
         assertEquals(
-            SessionResult.RESULT_ERROR_INVALID_STATE,
+            SessionError.ERROR_INVALID_STATE,
             callback.onCustomCommand(
                 sessionFixture.session,
                 controller,

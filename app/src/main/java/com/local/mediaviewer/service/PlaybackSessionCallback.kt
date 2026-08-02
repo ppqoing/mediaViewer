@@ -105,7 +105,7 @@ class PlaybackSessionCallback(
                     .toPlaybackPositionSnapshot()
                 Futures.immediateFuture(
                     if (snapshot == null) {
-                        SessionResult(SessionResult.RESULT_ERROR_INVALID_STATE)
+                        SessionResult(SessionError.ERROR_INVALID_STATE)
                     } else {
                         SessionResult(
                             SessionResult.RESULT_SUCCESS,
