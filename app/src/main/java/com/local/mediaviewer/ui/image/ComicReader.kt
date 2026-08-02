@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -39,6 +41,8 @@ import coil3.compose.SubcomposeAsyncImage
 import coil3.compose.SubcomposeAsyncImageContent
 import com.local.mediaviewer.image.ComicTransform
 import com.local.mediaviewer.image.ComicTransformReducer
+import com.local.mediaviewer.image.ComicVisibleItem
+import com.local.mediaviewer.image.ComicViewportAnchor
 import com.local.mediaviewer.image.ImageDecodePolicy
 import com.local.mediaviewer.image.ImageItemFailure
 import com.local.mediaviewer.image.ImageLoadFailureKind
@@ -46,6 +50,8 @@ import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.ImageSortOrder
 import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.image.classifyImageLoadFailure
+import com.local.mediaviewer.image.captureComicViewportAnchor
+import com.local.mediaviewer.image.comicScrollCorrectionPx
 import com.local.mediaviewer.ui.theme.MediaTheme
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -58,6 +64,10 @@ val ComicScaleSemanticsKey =
 val ComicHorizontalOffsetSemanticsKey =
     SemanticsPropertyKey<Float>(
         "ComicHorizontalOffset",
+    )
+val ComicViewportAnchorErrorSemanticsKey =
+    SemanticsPropertyKey<Float>(
+        "ComicViewportAnchorError",
     )
 
 @Composable
@@ -95,6 +105,15 @@ fun ComicReader(
     val currentTransform = remember {
         mutableStateOf(transform)
     }
+    var pendingViewportAnchor by remember {
+        mutableStateOf<PendingComicViewportAnchor?>(null)
+    }
+    var viewportAnchorGeneration by remember {
+        mutableStateOf(0)
+    }
+    var viewportAnchorErrorPx by remember {
+        mutableStateOf<Float?>(null)
+    }
     SideEffect {
         currentTransform.value = transform
     }
@@ -120,6 +139,8 @@ fun ComicReader(
                 current = currentTransform.value,
                 zoomChange = 1f,
                 panXPx = delta,
+                centroidXPx =
+                    viewportWidthPx.toFloat() / 2f,
                 viewportWidthPx =
                     viewportWidthPx.toFloat(),
             )
@@ -143,6 +164,52 @@ fun ComicReader(
                 }.coerceAtLeast(0)
             listState.scrollToItem(anchorIndex)
         }
+        LaunchedEffect(pendingViewportAnchor) {
+            val pending =
+                pendingViewportAnchor
+                    ?: return@LaunchedEffect
+            withFrameNanos { }
+            val updatedInfo =
+                listState.layoutInfo.visibleItemsInfo
+                    .firstOrNull {
+                        it.index == pending.anchor.itemIndex
+                    }
+            if (updatedInfo != null) {
+                listState.scrollBy(
+                    comicScrollCorrectionPx(
+                        anchor = pending.anchor,
+                        updatedItem = ComicVisibleItem(
+                            index = updatedInfo.index,
+                            offsetPx = updatedInfo.offset,
+                            sizePx = updatedInfo.size,
+                        ),
+                    ),
+                )
+                withFrameNanos { }
+                val correctedInfo =
+                    listState.layoutInfo.visibleItemsInfo
+                        .firstOrNull {
+                            it.index == pending.anchor.itemIndex
+                        }
+                viewportAnchorErrorPx =
+                    correctedInfo?.let {
+                        comicScrollCorrectionPx(
+                            anchor = pending.anchor,
+                            updatedItem = ComicVisibleItem(
+                                index = it.index,
+                                offsetPx = it.offset,
+                                sizePx = it.size,
+                            ),
+                        )
+                    }
+            }
+            if (
+                pendingViewportAnchor?.generation ==
+                pending.generation
+            ) {
+                pendingViewportAnchor = null
+            }
+        }
         LaunchedEffect(listState, images) {
             snapshotFlow {
                 if (listState.isScrollInProgress) {
@@ -163,6 +230,13 @@ fun ComicReader(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("comic_reader")
+                .semantics {
+                    viewportAnchorErrorPx?.let { error ->
+                        this[
+                            ComicViewportAnchorErrorSemanticsKey
+                        ] = error
+                    }
+                }
                 .comicTransformGestures(
                     onDoubleTap = {
                         val reset =
@@ -172,21 +246,52 @@ fun ComicReader(
                     },
                     onTap = onToggleToolbar,
                     onGesture = {
+                        centroid,
                         zoomChange,
-                        panXPx,
+                        panChange,
                     ->
+                        val previous = currentTransform.value
+                        val anchor =
+                            captureComicViewportAnchor(
+                                items =
+                                    listState.layoutInfo
+                                        .visibleItemsInfo
+                                        .map { info ->
+                                            ComicVisibleItem(
+                                                index = info.index,
+                                                offsetPx = info.offset,
+                                                sizePx = info.size,
+                                            )
+                                        },
+                                centroidYPx = centroid.y,
+                            )
                         val updated =
                             ComicTransformReducer.gesture(
                             current =
-                                currentTransform.value,
+                                previous,
                             zoomChange = zoomChange,
-                            panXPx = panXPx,
+                            panXPx = panChange.x,
+                            centroidXPx = centroid.x,
                             viewportWidthPx =
                                 viewportWidthPx
                                     .toFloat(),
                         )
                         currentTransform.value = updated
                         onTransformChanged(updated)
+                        if (
+                            anchor != null &&
+                            updated.scale !=
+                            previous.scale
+                        ) {
+                            viewportAnchorGeneration += 1
+                            viewportAnchorErrorPx = null
+                            pendingViewportAnchor =
+                                PendingComicViewportAnchor(
+                                    generation =
+                                        viewportAnchorGeneration,
+                                    anchor = anchor,
+                                )
+                        }
                     },
                 )
                 .draggable(
@@ -270,6 +375,11 @@ fun ComicReader(
         }
     }
 }
+
+private data class PendingComicViewportAnchor(
+    val generation: Int,
+    val anchor: ComicViewportAnchor,
+)
 
 @Composable
 private fun ComicImage(

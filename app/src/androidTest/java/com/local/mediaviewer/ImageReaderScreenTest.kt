@@ -53,6 +53,9 @@ import com.local.mediaviewer.ui.image.ComicHorizontalOffsetSemanticsKey
 import com.local.mediaviewer.ui.image.ComicScaleSemanticsKey
 import com.local.mediaviewer.ui.image.ImageItemErrorPanel
 import com.local.mediaviewer.ui.image.ImageReaderScreen
+import com.local.mediaviewer.ui.image.SingleImageOffsetXSemanticsKey
+import com.local.mediaviewer.ui.image.SingleImageOffsetYSemanticsKey
+import com.local.mediaviewer.ui.image.SingleImageScaleSemanticsKey
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import java.time.Instant
 import kotlin.math.abs
@@ -455,6 +458,25 @@ class ImageReaderScreenTest {
     }
 
     @Test
+    fun singleImagePinchUsesTheOffCenterFingerCentroid() {
+        setScreen(contentState(ImageReaderMode.SINGLE))
+
+        offCenterPinch("media_image")
+
+        val semantics = rule.onNodeWithTag("media_image")
+            .fetchSemanticsNode().config
+        assertTrue(
+            semantics[SingleImageScaleSemanticsKey] > 1f,
+        )
+        assertTrue(
+            semantics[SingleImageOffsetXSemanticsKey] < -0.1f,
+        )
+        assertTrue(
+            semantics[SingleImageOffsetYSemanticsKey] > 0.1f,
+        )
+    }
+
+    @Test
     fun tapTogglesImmersiveToolbar() {
         setScreen(contentState(ImageReaderMode.SINGLE))
         rule.onNodeWithTag("image_reader_scrim").assertIsDisplayed()
@@ -509,6 +531,16 @@ class ImageReaderScreenTest {
 
         assertEquals(1f, comicScale(), 0.001f)
         assertEquals(0f, comicOffset(), 0.001f)
+    }
+
+    @Test
+    fun comicPinchKeepsTheOffCenterImagePointAtTheFingerCentroid() {
+        setScreen(contentState(ImageReaderMode.COMIC))
+
+        offCenterPinch("comic_reader")
+
+        assertTrue(comicScale() > 1f)
+        assertTrue(comicOffset() < -0.1f)
     }
 
     @Test
@@ -1083,6 +1115,31 @@ class ImageReaderScreenTest {
                 up(0)
                 up(1)
             }
+    }
+
+    private fun offCenterPinch(tag: String) {
+        rule.onNodeWithTag(tag)
+            .performTouchInput {
+                val centroid = Offset(
+                    x = center.x * 1.5f,
+                    y = center.y * 0.5f,
+                )
+                down(0, centroid + Offset(-40f, 0f))
+                down(1, centroid + Offset(40f, 0f))
+                moveTo(
+                    0,
+                    centroid + Offset(-120f, 0f),
+                    delayMillis = 120L,
+                )
+                moveTo(
+                    1,
+                    centroid + Offset(120f, 0f),
+                    delayMillis = 120L,
+                )
+                up(0)
+                up(1)
+            }
+        rule.waitForIdle()
     }
 
     private fun zoomAndPanComic() {

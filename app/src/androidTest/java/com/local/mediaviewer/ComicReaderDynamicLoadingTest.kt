@@ -21,8 +21,10 @@ import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.testing.MediaFixtureFactory
 import com.local.mediaviewer.testing.MediaFixtureServer
 import com.local.mediaviewer.ui.image.ComicReader
+import com.local.mediaviewer.ui.image.ComicViewportAnchorErrorSemanticsKey
 import java.io.File
 import java.time.Instant
+import kotlin.math.abs
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -152,18 +154,7 @@ class ComicReaderDynamicLoadingTest {
 
     @Test
     fun zoomingLoadedImageKeepsTheExistingRequest() {
-        val image = ImageReaderItem(
-            name = "page-001.png",
-            size = 1_024L,
-            modifiedAt =
-                Instant.parse(
-                    "2026-07-28T00:00:00Z",
-                ),
-            logicalUrl =
-                "http://media.example/pik/page-001.png",
-            requestUrl =
-                server.url("/pik/page-001.png"),
-        )
+        val image = imageItem(1)
         var successfulLoads = 0
         rule.setContent {
             var transform by remember {
@@ -197,7 +188,6 @@ class ComicReaderDynamicLoadingTest {
         val initialRequestCount =
             server.mediaRequestCount()
         val initialSuccessCount = successfulLoads
-
         zoomComic()
         zoomComic()
         rule.waitForIdle()
@@ -215,20 +205,86 @@ class ComicReaderDynamicLoadingTest {
         )
     }
 
+    @Test
+    fun offCenterZoomKeepsTheSameImagePointAtTheFingerCentroid() {
+        val images = (1..5).map(::imageItem)
+        var successfulLoads = 0
+        rule.setContent {
+            var transform by remember {
+                mutableStateOf(ComicTransform())
+            }
+            MaterialTheme {
+                ComicReader(
+                    images = images,
+                    anchorLogicalUrl = images.first().logicalUrl,
+                    sortOrder = ImageSortOrder.NAME_ASC,
+                    imageLoader = imageLoader,
+                    requestGeneration = 0,
+                    itemFailures = emptyMap(),
+                    itemRequestGenerations = emptyMap(),
+                    transform = transform,
+                    onTransformChanged = {
+                        transform = it
+                    },
+                    onAnchorChanged = {},
+                    onImageLoadError = { _, _ -> },
+                    onImageLoadSuccess = {
+                        successfulLoads += 1
+                    },
+                    onRetryImage = {},
+                )
+            }
+        }
+        rule.waitUntil(10_000) {
+            successfulLoads >= images.size
+        }
+        zoomComic()
+        rule.waitForIdle()
+        val anchorError = rule.onNodeWithTag("comic_reader")
+            .fetchSemanticsNode().config[
+                ComicViewportAnchorErrorSemanticsKey
+            ]
+        assertTrue(
+            "anchorError=$anchorError",
+            abs(anchorError) <= 3f,
+        )
+    }
+
+    private fun imageItem(index: Int): ImageReaderItem {
+        val name =
+            "page-" +
+                index.toString().padStart(3, '0') +
+                ".png"
+        return ImageReaderItem(
+            name = name,
+            size = 1_024L,
+            modifiedAt =
+                Instant.parse(
+                    "2026-07-28T00:00:00Z",
+                ),
+            logicalUrl =
+                "http://media.example/pik/$name",
+            requestUrl = server.url("/pik/$name"),
+        )
+    }
+
     private fun zoomComic() {
         rule.onNodeWithTag("comic_reader")
             .performTouchInput {
-                val middle = center
-                down(0, middle + Offset(-40f, 0f))
-                down(1, middle + Offset(40f, 0f))
+                val centroid = Offset(
+                    x = center.x * 1.44f,
+                    y = center.y * 0.4f,
+                )
+                down(0, centroid + Offset(-40f, 0f))
+                down(1, centroid + Offset(40f, 0f))
                 moveTo(
                     0,
-                    middle + Offset(-120f, 0f),
+                    centroid + Offset(-120f, 0f),
                     delayMillis = 120L,
                 )
                 moveTo(
                     1,
-                    middle + Offset(120f, 0f),
+                    centroid + Offset(120f, 0f),
                     delayMillis = 120L,
                 )
                 up(0)
