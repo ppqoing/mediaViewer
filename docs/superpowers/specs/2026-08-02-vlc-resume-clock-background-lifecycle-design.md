@@ -1,7 +1,7 @@
 # VLC 暂停恢复时钟与应用前后台生命周期修复设计
 
 - 日期：2026-08-02
-- 状态：方案 A 已由用户确认，等待规格复核
+- 状态：规格已由用户确认
 - 关联分析：`docs/analysis/2026-08-02-player-resume-progress-root-cause.md`
 - 前置修复：`docs/superpowers/specs/2026-08-02-player-resume-exact-progress-design.md`
 
