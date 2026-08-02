@@ -1,5 +1,6 @@
 package com.local.mediaviewer.ui.player
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -128,8 +130,16 @@ private fun NowPlayingBarContent(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(MediaTheme.sizing.miniPlayerHeight),
-        tonalElevation = MediaTheme.elevation.surface3,
+            .height(MediaTheme.sizing.miniPlayerHeight)
+            .padding(horizontal = MediaTheme.spacing.sm, vertical = 4.dp)
+            .testTag("now_playing_warm_paper"),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.78f),
+        ),
+        shadowElevation = MediaTheme.elevation.surface4,
     ) {
         Column(Modifier.fillMaxWidth()) {
             LinearProgressIndicator(
@@ -138,6 +148,8 @@ private fun NowPlayingBarContent(
                     .fillMaxWidth()
                     .height(MediaTheme.sizing.miniPlayerProgressHeight)
                     .testTag("mini_player_progress"),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
             )
             BoxWithConstraints(
                 modifier = Modifier

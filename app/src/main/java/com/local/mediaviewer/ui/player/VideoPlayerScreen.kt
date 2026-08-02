@@ -29,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -55,6 +56,7 @@ import com.local.mediaviewer.ui.components.MediaOptionMenu
 import com.local.mediaviewer.ui.components.MediaTopAppBar
 import com.local.mediaviewer.ui.icons.MediaIcons
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
+import com.local.mediaviewer.ui.theme.MediaTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -167,10 +169,11 @@ fun VideoPlayerScreen(
     }
 
     MediaViewerTheme(darkTheme = true) {
+        val playerColors = MediaTheme.playerColors
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(playerColors.canvas)
                 .testTag("video_player_canvas"),
         ) {
                 VlcSurface(
@@ -320,9 +323,17 @@ fun VideoPlayerScreen(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        playerColors.topScrimStart,
+                                        playerColors.topScrimEnd,
+                                    ),
+                                ),
+                            )
                             .testTag("video_top_controls_ordinary"),
-                        containerColor = OrdinaryControlsScrim,
-                        contentColor = Color.White,
+                        containerColor = Color.Transparent,
+                        contentColor = playerColors.control,
                         windowInsets = safeDrawingInsets.only(
                             WindowInsetsSides.Top +
                                 WindowInsetsSides.Horizontal,
@@ -369,7 +380,14 @@ fun VideoPlayerScreen(
                                 ),
                             )
                             .testTag("video_bottom_controls_ordinary")
-                            .background(OrdinaryControlsScrim),
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        playerColors.bottomScrimStart,
+                                        playerColors.bottomScrimEnd,
+                                    ),
+                                ),
+                            ),
                     ) {
                         PlayerControls(
                             state = state,
@@ -405,6 +423,7 @@ fun VideoPlayerScreen(
                             onPlaybackModeChanged =
                                 onPlaybackModeChanged,
                             showLowFrequencyControls = false,
+                            primaryActionTag = "video_primary_action",
                             leadingUtilityControls = {
                                 onOpenQueue?.let { openQueue ->
                                     MediaIconButton(
@@ -465,8 +484,6 @@ fun VideoPlayerScreen(
     }
 }
 
-private val OrdinaryControlsScrim = Color.Black.copy(alpha = 0.58f)
-
 private enum class OrdinarySettingsPage {
     ROOT,
     SPEED,
@@ -495,7 +512,7 @@ private fun OrdinaryPlaybackSettingsMenu(
     Box {
         MediaIconButton(
             icon = MediaIcons.More,
-            contentDescription = "更多播放设置",
+            contentDescription = "更多播放选项",
             onClick = {
                 page = OrdinarySettingsPage.ROOT
                 onExpandedChanged(true)

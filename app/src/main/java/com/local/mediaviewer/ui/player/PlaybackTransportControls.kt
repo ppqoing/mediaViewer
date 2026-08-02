@@ -28,6 +28,7 @@ fun PlaybackTransportControls(
     onSeekForward: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    primaryActionTag: String? = null,
 ) {
     val seekEnabled = state.isSeekable && state.durationMs > 0L
 
@@ -54,6 +55,7 @@ fun PlaybackTransportControls(
             onPlay = onPlay,
             onPause = onPause,
             onReplay = onReplay,
+            actionTestTag = primaryActionTag,
         )
         ControlButton(
             description = "快进 10 秒",
@@ -92,22 +94,20 @@ private fun PrimaryControlButton(
     onPlay: () -> Unit,
     onPause: () -> Unit,
     onReplay: () -> Unit,
+    actionTestTag: String?,
 ) {
-    val action = playbackPrimaryAction(state.status)
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier.size(MediaTheme.sizing.playerPrimaryButton),
     ) {
-        PlayerIconButton(
-            icon = action.icon,
-            contentDescription = action.contentDescription,
-            stateDescription = action.stateDescription,
-            enabled = action.enabled,
-            loading = action.loading,
-            onClick = {
-                action.command.invoke(onPlay, onPause, onReplay)
-            },
-            modifier = Modifier.size(MediaTheme.sizing.playerPrimaryButton),
+        PlaybackPrimaryActionButton(
+            status = state.status,
+            size = MediaTheme.sizing.playerPrimaryButton,
+            iconSize = 32.dp,
+            onPlay = onPlay,
+            onPause = onPause,
+            onReplay = onReplay,
+            actionTestTag = actionTestTag,
         )
         if (state.status == PlaybackStatus.BUFFERING) {
             CircularProgressIndicator(

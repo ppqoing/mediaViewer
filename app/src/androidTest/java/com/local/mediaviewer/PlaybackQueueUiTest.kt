@@ -217,6 +217,7 @@ class PlaybackQueueUiTest {
             }
         }
 
+        rule.onNodeWithTag("queue_warm_paper").assertIsDisplayed()
         rule.onNodeWithText("播放队列 · 3 项").assertIsDisplayed()
         rule.onNodeWithText("顺序播放").assertIsDisplayed()
         rule.onNodeWithContentDescription("队列项 第一首，正在播放")
@@ -238,6 +239,23 @@ class PlaybackQueueUiTest {
         assertEquals("c", removed)
         rule.onNodeWithText("清空其他").performClick()
         assertTrue(cleared)
+    }
+
+    @Test
+    fun queueKeepsDragDeleteAndCurrentItemSemantics() {
+        val current = item("current", "当前曲目.flac", MediaKind.AUDIO)
+        showQueue(
+            PlaybackQueue(
+                items = listOf(current),
+                currentMediaKey = current.mediaKey,
+            ),
+        )
+
+        rule.onNodeWithTag("queue_row:current").assertIsSelected()
+        rule.onNodeWithContentDescription("拖动排序 当前曲目.flac")
+            .assertIsDisplayed()
+        rule.onNodeWithContentDescription("删除 当前曲目.flac")
+            .assertIsDisplayed()
     }
 
     @Test
@@ -686,6 +704,7 @@ class PlaybackQueueUiTest {
 
         // 规格 §6.1：浅色页面上关键非文字控制至少 3:1，
         // 迷你条不得把黑底 PlayerColors 的近白控件放在浅色 surface 上。
+        rule.onNodeWithTag("now_playing_warm_paper").assertIsDisplayed()
         rule.onNodeWithContentDescription("播放").assertIsDisplayed()
         assertControlHasDarkPixels("播放")
         assertControlHasDarkPixels("打开播放队列")

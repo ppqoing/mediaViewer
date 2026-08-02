@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,8 +25,10 @@ import com.local.mediaviewer.player.PlayerUiState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.queue.PlaybackMode
 import com.local.mediaviewer.ui.components.MediaScreenScaffold
+import com.local.mediaviewer.ui.components.WarmPaperCard
+import com.local.mediaviewer.ui.theme.LocalPlayerColors
 import com.local.mediaviewer.ui.theme.MediaTheme
-import com.local.mediaviewer.ui.theme.MediaViewerTheme
+import com.local.mediaviewer.ui.theme.surfacePlayerColors
 
 @Composable
 fun AudioPlayerScreen(
@@ -58,11 +61,10 @@ fun AudioPlayerScreen(
         onResumeHintShown = onResumeHintShown,
     )
 
-    MediaViewerTheme(darkTheme = true) {
-        MediaScreenScaffold(
-            title = "音频播放",
-            onBack = onBack,
-        ) { padding ->
+    MediaScreenScaffold(
+        title = "音频播放",
+        onBack = onBack,
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -101,46 +103,63 @@ fun AudioPlayerScreen(
                     else -> Unit
                 }
             }
-            Text(
-                text = state.name,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-            )
-            Text(
-                text = "音频文件",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            PlayerControls(
-                state = state,
-                onPlay = onPlay,
-                onPause = onPause,
-                onReplay = onReplay,
-                onSeekBack = onSeekBack,
-                onSeekForward = onSeekForward,
-                onBeginScrub = onBeginScrub,
-                onPreviewScrub = onPreviewScrub,
-                onCommitScrub = onCommitScrub,
-                onPrevious = onPrevious,
-                onNext = onNext,
-                onSpeedChanged = onSpeedChanged,
-                playbackMode = playbackMode,
-                onPlaybackModeChanged = onPlaybackModeChanged,
-                onOpenQueue = onOpenQueue,
-            ) {
-                PlaybackVolumeControl(
-                    state = volumeState,
-                    expanded = volumeExpanded,
-                    onExpandedChanged = { expanded ->
-                        volumeExpanded = expanded
-                        if (expanded) volumeController.refresh()
-                    },
-                    onRefresh = volumeController::refresh,
-                    onToggleMute = volumeController::toggleMute,
-                    onVolumeChanged = volumeController::setFraction,
-                )
+            WarmPaperCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(MediaTheme.spacing.sm),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(
+                        MediaTheme.spacing.xxs,
+                    ),
+                ) {
+                    Text(
+                        text = state.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "音频文件",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val colorScheme = MaterialTheme.colorScheme
+                    val surfaceColors = remember(colorScheme) {
+                        surfacePlayerColors(colorScheme)
+                    }
+                    CompositionLocalProvider(
+                        LocalPlayerColors provides surfaceColors,
+                    ) {
+                        PlayerControls(
+                            state = state,
+                            onPlay = onPlay,
+                            onPause = onPause,
+                            onReplay = onReplay,
+                            onSeekBack = onSeekBack,
+                            onSeekForward = onSeekForward,
+                            onBeginScrub = onBeginScrub,
+                            onPreviewScrub = onPreviewScrub,
+                            onCommitScrub = onCommitScrub,
+                            onPrevious = onPrevious,
+                            onNext = onNext,
+                            onSpeedChanged = onSpeedChanged,
+                            playbackMode = playbackMode,
+                            onPlaybackModeChanged = onPlaybackModeChanged,
+                            onOpenQueue = onOpenQueue,
+                        ) {
+                            PlaybackVolumeControl(
+                                state = volumeState,
+                                expanded = volumeExpanded,
+                                onExpandedChanged = { expanded ->
+                                    volumeExpanded = expanded
+                                    if (expanded) volumeController.refresh()
+                                },
+                                onRefresh = volumeController::refresh,
+                                onToggleMute = volumeController::toggleMute,
+                                onVolumeChanged = volumeController::setFraction,
+                            )
+                        }
+                    }
+                }
             }
         }
-    }
     }
 }

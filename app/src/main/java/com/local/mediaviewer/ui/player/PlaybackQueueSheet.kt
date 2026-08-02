@@ -438,12 +438,24 @@ private fun QueueItemRow(
                 scaleY = dragScale
                 translationY = dragOffsetPx
             }
+            .semantics {
+                if (isCurrent) {
+                    selected = true
+                }
+            }
             .testTag("queue_row:${item.mediaKey}"),
     ) {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 3.dp)
+                .then(
+                    if (index == 0) {
+                        Modifier.testTag("queue_warm_paper")
+                    } else {
+                        Modifier
+                    },
+                )
                 .semantics {
                     contentDescription = rowDescription
                     if (isCurrent) {
@@ -474,14 +486,17 @@ private fun QueueItemRow(
                 .clickable(onClick = onSelect),
             shape = MaterialTheme.shapes.medium,
             color = if (isCurrent) {
-                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f)
             } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
             },
             border = if (isCurrent) {
                 BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
             } else {
-                null
+                BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f),
+                )
             },
             shadowElevation = dragElevation,
         ) {

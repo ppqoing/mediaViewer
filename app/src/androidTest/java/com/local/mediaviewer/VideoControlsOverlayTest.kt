@@ -1,12 +1,16 @@
 package com.local.mediaviewer
 
 import android.view.ViewGroup
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
@@ -23,6 +27,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import com.local.mediaviewer.model.MediaKind
@@ -172,17 +177,22 @@ class VideoControlsOverlayTest {
     }
 
     @Test
-    fun fullscreenControlsStayInsideInjectedSafeDrawingInsets() {
+    fun fullscreenKeepsConfigurationBelowTimelineAndSafeFromInsets() {
         showFullscreen(
             hasShownGestureHint = true,
             safeDrawingInsets = WindowInsets(
                 left = 16.dp,
-                top = 24.dp,
-                right = 16.dp,
+                top = 48.dp,
+                right = 20.dp,
                 bottom = 32.dp,
             ),
         )
 
+        rule.onNodeWithTag("fullscreen_playback_configuration")
+            .assertIsDisplayed()
+        rule.onNodeWithText("倍速").assertIsDisplayed()
+        rule.onNodeWithText("播放模式").assertIsDisplayed()
+        rule.onNodeWithText("画面比例").assertIsDisplayed()
         val root = rule.onNodeWithTag("fullscreen_root")
             .fetchSemanticsNode().boundsInRoot
         val top = rule.onNodeWithTag("fullscreen_top_controls")
@@ -190,15 +200,15 @@ class VideoControlsOverlayTest {
         val bottom = rule.onNodeWithTag("fullscreen_bottom_controls")
             .fetchSemanticsNode().boundsInRoot
 
-        assertTrue("顶部控制应位于注入 top inset 之下", top.top >= root.top + 24f)
+        assertTrue("顶部控制应位于注入 top inset 之下", top.top >= root.top + 48f)
         assertTrue("顶部控制应位于注入 left inset 之右", top.left >= root.left + 16f)
-        assertTrue("顶部控制应位于注入 right inset 之左", top.right <= root.right - 16f)
+        assertTrue("顶部控制应位于注入 right inset 之左", top.right <= root.right - 20f)
         assertTrue(
             "底部控制应位于注入 bottom inset 之上",
             bottom.bottom <= root.bottom - 32f,
         )
         assertTrue("底部控制应位于注入 left inset 之右", bottom.left >= root.left + 16f)
-        assertTrue("底部控制应位于注入 right inset 之左", bottom.right <= root.right - 16f)
+        assertTrue("底部控制应位于注入 right inset 之左", bottom.right <= root.right - 20f)
     }
 
     @Test
@@ -217,6 +227,60 @@ class VideoControlsOverlayTest {
         val bufferingCenter = rule.onNodeWithTag("fullscreen_center_controls")
             .fetchSemanticsNode().boundsInRoot.center
         assertEquals(playingCenter.y, bufferingCenter.y, 0.5f)
+    }
+
+    @Test
+    fun compactLandscapeKeepsCenterTransportAboveBottomControls() {
+        showFullscreen(
+            hasShownGestureHint = true,
+            safeDrawingInsets = WindowInsets(
+                left = 16.dp,
+                top = 24.dp,
+                right = 16.dp,
+                bottom = 32.dp,
+            ),
+            hostWidth = 640.dp,
+            hostHeight = 360.dp,
+        )
+
+        val center = rule.onNodeWithTag("fullscreen_center_controls")
+            .fetchSemanticsNode().boundsInRoot
+        val bottom = rule.onNodeWithTag("fullscreen_bottom_controls")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "紧凑横屏中央 transport 不应与底部控制重叠：center=$center bottom=$bottom",
+            center.bottom <= bottom.top,
+        )
+    }
+
+    @Test
+    fun commonPhoneLandscapeKeepsCenterBetweenTopAndBottomControls() {
+        showFullscreen(
+            hasShownGestureHint = true,
+            safeDrawingInsets = WindowInsets(
+                left = 24.dp,
+                top = 48.dp,
+                right = 24.dp,
+                bottom = 32.dp,
+            ),
+            hostWidth = 891.dp,
+            hostHeight = 411.dp,
+        )
+
+        val top = rule.onNodeWithTag("fullscreen_top_controls")
+            .fetchSemanticsNode().boundsInRoot
+        val center = rule.onNodeWithTag("fullscreen_center_controls")
+            .fetchSemanticsNode().boundsInRoot
+        val bottom = rule.onNodeWithTag("fullscreen_bottom_controls")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "常见手机横屏顶部不应与中央 transport 重叠：top=$top center=$center",
+            top.bottom <= center.top,
+        )
+        assertTrue(
+            "常见手机横屏中央 transport 不应与底部控制重叠：center=$center bottom=$bottom",
+            center.bottom <= bottom.top,
+        )
     }
 
     @Test
@@ -280,13 +344,13 @@ class VideoControlsOverlayTest {
         rule.onNodeWithTag("video_scale_menu").assertIsDisplayed()
         rule.onNodeWithContentDescription("播放速度，当前 1.0 倍")
             .assertIsDisplayed()
-        rule.onNodeWithTag("fullscreen_inline_playback_options")
+        rule.onNodeWithTag("fullscreen_playback_configuration")
             .assertIsDisplayed()
         rule.onNodeWithContentDescription("更多播放设置").performClick()
         rule.onNodeWithText("后台播放").assertIsDisplayed()
         rule.onNodeWithText("播放速度").assertDoesNotExist()
-        rule.onNodeWithText("播放模式").assertDoesNotExist()
-        rule.onNodeWithText("画面比例").assertDoesNotExist()
+        rule.onNodeWithTag("fullscreen_playback_configuration")
+            .assertIsDisplayed()
 
         Espresso.pressBack()
         rule.onNodeWithContentDescription("播放速度，当前 1.0 倍")
@@ -333,7 +397,7 @@ class VideoControlsOverlayTest {
         val timeline = rule.onNodeWithTag("player_timeline_layer")
             .fetchSemanticsNode().boundsInRoot
         val playbackOptions = rule.onNodeWithTag(
-            "fullscreen_inline_playback_options",
+            "fullscreen_playback_configuration",
         ).fetchSemanticsNode().boundsInRoot
         val utilities = rule.onNodeWithTag("player_utility_layer")
             .fetchSemanticsNode().boundsInRoot
@@ -407,8 +471,15 @@ class VideoControlsOverlayTest {
 
         val primary = rule.onNodeWithContentDescription("播放")
             .fetchSemanticsNode().boundsInRoot
+        val icon = rule.onNodeWithTag(
+            "fullscreen_primary_icon",
+            useUnmergedTree = true,
+        )
+            .fetchSemanticsNode().boundsInRoot
         assertTrue("主动作宽度至少 72dp", primary.width >= 72f)
         assertTrue("主动作高度至少 72dp", primary.height >= 72f)
+        assertEquals(40.0, icon.width.toDouble(), 0.5)
+        assertEquals(40.0, icon.height.toDouble(), 0.5)
         listOf("快退 10 秒", "快进 10 秒", "打开播放队列", "返回", "锁定控制")
             .forEach { description ->
                 val bounds = rule.onNodeWithContentDescription(description)
@@ -484,11 +555,20 @@ class VideoControlsOverlayTest {
         onSpeedChanged: (Float) -> Unit = {},
         onPlaybackModeChanged: (PlaybackMode) -> Unit = {},
         onVideoScaleModeChanged: (VideoScaleMode) -> Unit = {},
+        hostWidth: Dp? = null,
+        hostHeight: Dp? = null,
     ): OverlayFullscreenController {
         val controller = OverlayFullscreenController(initiallyFullscreen = true)
         rule.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f)) {
                 MediaViewerTheme {
+                    Box(
+                        modifier = if (hostWidth != null && hostHeight != null) {
+                            Modifier.size(hostWidth, hostHeight)
+                        } else {
+                            Modifier.fillMaxSize()
+                        },
+                    ) {
                     VideoPlayerScreen(
                         state = stateProvider(),
                         controller = OverlayPlaybackController(),
@@ -521,6 +601,7 @@ class VideoControlsOverlayTest {
                         onBack = {},
                         safeDrawingInsets = safeDrawingInsets,
                     )
+                    }
                 }
             }
         }

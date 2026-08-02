@@ -32,6 +32,7 @@ fun PlayerControls(
     onPlaybackModeChanged: (PlaybackMode) -> Unit = {},
     onOpenQueue: (() -> Unit)? = null,
     showLowFrequencyControls: Boolean = true,
+    primaryActionTag: String? = null,
     leadingUtilityControls: @Composable RowScope.() -> Unit = {},
     secondaryControls: @Composable RowScope.() -> Unit = {},
 ) {
@@ -59,6 +60,7 @@ fun PlayerControls(
             onSeekForward = onSeekForward,
             onPrevious = onPrevious,
             onNext = onNext,
+            primaryActionTag = primaryActionTag,
         )
         PlayerUtilityRow(
             startContent = {

@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -18,6 +20,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -296,6 +299,71 @@ class PlaybackControlsTest {
         assertTrue(transport.bottom <= utilities.top)
         assertTrue(startGroup.right <= endGroup.left)
         assertTrue(primary.width > seekBack.width)
+    }
+
+    @Test
+    fun ordinaryPrimaryUsesWarmSixtyFourDpAction() {
+        showOrdinaryPrimary(PlaybackStatus.PAUSED, {}, {}, {})
+
+        val primary = rule.onNodeWithTag("playback_primary_action")
+            .assertIsDisplayed()
+            .fetchSemanticsNode().boundsInRoot
+        val icon = rule.onNodeWithTag(
+            "playback_primary_icon",
+            useUnmergedTree = true,
+        )
+            .assertIsDisplayed()
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("普通主动作宽度至少 64dp", primary.width >= 64f)
+        assertTrue("普通主动作高度至少 64dp", primary.height >= 64f)
+        assertEquals(32.0, icon.width.toDouble(), 0.5)
+        assertEquals(32.0, icon.height.toDouble(), 0.5)
+    }
+
+    @Test
+    fun darkWarmPrimaryMaintainsThreeToOneIconContrast() {
+        rule.setContent {
+            MediaViewerTheme(darkTheme = true) {
+                PlayerControls(
+                    state = PlayerUiState(
+                        name = "movie.mp4",
+                        kind = MediaKind.VIDEO,
+                        status = PlaybackStatus.PAUSED,
+                        durationMs = 60_000L,
+                        isSeekable = true,
+                    ),
+                    onPlay = {},
+                    onPause = {},
+                    onReplay = {},
+                    onSeekBack = {},
+                    onSeekForward = {},
+                    onBeginScrub = {},
+                    onPreviewScrub = {},
+                    onCommitScrub = {},
+                    onPrevious = {},
+                    onNext = {},
+                    onSpeedChanged = {},
+                )
+            }
+        }
+
+        val pixels = rule.onNodeWithContentDescription("播放")
+            .captureToImage()
+            .toPixelMap()
+        val background = pixels[8, pixels.height / 2]
+        var strongestContrast = 1.0
+        for (y in pixels.height / 4 until pixels.height * 3 / 4) {
+            for (x in pixels.width / 4 until pixels.width * 3 / 4) {
+                strongestContrast = maxOf(
+                    strongestContrast,
+                    contrastRatio(background, pixels[x, y]),
+                )
+            }
+        }
+        assertTrue(
+            "深色暖纸主动作图标对比度应至少 3:1，实际 $strongestContrast",
+            strongestContrast >= 3.0,
+        )
     }
 
     @Test
@@ -657,5 +725,22 @@ class PlaybackControlsTest {
         rule.mainClock.advanceTimeBy(500L)
         rule.waitForIdle()
         rule.onNodeWithTag("volume_popup").assertDoesNotExist()
+    }
+
+    private fun contrastRatio(first: Color, second: Color): Double {
+        val lighter = maxOf(relativeLuminance(first), relativeLuminance(second))
+        val darker = minOf(relativeLuminance(first), relativeLuminance(second))
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+
+    private fun relativeLuminance(color: Color): Double {
+        fun channel(value: Float): Double = if (value <= 0.04045f) {
+            value / 12.92
+        } else {
+            Math.pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(color.red) +
+            0.7152 * channel(color.green) +
+            0.0722 * channel(color.blue)
     }
 }

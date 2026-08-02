@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
@@ -56,26 +57,29 @@ class PlayerScreenTest {
     val rule = createComposeRule()
 
     @Test
-    fun audioPlayerHasLocalArtworkAndNoVideoOnlyControls() {
+    fun audioUsesWarmArtworkAndNeverShowsVideoOnlyControls() {
         showAudio(playerState(name = "song.flac", kind = MediaKind.AUDIO))
 
-        rule.onNodeWithTag("audio_artwork").assertIsDisplayed()
+        rule.onNodeWithTag("audio_artwork_card").assertIsDisplayed()
         rule.onNodeWithText("song.flac").assertIsDisplayed()
         rule.onNodeWithContentDescription("画面比例").assertDoesNotExist()
-        rule.onNodeWithContentDescription("全屏").assertDoesNotExist()
-        rule.onNodeWithContentDescription("调节亮度").assertDoesNotExist()
+        rule.onNodeWithContentDescription("进入全屏").assertDoesNotExist()
+        rule.onNodeWithContentDescription("锁定控制").assertDoesNotExist()
     }
 
     @Test
-    fun ordinaryVideoKeepsOneStableSurfaceAndMovesLowFrequencyOptionsToMenu() {
+    fun normalVideoKeepsOptionsInMoreMenuAndUsesPrimaryTransportAction() {
         showVideo(playerState(name = "movie.mp4", kind = MediaKind.VIDEO))
 
         rule.onAllNodesWithTag("vlc_surface").assertCountEquals(1)
+        rule.onNodeWithTag("video_primary_action")
+            .assertIsDisplayed()
+            .assertHasClickAction()
         rule.onNodeWithTag("video_top_controls_ordinary")
             .assertIsDisplayed()
         rule.onNodeWithTag("video_bottom_controls_ordinary")
             .assertIsDisplayed()
-        rule.onNodeWithContentDescription("更多播放设置").performClick()
+        rule.onNodeWithContentDescription("更多播放选项").performClick()
         rule.onNodeWithText("后台播放").assertIsDisplayed()
         rule.onNodeWithText("播放速度").assertIsDisplayed()
         rule.onNodeWithText("播放模式").assertIsDisplayed()
@@ -493,7 +497,7 @@ class PlayerScreenTest {
 
         rule.onNodeWithContentDescription("全屏")
             .assertIsDisplayed()
-        rule.onNodeWithContentDescription("更多播放设置")
+        rule.onNodeWithContentDescription("更多播放选项")
             .performClick()
         rule.onNodeWithTag("video_background_playback")
             .performClick()
@@ -523,9 +527,7 @@ class PlayerScreenTest {
             .performClick()
         rule.runOnIdle { assertFalse(backgroundPlaybackEnabled) }
         rule.onNodeWithText("播放速度").assertDoesNotExist()
-        rule.onNodeWithText("播放模式").assertDoesNotExist()
-        rule.onNodeWithText("画面比例").assertDoesNotExist()
-        rule.onNodeWithTag("fullscreen_inline_playback_options")
+        rule.onNodeWithTag("fullscreen_playback_configuration")
             .assertIsDisplayed()
         androidx.test.espresso.Espresso.pressBack()
         rule.onNodeWithContentDescription("画面比例")
@@ -860,17 +862,31 @@ class PlayerScreenTest {
     }
 
     @Test
-    fun ordinaryAudioPlayerKeepsControlsOnDarkCanvasInLightTheme() {
+    fun ordinaryAudioPlayerUsesWarmPaperCanvasInLightTheme() {
         showAudio(
             playerState(name = "song.flac", kind = MediaKind.AUDIO),
             darkTheme = false,
         )
 
         rule.onNodeWithContentDescription("播放").assertIsDisplayed()
-        assertControlsRegionStaysOnDarkCanvas()
+        val averageLuminance = controlsRegionAverageLuminance()
+        assertTrue(
+            "audio player should use a warm paper canvas in light theme " +
+                "(average controls-region luminance=$averageLuminance)",
+            averageLuminance > 0.5,
+        )
     }
 
     private fun assertControlsRegionStaysOnDarkCanvas() {
+        val averageLuminance = controlsRegionAverageLuminance()
+        assertTrue(
+            "ordinary player must keep the dark player canvas in light theme " +
+                "(average controls-region luminance=$averageLuminance)",
+            averageLuminance < 0.5,
+        )
+    }
+
+    private fun controlsRegionAverageLuminance(): Double {
         val pixels = rule.onRoot().captureToImage().toPixelMap()
         val regionTop = pixels.height * 3 / 5
         var luminanceSum = 0.0
@@ -889,12 +905,7 @@ class PlayerScreenTest {
             }
             y += 4
         }
-        val averageLuminance = luminanceSum / samples
-        assertTrue(
-            "ordinary player must keep the dark player canvas in light theme " +
-                "(average controls-region luminance=$averageLuminance)",
-            averageLuminance < 0.5,
-        )
+        return luminanceSum / samples
     }
 
     private fun assertControlInsideGroup(
