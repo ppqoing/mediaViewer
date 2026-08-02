@@ -51,7 +51,7 @@
 
 | 门禁 | 结果 | 证据 |
 |---|---|---|
-| 完整 JVM / Robolectric | PASS | `testDebugUnitTest --no-daemon`，17 秒；当前源码共 321 个 `@Test` 方法，Gradle exit 0 |
+| 完整 JVM / Robolectric | PASS | `testDebugUnitTest --no-daemon`，17 秒；Release 最终源提交上的 JUnit XML 为 75 suites / 345 tests / 0 failures / 0 errors / 0 skipped |
 | AndroidTest Kotlin 编译 | PASS | `compileDebugAndroidTestKotlin` 在合并命令中完成 |
 | Debug APK | PASS | `assembleDebug` 在合并命令中完成 |
 | Debug Lint 初次 | FAIL | 1 error / 36 warnings，唯一错误为上节 WrongConstant |
@@ -67,4 +67,18 @@ arm64 真机真实视频人工检查：**NOT RUN**。
 
 ## 5. Release 证据
 
-待个人 ARM64 Release 构建与独立校验完成后追加。自动测试、x86_64 设备回归、arm64 真机人工检查和 Release 产物保持分开报告。
+- 构建源提交：`81fbc4d7be42c2c0defeb252d5a59ee15d630144`（基础验证文档提交）。
+- 命令：`scripts/Build-PersonalRelease.ps1 -SdkRoot 'C:\Users\Administrator\AppData\Local\Android\Sdk'`。
+- 脚本门禁：`clean`、`testDebugUnitTest`、`lintRelease`、`assembleRelease`、LibVLC/Dex 压缩、体积、16 KiB ZIP 对齐、签名、包信息、ABI 和二次 SHA-256 均通过；Gradle `BUILD SUCCESSFUL in 1m 16s`，85 个任务中 84 个执行、1 个最新。
+- APK：`D:\code\mediaviewer\.worktrees\android-mediaviewer\dist\mediaviewer-v1.1.0-arm64-v8a-release.apk`
+- 大小：43,792,510 字节（41.76 MiB，小于 70 MiB 上限）。
+- SHA-256：`6a7f4dd2b6aa4b82e6560b5bffd64ca5b1608fa9402382321691b2d066757c8d`；独立 `Get-FileHash` 与 `.sha256` 文件一致。
+- 独立 `aapt dump badging`：包名 `com.local.mediaviewer`，版本 `1.1.0 (3)`，`minSdk 29`，`targetSdk 36`，Native ABI 仅 `arm64-v8a`。
+- 独立 `zipalign -c -P 16 -v 4`：exit 0，`Verification successful`。
+- 独立 `apksigner verify --verbose --print-certs`：exit 0；仅 APK Signature Scheme v3 为 `true`，1 个签名者；证书 SHA-256 为 `b432a64032601b66f275d0c4b3308d95cbb40b58be9269c1494783e82fa5415d`。
+- 证书 DN 为 `C=US, O=Android, CN=Android Debug`，只适合个人安装与测试，不是应用商店正式发布证书。
+- arm64 真机安装、冷启动及真实视频 1.0x/2.0x 人工场景：**NOT RUN**。
+
+构建前为 26 个既有文件记录长度与 SHA-256。可见未跟踪内容与被忽略的 `dist` 内容分别以 stash `69397253fefc8b66e6f7dbb2873dcef45e98e2a9` 和 `f4be5826d29dab6a29325286485eba89f3d1f82a` 临时保护；原 `dist` 同时移动到 worktree 外的独立同盘临时目录。构建后先移走新 APK、SHA 和脚本生成的冲突验证文件，再恢复原内容；根因文档因系统 `core.autocrlf=true` 需以单次命令级 `core.autocrlf=false` 从已验证 stash blob 原样恢复。最终除明确覆盖的 APK/SHA 外，24/24 个受保护文件的长度和 SHA-256 与构建前一致；原 `docs/verification/2026-07-30-arm64-compressed-release.md` 未被脚本生成副本覆盖。两份任务 stash 均已删除，0 个任务 stash、0 个遗留 Git 进程。
+
+自动测试、x86_64 设备回归、arm64 真机人工检查和 Release 产物在本记录中保持分开报告。
