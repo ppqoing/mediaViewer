@@ -115,9 +115,21 @@ class PdfTemporaryFileRepositoryTest {
     }
 
     @Test
-    fun `release 删除已完成 PDF 文件`() = runTest {
+    fun `release 只删除受控 pdf 缓存文件`() = runTest {
         val repository = successfulRepository()
         val acquired = repository.acquire(LOGICAL_URL) as AppResult.Success<PdfTemporaryFile>
+        val outsideFile = temporaryFolder.newFile("outside.pdf").apply { writeText("outside") }
+
+        assertEquals(File(temporaryFolder.root, "pdf"), acquired.value.file.parentFile)
+
+        repository.release(
+            PdfTemporaryFile(
+                logicalUrl = LOGICAL_URL,
+                file = outsideFile,
+                byteCount = outsideFile.length(),
+            ),
+        )
+        assertTrue(outsideFile.exists())
 
         repository.release(acquired.value)
 
@@ -127,7 +139,7 @@ class PdfTemporaryFileRepositoryTest {
     @Test
     fun `超过 24 小时的 PDF 和 part 被清理`() = runTest {
         val repository = successfulRepository()
-        val cacheDirectory = File(temporaryFolder.root, "pdf-cache").apply { mkdirs() }
+        val cacheDirectory = File(temporaryFolder.root, "pdf").apply { mkdirs() }
         val expiredPdf = File(cacheDirectory, "expired.pdf").apply { writeText("old") }
         val expiredPart = File(cacheDirectory, "expired.part").apply { writeText("old") }
         val nowMs = 2_000_000_000L
@@ -143,7 +155,7 @@ class PdfTemporaryFileRepositoryTest {
     @Test
     fun `刚好 24 小时的 PDF 与更新文件都不清理`() = runTest {
         val repository = successfulRepository()
-        val cacheDirectory = File(temporaryFolder.root, "pdf-cache").apply { mkdirs() }
+        val cacheDirectory = File(temporaryFolder.root, "pdf").apply { mkdirs() }
         val boundaryPdf = File(cacheDirectory, "boundary.pdf").apply { writeText("boundary") }
         val freshPart = File(cacheDirectory, "fresh.part").apply { writeText("fresh") }
         val nowMs = 2_000_000_000L

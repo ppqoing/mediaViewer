@@ -100,4 +100,49 @@ class PdfFileClientTest {
         )
         assertFalse(destination.exists())
     }
+
+    @Test
+    fun `未知 Content-Length 逐段写入超过可用空间时保留余量并失败`() = runTest {
+        val body = "0123456789ABCDEF"
+        server.enqueue(
+            MockResponse.Builder()
+                .code(200)
+                .chunkedBody(body, 4)
+                .build(),
+        )
+        val realDirectory = temporaryFolder.newFolder("space-limited")
+        val destination = SpaceLimitedDestination(
+            actual = File(realDirectory, "chunked.part"),
+            parent = SpaceLimitedDirectory(
+                actual = realDirectory,
+                usableSpace = 16L * 1024L * 1024L + body.length - 1L,
+            ),
+        )
+        val client = DefaultPdfFileClient(
+            client = OkHttpClient(),
+            dispatchers = dispatchers,
+        )
+
+        val result = client.download(server.url("/chunked.pdf").toString(), destination)
+
+        assertEquals(
+            AppError.PdfCacheSpaceInsufficient,
+            (result as AppResult.Failure).error,
+        )
+        assertTrue(destination.length() <= body.length - 1L)
+    }
+}
+
+private class SpaceLimitedDirectory(
+    actual: File,
+    private val usableSpace: Long,
+) : File(actual.path) {
+    override fun getUsableSpace(): Long = usableSpace
+}
+
+private class SpaceLimitedDestination(
+    actual: File,
+    private val parent: File,
+) : File(actual.path) {
+    override fun getParentFile(): File = parent
 }

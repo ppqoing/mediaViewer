@@ -57,7 +57,11 @@ class DefaultPdfTemporaryFileRepository(
     }
 
     override fun release(file: PdfTemporaryFile) {
-        file.file.delete()
+        val cacheDirectory = File(cacheRoot, PDF_CACHE_DIRECTORY_NAME).canonicalFile
+        val target = file.file.canonicalFile
+        if (target.parentFile == cacheDirectory && target.extension == "pdf") {
+            target.delete()
+        }
     }
 
     override suspend fun cleanupExpired(nowMs: Long) {
@@ -151,4 +155,4 @@ private fun sha256(value: String): String =
         .joinToString("") { byte -> "%02x".format(byte) }
 
 const val PDF_CACHE_MAX_AGE_MS = 24L * 60L * 60L * 1_000L
-private const val PDF_CACHE_DIRECTORY_NAME = "pdf-cache"
+private const val PDF_CACHE_DIRECTORY_NAME = "pdf"

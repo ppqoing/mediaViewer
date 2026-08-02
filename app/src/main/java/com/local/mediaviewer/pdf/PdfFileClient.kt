@@ -41,13 +41,13 @@ class DefaultPdfFileClient(
                     )
                 }
 
-                val availableBytes = (
+                val writableBytes = (
                     destination.parentFile?.usableSpace ?: 0L
                     ) - PDF_CACHE_RESERVED_SPACE_BYTES
                 val contentLength = response.body.contentLength()
                 if (
                     contentLength >= 0 &&
-                    contentLength > availableBytes.coerceAtLeast(0L)
+                    contentLength > writableBytes.coerceAtLeast(0L)
                 ) {
                     return@withContext AppResult.Failure(
                         AppError.PdfCacheSpaceInsufficient,
@@ -60,10 +60,17 @@ class DefaultPdfFileClient(
                             PDF_DOWNLOAD_BUFFER_BYTES,
                         ).use { output ->
                             val buffer = ByteArray(PDF_DOWNLOAD_BUFFER_BYTES)
+                            var writtenBytes = 0L
                             while (true) {
                                 val count = input.read(buffer)
                                 if (count == -1) break
+                                if (count > writableBytes.coerceAtLeast(0L) - writtenBytes) {
+                                    return@withContext AppResult.Failure(
+                                        AppError.PdfCacheSpaceInsufficient,
+                                    )
+                                }
                                 output.write(buffer, 0, count)
+                                writtenBytes += count
                             }
                         }
                     }
