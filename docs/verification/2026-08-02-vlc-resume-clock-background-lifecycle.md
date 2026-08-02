@@ -77,6 +77,45 @@ C:\Users\Administrator\AppData\Local\Android\Sdk\platform-tools\adb.exe devices 
 | 从视频页返回目录；应停止播放并清空播放列表 | NOT RUN | 无在线 ARM64 设备。 |
 | 旋转或配置重建；不因本状态机额外暂停或续播 | NOT RUN | 无在线 ARM64 设备。 |
 
-## 6. 结论
+## 6. 最终审查修复与重新构建
 
-代码边界、前序定向 GREEN、Release lint/构建以及 APK 静态门禁均已记录为 PASS；ARM64 真机人工验收全部为 NOT RUN。故本记录只能结论为“代码与静态门禁完成并生成个人签名 ARM64 Release”，不能宣称“用户原始问题已解决”。
+### 6.1 修复范围与代码提交
+
+- 最终审查修复代码提交：`17e840fb3f0a013f035944efaa88d30b00b7d18e`（`fix: retain video route state through reconnect`）。
+- `PlayerRouteLifecycleState` 在 `PlayerRoute` destination 作用域保留最后确认的媒体类型；`currentItem == null` 的 Connecting/Failed 重连窗口不再清除已确认视频身份。
+- 视频后台播放复选框移至同一 destination 作用域；pending 恢复请求与活动视频身份只在 destination 真正销毁或新 Ready 项确认是音频时清除。
+- Ready 视频退出使用可用的 `PlayerViewModel.stopAndClear()`；Connecting、Failed、Empty 的 bootstrap 退出在最后确认是视频时使用 `QueuePlaybackController.clearAll()` 后导航。确认音频或从未确认的路由保持原非视频退出行为，音频页未接入视频后台播放交互。
+
+### 6.2 本轮聚焦 RED/GREEN
+
+只新增并运行 `PlayerRouteLifecyclePolicyTest`，没有运行完整测试集，也没有重跑 Task 1/Task 2 已通过测试。
+
+- RED 命令：`./gradlew.bat testDebugUnitTest --tests 'com.local.mediaviewer.navigation.PlayerRouteLifecyclePolicyTest' --no-daemon`。API 形状建立后，4 项测试中 2 项按预期失败：`confirmed video identity survives missing current item during reconnect` 与 `bootstrap exit after confirmed video stops and clears`；退出码 1。另两项“音频/未确认路由不做视频清理”和“视频变音频结束视频身份”当时已通过。
+- GREEN 命令只重跑上述两个失败方法，输出 `BUILD SUCCESSFUL in 22s`，32 个任务中 6 个执行、26 个最新，退出码 0。
+- 接线编译：`./gradlew.bat compileDebugKotlin --no-daemon` 输出 `BUILD SUCCESSFUL in 4s`，8 个任务均为最新，退出码 0；该命令不运行测试。
+- 基础静态复核：`ON_STOP` 无 `clearAll()`；destination 级 `DisposableEffect(entry.id)` 负责最终清理；bootstrap `onBack` 与 Empty 自动退出均使用路由级退出决策；Ready 视频经 `stopAndClear()`，bootstrap 视频经 `clearAll()`；`AudioPlayerScreen` 不包含视频后台播放复选框接线。限定文件 `git diff --check` 退出码 0。
+
+### 6.3 从最终修复提交重新构建与交付
+
+在 HEAD 为 `17e840fb3f0a013f035944efaa88d30b00b7d18e` 时重新执行：
+
+```powershell
+.\gradlew.bat clean lintRelease assembleRelease '-Pkotlin.incremental=false' --no-daemon --stacktrace
+```
+
+结果为 `BUILD SUCCESSFUL in 1m 21s`，53 个可操作任务中 52 个执行、1 个最新；没有运行测试。随后使用第 3.2 节所述既有 `ReleaseApkTools.psm1` 流程重新检查、16 KiB 对齐并以同一个人 Debug 证书签名，只覆盖第 4 节列出的 APK 与同名 SHA 文件。
+
+刷新后的交付信息：
+
+- APK 大小：43,796,606 字节（41.77 MiB）。
+- 唯一 ABI：`arm64-v8a`；LibVLC Native 与 DEX 均为 compressed；小于 70 MiB。
+- 包元数据：`com.local.mediaviewer`，`versionCode=3`，`versionName=1.1.0`，`minSdk=29`，`targetSdk=36`。
+- APK SHA-256：`73a053e3e0ac79f92ff24be2cc36c8a299fd2c6b18acf7a8c2bc01e1054b69c4`；同名 SHA 文件与 `Get-FileHash` 二次读取一致。
+- 证书 SHA-256：`b432a64032601b66f275d0c4b3308d95cbb40b58be9269c1494783e82fa5415d`；`apksigner verify` 与 `zipalign -c -P 16 -v 4` 均退出码 0。
+- 最终只读 `adb devices -l` 仍无在线设备；第 5 节全部真机场景继续为 NOT RUN，没有安装、卸载或清除设备数据。
+
+第 3、4 节保留的是前一次构建的历史事实；当前结论与交付以本节从 `17e840f` 重新生成的 APK 和新 SHA-256 为准。
+
+## 7. 结论
+
+最终审查的两个 Important finding 已由聚焦 RED/GREEN 覆盖，代码提交 `17e840f` 的编译、Release lint/构建以及刷新 APK 静态门禁均记录为 PASS；ARM64 真机人工验收仍全部为 NOT RUN。故本记录只能结论为“最终修复代码与静态门禁完成并重新生成个人签名 ARM64 Release”，不能宣称“用户原始问题已在真机解决”。
