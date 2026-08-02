@@ -7,7 +7,10 @@ import com.local.mediaviewer.core.DispatcherProvider
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -19,7 +22,7 @@ fun interface PdfFileClient {
 }
 
 class DefaultPdfFileClient(
-    private val client: OkHttpClient = OkHttpClient.Builder()
+    private val client: Call.Factory = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build(),
@@ -34,58 +37,88 @@ class DefaultPdfFileClient(
                 .url(requestUrl)
                 .get()
                 .build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    return@withContext AppResult.Failure(
-                        AppError.HttpFailure(response.code),
-                    )
-                }
+            executeCancellable(
+                call = client.newCall(request),
+                destination = destination,
+            )
+        } catch (error: IllegalArgumentException) {
+            AppResult.Failure(
+                AppError.NetworkFailure(error.javaClass.simpleName),
+            )
+        }
+    }
 
-                val writableBytes = (
-                    destination.parentFile?.usableSpace ?: 0L
-                    ) - PDF_CACHE_RESERVED_SPACE_BYTES
-                val contentLength = response.body.contentLength()
-                if (
-                    contentLength >= 0 &&
-                    contentLength > writableBytes.coerceAtLeast(0L)
-                ) {
-                    return@withContext AppResult.Failure(
-                        AppError.PdfCacheSpaceInsufficient,
-                    )
-                }
+    private suspend fun executeCancellable(
+        call: Call,
+        destination: File,
+    ): AppResult<Long> = suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation { call.cancel() }
+        val result = executeBlocking(
+            call = call,
+            destination = destination,
+            isCancelled = continuation::isCancelled,
+        )
+        if (result != null && continuation.isActive) {
+            continuation.resume(result)
+        }
+    }
 
-                try {
-                    response.body.byteStream().use { input ->
-                        destination.outputStream().buffered(
-                            PDF_DOWNLOAD_BUFFER_BYTES,
-                        ).use { output ->
-                            val buffer = ByteArray(PDF_DOWNLOAD_BUFFER_BYTES)
-                            var writtenBytes = 0L
-                            while (true) {
-                                val count = input.read(buffer)
-                                if (count == -1) break
-                                if (count > writableBytes.coerceAtLeast(0L) - writtenBytes) {
-                                    return@withContext AppResult.Failure(
-                                        AppError.PdfCacheSpaceInsufficient,
-                                    )
-                                }
-                                output.write(buffer, 0, count)
-                                writtenBytes += count
+    private fun executeBlocking(
+        call: Call,
+        destination: File,
+        isCancelled: () -> Boolean,
+    ): AppResult<Long>? = try {
+        call.execute().use { response ->
+            if (!response.isSuccessful) {
+                return AppResult.Failure(
+                    AppError.HttpFailure(response.code),
+                )
+            }
+
+            val writableBytes = (
+                destination.parentFile?.usableSpace ?: 0L
+                ) - PDF_CACHE_RESERVED_SPACE_BYTES
+            val contentLength = response.body.contentLength()
+            if (
+                contentLength >= 0 &&
+                contentLength > writableBytes.coerceAtLeast(0L)
+            ) {
+                return AppResult.Failure(
+                    AppError.PdfCacheSpaceInsufficient,
+                )
+            }
+
+            try {
+                response.body.byteStream().use { input ->
+                    destination.outputStream().buffered(
+                        PDF_DOWNLOAD_BUFFER_BYTES,
+                    ).use { output ->
+                        val buffer = ByteArray(PDF_DOWNLOAD_BUFFER_BYTES)
+                        var writtenBytes = 0L
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count == -1) break
+                            if (count > writableBytes.coerceAtLeast(0L) - writtenBytes) {
+                                return AppResult.Failure(
+                                    AppError.PdfCacheSpaceInsufficient,
+                                )
                             }
+                            output.write(buffer, 0, count)
+                            writtenBytes += count
                         }
                     }
-                    AppResult.Success(destination.length())
-                } catch (error: IOException) {
+                }
+                AppResult.Success(destination.length())
+            } catch (error: IOException) {
+                if (isCancelled()) null else {
                     AppResult.Failure(
                         AppError.PdfCacheFailure(error.javaClass.simpleName),
                     )
                 }
             }
-        } catch (error: IOException) {
-            AppResult.Failure(
-                AppError.NetworkFailure(error.javaClass.simpleName),
-            )
-        } catch (error: IllegalArgumentException) {
+        }
+    } catch (error: IOException) {
+        if (isCancelled()) null else {
             AppResult.Failure(
                 AppError.NetworkFailure(error.javaClass.simpleName),
             )

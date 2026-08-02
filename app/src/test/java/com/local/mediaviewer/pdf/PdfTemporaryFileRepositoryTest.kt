@@ -8,9 +8,18 @@ import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import java.io.File
 import java.util.concurrent.CancellationException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
+import mockwebserver3.MockResponse
+import mockwebserver3.MockWebServer
+import okhttp3.Call
+import okhttp3.EventListener
+import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -115,6 +124,71 @@ class PdfTemporaryFileRepositoryTest {
     }
 
     @Test
+    fun `取消慢速 HTTP 下载会中断 Call 并删除 part 文件`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        val callCancelled = CountDownLatch(1)
+        val acquireCompleted = CountDownLatch(1)
+        try {
+            server.enqueue(
+                MockResponse.Builder()
+                    .code(200)
+                    .body("x".repeat(1024))
+                    .throttleBody(1, 1, TimeUnit.SECONDS)
+                    .build(),
+            )
+            val httpClient = OkHttpClient.Builder()
+                .eventListener(
+                    object : EventListener() {
+                        override fun canceled(call: Call) {
+                            callCancelled.countDown()
+                        }
+                    },
+                )
+                .build()
+            val repository = DefaultPdfTemporaryFileRepository(
+                cacheRoot = temporaryFolder.root,
+                client = DefaultPdfFileClient(
+                    client = httpClient,
+                    dispatchers = object : com.local.mediaviewer.core.DispatcherProvider {
+                        override val io = Dispatchers.IO
+                        override val default = Dispatchers.Default
+                        override val main = Dispatchers.Default
+                    },
+                ),
+                session = PdfSession(
+                    SessionEndpoint(
+                        logicalBaseUrl = "http://media.example:8080",
+                        requestBaseUrl = server.url("/").toString().removeSuffix("/"),
+                        ipv4 = "127.0.0.1",
+                    ),
+                ),
+            )
+            val acquire = async(Dispatchers.Default) { repository.acquire(LOGICAL_URL) }
+            acquire.invokeOnCompletion { acquireCompleted.countDown() }
+            assertTrue(
+                waitUntil(timeoutMs = 2_000) {
+                    temporaryFolder.root.walk().any { it.extension == "part" }
+                },
+            )
+
+            acquire.cancel()
+            val completedQuickly = acquireCompleted.await(750, TimeUnit.MILLISECONDS)
+            val callCancelledQuickly = callCancelled.await(750, TimeUnit.MILLISECONDS)
+            if (!completedQuickly) server.close()
+            assertTrue(acquireCompleted.await(3, TimeUnit.SECONDS))
+
+            assertTrue("acquire 未在短超时内结束", completedQuickly)
+            assertTrue("底层 Call.cancel() 未触发", callCancelledQuickly)
+            assertTrue(acquire.isCancelled)
+            assertFalse(temporaryFolder.root.walk().any { it.extension == "part" })
+            assertFalse(temporaryFolder.root.walk().any { it.extension == "pdf" })
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
     fun `release 只删除受控 pdf 缓存文件`() = runTest {
         val repository = successfulRepository()
         val acquired = repository.acquire(LOGICAL_URL) as AppResult.Success<PdfTemporaryFile>
@@ -177,6 +251,18 @@ class PdfTemporaryFileRepositoryTest {
             },
             session = PdfSession(initialEndpoint),
         )
+}
+
+private fun waitUntil(
+    timeoutMs: Long,
+    condition: () -> Boolean,
+): Boolean {
+    val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+    while (System.nanoTime() < deadline) {
+        if (condition()) return true
+        Thread.sleep(10)
+    }
+    return condition()
 }
 
 private const val LOGICAL_URL = "http://media.example:8080/books/example.pdf"
