@@ -229,26 +229,27 @@ private fun PdfContent(
                     zoom,
                 ->
                     val current = transform
-                    val updated = PdfTransformReducer.gesture(
+                    val gestureCentroid = centroid - pan
+                    val updated = reducePdfScreenGesture(
                         current = current,
                         zoomChange = zoom,
                         panXPx = pan.x,
-                        centroidXPx = centroid.x,
+                        currentCentroidXPx = centroid.x,
                         viewportWidthPx = viewportWidthPx.toFloat(),
                     )
                     if (updated.scale != current.scale) {
                         listState.pageAt(
                             pageSizes = state.pageSizes,
-                            viewportYPx = centroid.y,
+                            viewportYPx = gestureCentroid.y,
                         )?.let { (item, pageIndex) ->
                             anchorGeneration += 1L
                             zoomAnchor = ZoomAnchor(
                                 pageIndex = pageIndex,
                                 pageRatio = (
-                                    (centroid.y - item.offset) /
+                                    (gestureCentroid.y - item.offset) /
                                         item.size.toFloat()
                                     ).coerceIn(0f, 1f),
-                                centroidYPx = centroid.y,
+                                centroidYPx = gestureCentroid.y,
                                 generation = anchorGeneration,
                             )
                         }
@@ -496,6 +497,20 @@ private fun Modifier.pdfTransformGestures(
         }
     }
 }
+
+internal fun reducePdfScreenGesture(
+    current: PdfTransform,
+    zoomChange: Float,
+    panXPx: Float,
+    currentCentroidXPx: Float,
+    viewportWidthPx: Float,
+): PdfTransform = PdfTransformReducer.gesture(
+    current = current,
+    zoomChange = zoomChange,
+    panXPx = panXPx,
+    centroidXPx = currentCentroidXPx - panXPx,
+    viewportWidthPx = viewportWidthPx,
+)
 
 private data class ZoomAnchor(
     val pageIndex: Int,

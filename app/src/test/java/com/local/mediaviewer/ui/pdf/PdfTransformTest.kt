@@ -78,4 +78,25 @@ class PdfTransformTest {
         assertEquals(3f, transformed.scale, 0.001f)
         assertEquals(240f, transformed.horizontalOffsetPx, 0.001f)
     }
+
+    @Test
+    fun `屏幕手势适配在非对称平移缩放时使用变化前中心`() {
+        val transformed = reducePdfScreenGesture(
+            current = PdfTransform(
+                scale = 2f,
+                horizontalOffsetPx = 100f,
+            ),
+            zoomChange = 1.5f,
+            panXPx = 40f,
+            currentCentroidXPx = 440f,
+            viewportWidthPx = 1_000f,
+        )
+
+        assertEquals(3f, transformed.scale, 0.001f)
+        assertEquals(
+            240f,
+            transformed.horizontalOffsetPx,
+            0.001f,
+        )
+    }
 }
