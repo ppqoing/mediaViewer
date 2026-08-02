@@ -1,7 +1,12 @@
 package com.local.mediaviewer.ui.pdf
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerInputChange
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class PdfTransformTest {
@@ -102,4 +107,83 @@ class PdfTransformTest {
         )
         assertEquals(previousCentroid, update.anchorCentroid)
     }
+
+    @Test
+    fun `指针桥接在第三指加入和离开时只使用公共指针的前一中心`() {
+        val joining = PointerEvent(
+            listOf(
+                pointerChange(0, Offset(100f, 100f), Offset(110f, 100f)),
+                pointerChange(1, Offset(300f, 100f), Offset(310f, 100f)),
+                pointerChange(
+                    id = 2,
+                    previous = Offset(1_000f, 100f),
+                    current = Offset(1_000f, 100f),
+                    previousPressed = false,
+                    pressed = true,
+                ),
+            ),
+        )
+
+        val joiningSample = joining.toPdfGestureSample()
+        assertNotNull(joiningSample)
+        assertEquals(
+            Offset(200f, 100f),
+            joiningSample?.previousCentroid,
+        )
+        assertEquals(Offset(10f, 0f), joiningSample?.pan)
+
+        val leaving = PointerEvent(
+            listOf(
+                pointerChange(0, Offset(110f, 100f), Offset(120f, 100f)),
+                pointerChange(1, Offset(310f, 100f), Offset(320f, 100f)),
+                pointerChange(
+                    id = 2,
+                    previous = Offset(1_000f, 100f),
+                    current = Offset(1_000f, 100f),
+                    previousPressed = true,
+                    pressed = false,
+                ),
+            ),
+        )
+
+        val leavingSample = leaving.toPdfGestureSample()
+        assertNotNull(leavingSample)
+        assertEquals(
+            Offset(210f, 100f),
+            leavingSample?.previousCentroid,
+        )
+        assertEquals(Offset(10f, 0f), leavingSample?.pan)
+    }
+
+    @Test
+    fun `指针桥接忽略单指且不消费事件`() {
+        val change = pointerChange(
+            id = 0,
+            previous = Offset(100f, 100f),
+            current = Offset(120f, 100f),
+        )
+
+        val sample = PointerEvent(listOf(change))
+            .toPdfGestureSample()
+
+        assertEquals(null, sample)
+        assertFalse(change.isConsumed)
+    }
+
+    private fun pointerChange(
+        id: Long,
+        previous: Offset,
+        current: Offset,
+        previousPressed: Boolean = true,
+        pressed: Boolean = true,
+    ): PointerInputChange = PointerInputChange(
+        id = PointerId(id),
+        uptimeMillis = 16L,
+        position = current,
+        pressed = pressed,
+        previousUptimeMillis = 0L,
+        previousPosition = previous,
+        previousPressed = previousPressed,
+        isInitiallyConsumed = false,
+    )
 }

@@ -51,6 +51,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -479,18 +480,18 @@ private fun Modifier.pdfTransformGestures(
             awaitFirstDown(requireUnconsumed = false)
             do {
                 val event = awaitPointerEvent()
-                val pressed = event.changes.filter { it.pressed }
-                if (pressed.size >= 2) {
-                    val centroid = event.calculateCentroid(
-                        useCurrent = false,
-                    )
-                    val zoom = event.calculateZoom()
-                    val pan = event.calculatePan()
+                val sample = event.toPdfGestureSample()
+                if (sample != null) {
                     if (
-                        abs(zoom - 1f) > TRANSFORM_EPSILON ||
-                        pan != Offset.Zero
+                        abs(sample.zoom - 1f) >
+                            TRANSFORM_EPSILON ||
+                        sample.pan != Offset.Zero
                     ) {
-                        currentOnGesture(centroid, pan, zoom)
+                        currentOnGesture(
+                            sample.previousCentroid,
+                            sample.pan,
+                            sample.zoom,
+                        )
                     }
                     event.changes.forEach { it.consume() }
                 }
@@ -498,6 +499,24 @@ private fun Modifier.pdfTransformGestures(
         }
     }
 }
+
+internal fun PointerEvent.toPdfGestureSample():
+    PdfPointerGestureSample? {
+    if (changes.count { it.pressed } < 2) return null
+    return PdfPointerGestureSample(
+        previousCentroid = calculateCentroid(
+            useCurrent = false,
+        ),
+        pan = calculatePan(),
+        zoom = calculateZoom(),
+    )
+}
+
+internal data class PdfPointerGestureSample(
+    val previousCentroid: Offset,
+    val pan: Offset,
+    val zoom: Float,
+)
 
 internal fun reducePdfScreenGesture(
     current: PdfTransform,
