@@ -82,3 +82,9 @@ arm64 真机真实视频人工检查：**NOT RUN**。
 构建前为 26 个既有文件记录长度与 SHA-256。可见未跟踪内容与被忽略的 `dist` 内容分别以 stash `69397253fefc8b66e6f7dbb2873dcef45e98e2a9` 和 `f4be5826d29dab6a29325286485eba89f3d1f82a` 临时保护；原 `dist` 同时移动到 worktree 外的独立同盘临时目录。构建后先移走新 APK、SHA 和脚本生成的冲突验证文件，再恢复原内容；根因文档因系统 `core.autocrlf=true` 需以单次命令级 `core.autocrlf=false` 从已验证 stash blob 原样恢复。最终除明确覆盖的 APK/SHA 外，24/24 个受保护文件的长度和 SHA-256 与构建前一致；原 `docs/verification/2026-07-30-arm64-compressed-release.md` 未被脚本生成副本覆盖。两份任务 stash 均已删除，0 个任务 stash、0 个遗留 Git 进程。
 
 自动测试、x86_64 设备回归、arm64 真机人工检查和 Release 产物在本记录中保持分开报告。
+
+## 6. 后续用户复验
+
+本记录所述旧实现仍在“手动暂停后续播”场景存在失败风险：暂停后恢复播放时，旧路径会额外刷新视频输出，可能造成画面卡住、声音继续或进度异常。此历史记录不应被解读为该场景已经通过 ARM64 真机验收。
+
+该问题的后续代码变更、定向 RED/GREEN 证据、Release 静态门禁及本轮真机状态，见 [VLC 续播时钟与前后台生命周期复验记录](2026-08-02-vlc-resume-clock-background-lifecycle.md)。截至该记录日期，自动与静态门禁不能替代真机人工结论；只有其中所列 ARM64 场景全部 PASS 后，才能宣称用户原始问题已解决。
