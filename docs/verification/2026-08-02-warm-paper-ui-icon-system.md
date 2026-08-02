@@ -1,7 +1,8 @@
 # 暖纸界面与 Image2 图标系统基础验收记录
 
 - 验收日期：2026-08-02
-- 验收基线：`3bb621edea8a2788940ec88f3e96d8a286585ef3`
+- 初始整合基线：`3bb621edea8a2788940ec88f3e96d8a286585ef3`
+- 最终基础审查修复后 HEAD：`f2bf1a4d4447c1a4d928831c5c6d73761d16e395`
 - 验收范围：Task 8 静态门禁、Android 编译与 JVM 定向测试、设备可用性判断、一次基础静态视觉检查
 - 验收边界：只做基础功能性验收，不做多轮审美审查，不访问真实服务器，不创建或启动模拟器，不构建 APK
 
@@ -12,6 +13,15 @@
 `adb devices -l` 成功执行但设备列表为空。因此，13 个定向 Compose 测试类、全部基础人工功能检查以及真机视觉与适配检查均为 `NOT RUN`。这些项目没有被编译或 JVM 测试结果替代，也没有记为 `PASS`。
 
 APK 状态：**NOT BUILT**。本任务没有执行 assemble、bundle 或发布打包命令。
+
+## 最终基础审查后修复
+
+- Finding：漫画模式仍显示只属于单图模式的“上一张/下一张”控件；这些控件在漫画模式下失效，不应暴露给用户。
+- 最小修复：只修改 `ImageReaderToolbar.kt` 与 `ImageReaderScreenTest.kt`，在漫画模式隐藏单图上一张/下一张控件；提交为 `f2bf1a4d4447c1a4d928831c5c6d73761d16e395`（`fix: hide single image navigation in comic mode`）。
+- 编译门：`:app:compileDebugKotlin` 退出码 0；`:app:compileDebugAndroidTestKotlin` 退出码 0。这里仅记录编译成功，不把 AndroidTest 编译等同于 connected 运行时通过。
+- Connected runtime：`NOT RUN`，设备仍不可用；没有补跑真机或模拟器测试。
+- Scoped review：`CLEAN`，独立限定范围复核未发现问题。
+- 本次文档增量没有重跑既有测试；原有 JVM 17/17、图标 61 个、APK `NOT BUILT` 与所有真机 `NOT RUN` 结论保持不变。
 
 ## 自动化与静态门禁
 
