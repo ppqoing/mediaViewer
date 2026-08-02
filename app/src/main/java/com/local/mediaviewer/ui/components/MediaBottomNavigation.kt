@@ -32,7 +32,7 @@ private val topLevelNavigationItems = listOf(
         destination = TopLevelDestination.MEDIA_SOURCES,
         label = "媒体源",
         icon = MediaIcons.NetworkShare,
-        testTag = "bottom_nav_media_sources",
+        testTag = "bottom_nav_sources",
     ),
     TopLevelNavigationItem(
         destination = TopLevelDestination.SETTINGS,

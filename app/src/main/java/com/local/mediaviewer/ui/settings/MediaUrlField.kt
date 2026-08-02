@@ -37,6 +37,13 @@ fun MediaUrlField(
         singleLine = true,
         isError = isError,
         label = { Text("服务器 URL") },
+        leadingIcon = {
+            MediaIconImage(
+                icon = MediaIcons.NetworkShare,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Uri,
             imeAction = ImeAction.Done,

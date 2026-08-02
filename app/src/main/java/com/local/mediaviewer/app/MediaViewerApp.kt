@@ -311,7 +311,9 @@ fun MediaViewerApp(
                 state = state,
                 onRetry = appSessionViewModel::retry,
                 onOpenSettings = {
-                    navController.navigate(SettingsRoute)
+                    navController.navigate(SettingsRoute) {
+                        launchSingleTop = true
+                    }
                 },
                 onOpenShare = { share ->
                     navController.navigate(BrowserRoute(share.id))
@@ -351,6 +353,14 @@ fun MediaViewerApp(
                 onBack = { navController.popBackStack() },
                 onBackRequest = settings::requestBack,
                 onDiscardConfirmed = { navController.popBackStack() },
+                onOpenSources = {
+                    navController.navigate(HomeRoute) {
+                        popUpTo(navController.graph.startDestinationId) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         composable<BrowserRoute> { entry ->

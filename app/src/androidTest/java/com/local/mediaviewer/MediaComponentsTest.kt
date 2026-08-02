@@ -103,7 +103,7 @@ class MediaComponentsTest {
 
         rule.onNodeWithTag("segment_image").assertIsSelected()
         rule.onNodeWithTag("segment_comic").performClick()
-        rule.onNodeWithTag("bottom_nav_media_sources").assertIsSelected()
+        rule.onNodeWithTag("bottom_nav_sources").assertIsSelected()
         rule.onNodeWithTag("bottom_nav_settings").performClick()
         rule.runOnIdle {
             assertEquals(listOf("comic"), selectedSegments)

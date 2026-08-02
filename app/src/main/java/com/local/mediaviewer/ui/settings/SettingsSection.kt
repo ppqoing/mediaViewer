@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.local.mediaviewer.ui.components.WarmPaperCard
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
@@ -24,19 +25,24 @@ fun SettingsSection(
     description: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(MediaTheme.spacing.sm),
-    ) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        description?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    WarmPaperCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(MediaTheme.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(MediaTheme.spacing.xxs),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            description?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        content()
+        Column(
+            verticalArrangement = Arrangement.spacedBy(MediaTheme.spacing.sm),
+            content = content,
+        )
     }
 }
 

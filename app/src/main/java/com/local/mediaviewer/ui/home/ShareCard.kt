@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,37 +44,33 @@ fun ShareCard(
             },
         )
 
-    ElevatedCard(modifier = cardModifier) {
-        Row(
-            modifier = Modifier.padding(MediaTheme.spacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(MediaTheme.spacing.sm),
-        ) {
-            MediaGlyph(
-                icon = MediaIcons.Folder,
-                contentDescription = null,
-                tint = MediaTheme.extendedColors.folder,
+    Row(
+        modifier = cardModifier.padding(MediaTheme.spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MediaTheme.spacing.sm),
+    ) {
+        MediaGlyph(
+            icon = MediaIcons.NetworkShare,
+            contentDescription = null,
+            tint = MediaTheme.extendedColors.folder,
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = share.displayName,
+                style = MaterialTheme.typography.titleMedium,
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = share.displayName,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                unavailableReason?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (unavailableReason == null) {
-                MediaIconImage(
-                    icon = MediaIcons.Forward,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = unavailableReason ?: share.urlPrefix,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (unavailableReason == null) {
+            MediaIconImage(
+                icon = MediaIcons.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

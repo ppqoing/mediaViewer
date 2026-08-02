@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +19,7 @@ import com.local.mediaviewer.home.HomeUiState
 import com.local.mediaviewer.ui.components.MediaGlyph
 import com.local.mediaviewer.ui.components.MediaPrimaryButton
 import com.local.mediaviewer.ui.components.MediaSecondaryButton
+import com.local.mediaviewer.ui.components.WarmPaperCard
 import com.local.mediaviewer.ui.icons.MediaIcons
 import com.local.mediaviewer.ui.theme.MediaTheme
 
@@ -30,7 +30,7 @@ fun ConnectionStatusCard(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ElevatedCard(
+    WarmPaperCard(
         modifier = modifier.fillMaxWidth(),
     ) {
         when (state) {

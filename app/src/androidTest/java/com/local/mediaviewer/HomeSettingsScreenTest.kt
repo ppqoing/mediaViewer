@@ -23,6 +23,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -95,6 +97,28 @@ class HomeSettingsScreenTest {
         rule.onNodeWithText("网络连接失败：timeout").assertIsDisplayed()
         rule.onNodeWithText("重试").performClick()
         assertTrue(retried)
+    }
+
+    @Test
+    fun connectedHomeUsesWarmPaperSectionsAndTopLevelNavigation() {
+        showConnectedHome()
+
+        rule.onAllNodesWithText("媒体源").onFirst().assertIsDisplayed()
+        rule.onNodeWithTag("home_saved_shares").assertExists()
+        rule.onNodeWithTag("home_quick_actions").assertExists()
+        rule.onNodeWithTag("home_settings_entry").assertHasClickAction()
+        rule.onNodeWithTag("bottom_nav_sources").assertIsSelected()
+        rule.onNodeWithTag("bottom_nav_settings").assertHasClickAction()
+    }
+
+    @Test
+    fun homeSearchFiltersOnlyLoadedShares() {
+        showConnectedHome()
+
+        rule.onNodeWithTag("home_search_action").performClick()
+        rule.onNodeWithTag("home_search_field").performTextInput("Middle")
+        rule.onNodeWithText("MiddleDir").assertExists()
+        rule.onNodeWithText("私有目录").assertDoesNotExist()
     }
 
     @Test
@@ -393,6 +417,25 @@ class HomeSettingsScreenTest {
     }
 
     @Test
+    fun settingsKeepsAllVideoAutoHideChoicesInsidePaperSection() {
+        showSettings(
+            SettingsUiState(
+                videoControlsAutoHide = VideoControlsAutoHide.TEN_SECONDS,
+            ),
+        )
+
+        rule.onNodeWithTag("settings_video_section").assertExists()
+        listOf("3 秒", "5 秒", "10 秒", "15 秒", "不隐藏")
+            .forEach { label ->
+                rule.onNodeWithTag("settings_list")
+                    .performScrollToNode(hasText(label))
+                rule.onNodeWithText(label).assertExists()
+            }
+        rule.onNodeWithTag("video_controls_auto_hide_10")
+            .assertIsSelected()
+    }
+
+    @Test
     fun settingsKeepsSaveReachableAtLargeFontAndShowsActionHierarchy() {
         var saves = 0
         rule.setContent {
@@ -682,6 +725,41 @@ class HomeSettingsScreenTest {
                     LiveRegionMode.Polite,
                 ),
             )
+    }
+
+    private fun showConnectedHome() {
+        rule.setContent {
+            MediaViewerTheme {
+                HomeScreen(
+                    state = HomeUiState.Connected(
+                        ipv4 = "192.0.2.10",
+                        shares = listOf(
+                            HOME_ANONYMOUS_SHARE,
+                            HOME_BASIC_SHARE,
+                        ),
+                    ),
+                    onRetry = {},
+                    onOpenSettings = {},
+                    onOpenShare = {},
+                )
+            }
+        }
+    }
+
+    private fun showSettings(state: SettingsUiState) {
+        rule.setContent {
+            MediaViewerTheme {
+                SettingsScreen(
+                    state = state,
+                    onInputChanged = {},
+                    onTest = {},
+                    onSave = {},
+                    onDefaultImageModeChanged = {},
+                    onVideoControlsAutoHideChanged = {},
+                    onBack = {},
+                )
+            }
+        }
     }
 }
 

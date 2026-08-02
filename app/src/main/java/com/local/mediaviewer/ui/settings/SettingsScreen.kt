@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -31,9 +32,11 @@ import com.local.mediaviewer.settings.SettingsBackDecision
 import com.local.mediaviewer.settings.SettingsUiState
 import com.local.mediaviewer.settings.VideoControlsAutoHide
 import com.local.mediaviewer.ui.components.MediaConfirmDialog
+import com.local.mediaviewer.ui.components.MediaBottomNavigation
 import com.local.mediaviewer.ui.components.MediaPrimaryButton
 import com.local.mediaviewer.ui.components.MediaScreenScaffold
 import com.local.mediaviewer.ui.components.MediaSecondaryButton
+import com.local.mediaviewer.ui.components.TopLevelDestination
 import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
@@ -51,14 +54,21 @@ fun SettingsScreen(
         SettingsBackDecision.LEAVE
     },
     onDiscardConfirmed: () -> Unit = onBack,
+    onOpenSources: () -> Unit = onBack,
 ) {
     var showDiscardDialog by rememberSaveable {
         mutableStateOf(false)
     }
-    val requestLeave = {
+    var openSourcesAfterDiscard by rememberSaveable {
+        mutableStateOf(false)
+    }
+    val requestLeave: (Boolean) -> Unit = { openSources ->
         when (onBackRequest()) {
-            SettingsBackDecision.LEAVE -> onBack()
+            SettingsBackDecision.LEAVE -> {
+                if (openSources) onOpenSources() else onBack()
+            }
             SettingsBackDecision.CONFIRM_DISCARD -> {
+                openSourcesAfterDiscard = openSources
                 showDiscardDialog = true
             }
         }
@@ -70,51 +80,52 @@ fun SettingsScreen(
         else -> MediaUrlFieldState.IDLE
     }
 
-    BackHandler(onBack = requestLeave)
+    BackHandler { requestLeave(false) }
 
-    MediaScreenScaffold(
-        title = "服务器设置",
-        onBack = requestLeave,
-    ) { scaffoldPadding ->
-        val layoutDirection = LocalLayoutDirection.current
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            val pageGutter = if (maxWidth >= 600.dp) {
-                MediaTheme.spacing.widePageGutter
-            } else {
-                MediaTheme.spacing.pageGutter
-            }
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .imePadding()
-                    .testTag("settings_list"),
-                contentPadding = PaddingValues(
-                    start =
-                        scaffoldPadding.calculateStartPadding(
-                            layoutDirection,
-                        ) + pageGutter,
-                    top =
-                        scaffoldPadding.calculateTopPadding() +
-                            MediaTheme.spacing.md,
-                    end =
-                        scaffoldPadding.calculateEndPadding(
-                            layoutDirection,
-                        ) + pageGutter,
-                    bottom =
-                        scaffoldPadding.calculateBottomPadding() +
-                            MediaTheme.spacing.xxl,
-                ),
-                verticalArrangement = Arrangement.spacedBy(
-                    MediaTheme.spacing.lg,
-                ),
+    Column(modifier = Modifier.fillMaxSize()) {
+        MediaScreenScaffold(
+            title = "服务器设置",
+            onBack = { requestLeave(false) },
+            modifier = Modifier.weight(1f),
+        ) { scaffoldPadding ->
+            val layoutDirection = LocalLayoutDirection.current
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize(),
             ) {
+                val pageGutter = if (maxWidth >= 600.dp) {
+                    MediaTheme.spacing.widePageGutter
+                } else {
+                    MediaTheme.spacing.pageGutter
+                }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .imePadding()
+                        .testTag("settings_list"),
+                    contentPadding = PaddingValues(
+                        start = scaffoldPadding.calculateStartPadding(
+                            layoutDirection,
+                        ) + pageGutter,
+                        top = scaffoldPadding.calculateTopPadding() +
+                            MediaTheme.spacing.md,
+                        end = scaffoldPadding.calculateEndPadding(
+                            layoutDirection,
+                        ) + pageGutter,
+                        bottom = scaffoldPadding.calculateBottomPadding() +
+                            MediaTheme.spacing.xxl,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(
+                        MediaTheme.spacing.lg,
+                    ),
+                ) {
                 item {
                     SettingsSection(
                         title = "服务器连接",
                         description =
                             "测试成功后保存服务器地址",
+                        modifier = Modifier.testTag(
+                            "settings_server_section",
+                        ),
                     ) {
                         MediaUrlField(
                             value = state.input,
@@ -194,6 +205,9 @@ fun SettingsScreen(
                     SettingsSection(
                         title = "视频播放",
                         description = "选择上下功能区自动隐藏时长",
+                        modifier = Modifier.testTag(
+                            "settings_video_section",
+                        ),
                     ) {
                         SettingsChoiceRow(
                             title = "3 秒",
@@ -295,6 +309,9 @@ fun SettingsScreen(
                     SettingsSection(
                         title = "图片阅读",
                         description = "选择默认的图片阅读方式",
+                        modifier = Modifier.testTag(
+                            "settings_image_section",
+                        ),
                     ) {
                         SettingsChoiceRow(
                             title = "条漫",
@@ -339,8 +356,17 @@ fun SettingsScreen(
                         }
                     }
                 }
+                }
             }
         }
+        MediaBottomNavigation(
+            selected = TopLevelDestination.SETTINGS,
+            onSelect = { destination ->
+                if (destination == TopLevelDestination.MEDIA_SOURCES) {
+                    requestLeave(true)
+                }
+            },
+        )
     }
 
     if (showDiscardDialog) {
@@ -352,10 +378,16 @@ fun SettingsScreen(
             destructive = true,
             onConfirm = {
                 showDiscardDialog = false
-                onDiscardConfirmed()
+                if (openSourcesAfterDiscard) {
+                    openSourcesAfterDiscard = false
+                    onOpenSources()
+                } else {
+                    onDiscardConfirmed()
+                }
             },
             onDismiss = {
                 showDiscardDialog = false
+                openSourcesAfterDiscard = false
             },
         )
     }

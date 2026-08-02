@@ -1,6 +1,7 @@
 package com.local.mediaviewer
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -73,9 +74,13 @@ class MediaViewerNavigationTest {
     @Test
     fun homeOpensNestedVideo() {
         openNestedDirectory()
+        rule.onNodeWithTag("bottom_nav_sources").assertDoesNotExist()
+        rule.onNodeWithTag("bottom_nav_settings").assertDoesNotExist()
         rule.onNodeWithText("样例.mp4").performClick()
         rule.onNodeWithText("样例.mp4").assertIsDisplayed()
         rule.onNodeWithTag("vlc_surface").assertExists()
+        rule.onNodeWithTag("bottom_nav_sources").assertDoesNotExist()
+        rule.onNodeWithTag("bottom_nav_settings").assertDoesNotExist()
     }
 
     @Test
@@ -94,6 +99,20 @@ class MediaViewerNavigationTest {
             .onFirst()
             .assertIsDisplayed()
         rule.onNodeWithTag("comic_reader").assertExists()
+        rule.onNodeWithTag("bottom_nav_sources").assertDoesNotExist()
+        rule.onNodeWithTag("bottom_nav_settings").assertDoesNotExist()
+    }
+
+    @Test
+    fun bottomNavigationSwitchesOnlyBetweenTopLevelDestinations() {
+        rule.onNodeWithTag("bottom_nav_sources").assertIsSelected()
+        rule.onNodeWithTag("bottom_nav_settings").performClick()
+        rule.onNodeWithText("服务器设置").assertIsDisplayed()
+        rule.onNodeWithTag("bottom_nav_settings").assertIsSelected()
+
+        rule.onNodeWithTag("bottom_nav_sources").performClick()
+        rule.onAllNodesWithText("媒体源").onFirst().assertIsDisplayed()
+        rule.onNodeWithTag("bottom_nav_sources").assertIsSelected()
     }
 
     @Test
