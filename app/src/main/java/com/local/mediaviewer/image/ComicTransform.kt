@@ -148,7 +148,8 @@ fun captureComicViewportAnchor(
     return ComicViewportAnchor(
         itemIndex = selected.index,
         itemFraction =
-            (centroidYPx - selected.offsetPx.toFloat()) / selected.sizePx.toFloat(),
+            ((centroidYPx - selected.offsetPx.toFloat()) / selected.sizePx.toFloat())
+                .coerceIn(0f, 1f),
         centroidYPx = centroidYPx,
     )
 }
