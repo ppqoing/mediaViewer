@@ -230,7 +230,10 @@ fun ImageReaderOverlayControls(
                 .fillMaxSize()
                 .testTag("image_reader_controls"),
         ) {
-            if (currentIndex > 0) {
+            if (
+                mode == ImageReaderMode.SINGLE &&
+                currentIndex > 0
+            ) {
                 Surface(
                     modifier = Modifier
                         .align(Alignment.CenterStart),
@@ -245,7 +248,10 @@ fun ImageReaderOverlayControls(
                     )
                 }
             }
-            if (currentIndex < totalCount - 1) {
+            if (
+                mode == ImageReaderMode.SINGLE &&
+                currentIndex < totalCount - 1
+            ) {
                 Surface(
                     modifier = Modifier
                         .align(Alignment.CenterEnd),

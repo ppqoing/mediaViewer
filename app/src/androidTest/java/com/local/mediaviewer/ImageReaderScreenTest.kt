@@ -202,6 +202,16 @@ class ImageReaderScreenTest {
     }
 
     @Test
+    fun comicModeDoesNotShowSingleImageEdgeNavigation() {
+        setScreen(contentState(ImageReaderMode.COMIC))
+
+        rule.onNodeWithContentDescription("上一张")
+            .assertDoesNotExist()
+        rule.onNodeWithContentDescription("下一张")
+            .assertDoesNotExist()
+    }
+
+    @Test
     fun controlsStayInsideDisplayCutoutSafeArea() {
         setScreen(
             state = contentState(ImageReaderMode.SINGLE),
