@@ -105,10 +105,4 @@ object VideoBackgroundPlaybackPolicy {
     fun shouldStopAndClear(
         reason: VideoSessionExitReason,
     ): Boolean = reason == VideoSessionExitReason.NAVIGATE_AWAY
-
-    // Temporary compile bridge; remove when MediaViewerApp adopts lifecycle state.
-    fun shouldStopAndClear(
-        enabled: Boolean,
-        reason: VideoSessionExitReason,
-    ): Boolean = !enabled && reason != VideoSessionExitReason.CONFIGURATION_CHANGE
 }

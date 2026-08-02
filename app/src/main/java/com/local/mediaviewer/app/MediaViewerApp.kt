@@ -60,6 +60,9 @@ import com.local.mediaviewer.navigation.leavePlayerSafely
 import com.local.mediaviewer.navigation.resolvePlayerEntryState
 import com.local.mediaviewer.player.PlayerRequest
 import com.local.mediaviewer.player.PlayerViewModel
+import com.local.mediaviewer.player.VideoBackgroundLifecycleAction
+import com.local.mediaviewer.player.VideoBackgroundLifecycleState
+import com.local.mediaviewer.player.VideoBackgroundLifecycleTransition
 import com.local.mediaviewer.player.VideoBackgroundPlaybackPolicy
 import com.local.mediaviewer.player.VideoSessionExitReason
 import com.local.mediaviewer.queue.PlaybackNoticeAction
@@ -133,6 +136,18 @@ fun MediaViewerApp(
     var activeVideoBackgroundPlaybackEnabled by remember {
         mutableStateOf(false)
     }
+    var videoBackgroundLifecycleState by remember {
+        mutableStateOf(VideoBackgroundLifecycleState())
+    }
+    val applyVideoBackgroundTransition =
+        { transition: VideoBackgroundLifecycleTransition ->
+            videoBackgroundLifecycleState = transition.state
+            when (transition.action) {
+                VideoBackgroundLifecycleAction.NONE -> Unit
+                VideoBackgroundLifecycleAction.PAUSE -> playbackController.pause()
+                VideoBackgroundLifecycleAction.PLAY -> playbackController.play()
+            }
+        }
     var handledNoticeIds by rememberSaveable {
         mutableStateOf(arrayListOf<Long>())
     }
@@ -146,22 +161,49 @@ fun MediaViewerApp(
     }
     LifecycleEventEffect(Lifecycle.Event.ON_START) {
         playbackController.onAppStarted()
+        videoBackgroundLifecycleState =
+            VideoBackgroundPlaybackPolicy.onAppStarted(
+                videoBackgroundLifecycleState,
+            )
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        if (
-            activeVideoEntryId != null &&
-            VideoBackgroundPlaybackPolicy.shouldStopAndClear(
-                enabled = activeVideoBackgroundPlaybackEnabled,
-                reason = if (activity.isChangingConfigurations) {
-                    VideoSessionExitReason.CONFIGURATION_CHANGE
-                } else {
-                    VideoSessionExitReason.APP_BACKGROUND
-                },
+        if (activeVideoEntryId != null) {
+            applyVideoBackgroundTransition(
+                VideoBackgroundPlaybackPolicy.onAppStopped(
+                    state = videoBackgroundLifecycleState,
+                    backgroundPlaybackEnabled =
+                        activeVideoBackgroundPlaybackEnabled,
+                    reason = if (activity.isChangingConfigurations) {
+                        VideoSessionExitReason.CONFIGURATION_CHANGE
+                    } else {
+                        VideoSessionExitReason.APP_BACKGROUND
+                    },
+                    currentMediaKey = playbackSession.currentItem?.mediaKey,
+                    playWhenReady = playbackSession.playWhenReady,
+                ),
             )
-        ) {
-            playbackController.clearAll()
+        } else {
+            videoBackgroundLifecycleState =
+                VideoBackgroundPlaybackPolicy.clearPending(
+                    videoBackgroundLifecycleState.copy(isForeground = false),
+                )
         }
         playbackController.onAppStopped()
+    }
+
+    LaunchedEffect(
+        videoBackgroundLifecycleState.isForeground,
+        videoBackgroundLifecycleState.pendingResumeMediaKey,
+        activeVideoEntryId,
+        playbackSession.currentItem?.mediaKey,
+    ) {
+        applyVideoBackgroundTransition(
+            VideoBackgroundPlaybackPolicy.reconcileForeground(
+                state = videoBackgroundLifecycleState,
+                currentMediaKey = playbackSession.currentItem?.mediaKey,
+                hasActiveVideo = activeVideoEntryId != null,
+            ),
+        )
     }
 
     // 通知请求统一规整为 Home 基础栈：冷启动与前台 Browser 栈
@@ -529,6 +571,10 @@ fun MediaViewerApp(
                         }
                         DisposableEffect(entry.id) {
                             onDispose {
+                                videoBackgroundLifecycleState =
+                                    VideoBackgroundPlaybackPolicy.clearPending(
+                                        videoBackgroundLifecycleState,
+                                    )
                                 if (activeVideoEntryId == entry.id) {
                                     activeVideoEntryId = null
                                     activeVideoBackgroundPlaybackEnabled = false
@@ -562,20 +608,19 @@ fun MediaViewerApp(
                         )
                     } else {
                         val leaveVideo = {
+                            videoBackgroundLifecycleState =
+                                VideoBackgroundPlaybackPolicy.clearPending(
+                                    videoBackgroundLifecycleState,
+                                )
                             if (
                                 VideoBackgroundPlaybackPolicy
                                     .shouldStopAndClear(
-                                        enabled =
-                                            videoBackgroundPlaybackEnabled,
-                                        reason =
-                                            VideoSessionExitReason.NAVIGATE_AWAY,
+                                        VideoSessionExitReason.NAVIGATE_AWAY,
                                     )
                             ) {
                                 player.stopAndClear {
                                     navController.leavePlayerSafely()
                                 }
-                            } else {
-                                leave()
                             }
                         }
                         val brightnessController = remember(activity) {
