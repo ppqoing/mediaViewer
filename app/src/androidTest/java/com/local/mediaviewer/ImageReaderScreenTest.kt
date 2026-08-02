@@ -477,6 +477,46 @@ class ImageReaderScreenTest {
     }
 
     @Test
+    fun zoomedSingleImageOneFingerPanChangesOffsetWithoutPaging() {
+        val anchors = mutableListOf<String>()
+        setScreen(
+            state = contentState(ImageReaderMode.SINGLE),
+            onAnchorChanged = anchors::add,
+        )
+        offCenterPinch("media_image")
+        val before = rule.onNodeWithTag("media_image")
+            .fetchSemanticsNode().config
+        val beforeX = before[SingleImageOffsetXSemanticsKey]
+        val beforeY = before[SingleImageOffsetYSemanticsKey]
+
+        rule.onNodeWithTag("media_image")
+            .performTouchInput {
+                val start = center
+                down(0, start)
+                moveTo(
+                    0,
+                    start + Offset(120f, 80f),
+                    delayMillis = 200L,
+                )
+                up(0)
+            }
+        rule.waitForIdle()
+
+        val after = rule.onNodeWithTag("media_image")
+            .fetchSemanticsNode().config
+        assertTrue(
+            abs(after[SingleImageOffsetXSemanticsKey] - beforeX) > 1f,
+        )
+        assertTrue(
+            abs(after[SingleImageOffsetYSemanticsKey] - beforeY) > 1f,
+        )
+        assertEquals(
+            "http://media.example/pik/b.png",
+            anchors.last(),
+        )
+    }
+
+    @Test
     fun tapTogglesImmersiveToolbar() {
         setScreen(contentState(ImageReaderMode.SINGLE))
         rule.onNodeWithTag("image_reader_scrim").assertIsDisplayed()

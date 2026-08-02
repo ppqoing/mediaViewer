@@ -69,6 +69,10 @@ val ComicViewportAnchorErrorSemanticsKey =
     SemanticsPropertyKey<Float>(
         "ComicViewportAnchorError",
     )
+val ComicViewportAnchorTargetYSemanticsKey =
+    SemanticsPropertyKey<Float>(
+        "ComicViewportAnchorTargetY",
+    )
 
 @Composable
 fun ComicReader(
@@ -112,6 +116,9 @@ fun ComicReader(
         mutableStateOf(0)
     }
     var viewportAnchorErrorPx by remember {
+        mutableStateOf<Float?>(null)
+    }
+    var viewportAnchorTargetYPx by remember {
         mutableStateOf<Float?>(null)
     }
     SideEffect {
@@ -236,6 +243,11 @@ fun ComicReader(
                             ComicViewportAnchorErrorSemanticsKey
                         ] = error
                     }
+                    viewportAnchorTargetYPx?.let { targetY ->
+                        this[
+                            ComicViewportAnchorTargetYSemanticsKey
+                        ] = targetY
+                    }
                 }
                 .comicTransformGestures(
                     onDoubleTap = {
@@ -285,11 +297,18 @@ fun ComicReader(
                         ) {
                             viewportAnchorGeneration += 1
                             viewportAnchorErrorPx = null
+                            val adjustedAnchor = anchor.copy(
+                                centroidYPx =
+                                    anchor.centroidYPx +
+                                        panChange.y,
+                            )
+                            viewportAnchorTargetYPx =
+                                adjustedAnchor.centroidYPx
                             pendingViewportAnchor =
                                 PendingComicViewportAnchor(
                                     generation =
                                         viewportAnchorGeneration,
-                                    anchor = anchor,
+                                    anchor = adjustedAnchor,
                                 )
                         }
                     },

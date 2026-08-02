@@ -244,6 +244,9 @@ fun SingleImageViewer(
                     fittedContentSize,
                 ) {
                     awaitEachGesture {
+                        var sawMultiTouch = false
+                        var singlePanPastSlop = false
+                        var accumulatedSinglePan = Offset.Zero
                         awaitFirstDown(
                             requireUnconsumed = false,
                         )
@@ -254,6 +257,7 @@ fun SingleImageViewer(
                                     it.pressed
                                 } >= 2
                             ) {
+                                sawMultiTouch = true
                                 zoom = ZoomReducer.gesture(
                                     current = zoom,
                                     zoomChange =
@@ -270,6 +274,52 @@ fun SingleImageViewer(
                                 )
                                 event.changes.forEach {
                                     it.consume()
+                                }
+                            } else if (
+                                event.changes.count {
+                                    it.pressed
+                                } == 1 &&
+                                !sawMultiTouch &&
+                                zoom.scale > 1.001f
+                            ) {
+                                val eventPan =
+                                    event.calculatePan()
+                                val panToApply = if (
+                                    singlePanPastSlop
+                                ) {
+                                    eventPan
+                                } else {
+                                    accumulatedSinglePan +=
+                                        eventPan
+                                    if (
+                                        accumulatedSinglePan
+                                            .getDistance() >
+                                        viewConfiguration
+                                            .touchSlop
+                                    ) {
+                                        singlePanPastSlop = true
+                                        accumulatedSinglePan
+                                    } else {
+                                        Offset.Zero
+                                    }
+                                }
+                                if (panToApply != Offset.Zero) {
+                                    zoom = ZoomReducer.gesture(
+                                        current = zoom,
+                                        zoomChange = 1f,
+                                        panChange = panToApply,
+                                        centroid =
+                                            event.calculateCentroid(
+                                                useCurrent = false,
+                                            ),
+                                        viewportSize = viewportSize,
+                                        fittedContentSize =
+                                            fittedContentSize,
+                                    )
+                                    accumulatedSinglePan = Offset.Zero
+                                    event.changes.forEach {
+                                        it.consume()
+                                    }
                                 }
                             }
                         } while (
