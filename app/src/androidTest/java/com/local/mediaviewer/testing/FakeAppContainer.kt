@@ -1,6 +1,7 @@
 package com.local.mediaviewer.testing
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.view.ViewGroup
 import coil3.ImageLoader
 import com.local.mediaviewer.app.AppContainer
@@ -25,6 +26,11 @@ import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
 import com.local.mediaviewer.playback.VideoScaleMode
+import com.local.mediaviewer.pdf.PdfDocumentFactory
+import com.local.mediaviewer.pdf.PdfDocumentHandle
+import com.local.mediaviewer.pdf.PdfPageSize
+import com.local.mediaviewer.pdf.PdfTemporaryFile
+import com.local.mediaviewer.pdf.PdfTemporaryFileRepository
 import com.local.mediaviewer.player.PlaybackController
 import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.queue.PlaybackMode
@@ -39,6 +45,7 @@ import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.settings.ServerSettingsRepository
 import com.local.mediaviewer.settings.PlayerPreferencesRepository
 import com.local.mediaviewer.settings.VideoControlsAutoHide
+import java.io.File
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.CoroutineScope
@@ -99,6 +106,16 @@ class FakeAppContainer(
         InMemoryPlaybackPositionStore()
     override val imageLoader: ImageLoader =
         MediaImageLoaderFactory.create(context)
+    private val fakePdfTemporaryFiles =
+        FakePdfTemporaryFileRepository(context.cacheDir)
+    override val pdfTemporaryFileRepository: PdfTemporaryFileRepository =
+        fakePdfTemporaryFiles
+    override val pdfDocumentFactory: PdfDocumentFactory =
+        FakePdfDocumentFactory()
+    val pdfAcquireCalls: Int
+        get() = fakePdfTemporaryFiles.acquireCalls
+    val pdfReleaseCalls: Int
+        get() = fakePdfTemporaryFiles.releaseCalls
     var playbackEngineCreationCount: Int = 0
         private set
     var playbackEngineCloseCount: Int = 0
@@ -368,6 +385,18 @@ fun defaultDirectoryContent(): DirectoryContent {
                     requestDirectoryUrl,
             ),
             fixtureEntry(
+                name = "manual.pdf",
+                relativeUrl = "manual.pdf",
+                size = 1_024L,
+                modifiedAt =
+                    "2026-07-28T02:30:00Z",
+                kind = MediaKind.PDF,
+                logicalDirectoryUrl =
+                    logicalDirectoryUrl,
+                requestDirectoryUrl =
+                    requestDirectoryUrl,
+            ),
+            fixtureEntry(
                 name = "001.jpg",
                 relativeUrl = "001.jpg",
                 size = 300L,
@@ -429,6 +458,57 @@ fun defaultDirectoryContent(): DirectoryContent {
             ),
         ),
     )
+}
+
+private class FakePdfTemporaryFileRepository(
+    cacheDir: File,
+) : PdfTemporaryFileRepository {
+    private val file = File(cacheDir, "navigation-test.pdf")
+    var acquireCalls = 0
+        private set
+    var releaseCalls = 0
+        private set
+
+    override suspend fun acquire(logicalUrl: String): AppResult<PdfTemporaryFile> {
+        acquireCalls += 1
+        return AppResult.Success(
+            PdfTemporaryFile(
+                logicalUrl = logicalUrl,
+                file = file,
+                byteCount = 1_024L,
+            ),
+        )
+    }
+
+    override fun release(file: PdfTemporaryFile) {
+        releaseCalls += 1
+    }
+
+    override suspend fun cleanupExpired(nowMs: Long) = Unit
+}
+
+private class FakePdfDocumentFactory : PdfDocumentFactory {
+    override suspend fun open(file: File): AppResult<PdfDocumentHandle> =
+        AppResult.Success(FakePdfDocumentHandle())
+}
+
+private class FakePdfDocumentHandle : PdfDocumentHandle {
+    override val pageCount: Int = 1
+    override val pageSizes: List<PdfPageSize> =
+        listOf(PdfPageSize(pageIndex = 0, widthPoints = 600, heightPoints = 800))
+
+    override suspend fun renderPage(
+        pageIndex: Int,
+        targetWidthPx: Int,
+    ): AppResult<Bitmap> = AppResult.Success(
+        Bitmap.createBitmap(
+            targetWidthPx.coerceAtLeast(1),
+            1,
+            Bitmap.Config.ARGB_8888,
+        ),
+    )
+
+    override fun close() = Unit
 }
 
 private fun rebaseDirectoryContent(

@@ -104,6 +104,35 @@ class MediaViewerNavigationTest {
     }
 
     @Test
+    fun homeOpensNestedPdfWithoutCreatingPlaybackQueue() {
+        openNestedDirectory()
+
+        rule.onNodeWithText("manual.pdf").performClick()
+
+        rule.onNodeWithTag("pdf_reader_root").assertIsDisplayed()
+        rule.onNodeWithText("manual.pdf").assertIsDisplayed()
+        rule.runOnIdle {
+            assertTrue(
+                container.fakePlaybackController
+                    .sessionState.value.queue.items.isEmpty(),
+            )
+        }
+    }
+
+    @Test
+    fun pdfBackPopsRouteAndReleasesTemporaryFile() {
+        openNestedDirectory()
+        rule.onNodeWithText("manual.pdf").performClick()
+        rule.onNodeWithText("manual.pdf").assertIsDisplayed()
+
+        rule.onNodeWithContentDescription("返回").performClick()
+
+        rule.onNodeWithTag("browser_list").assertIsDisplayed()
+        rule.onNodeWithText("manual.pdf").assertIsDisplayed()
+        rule.waitUntil(5_000) { container.pdfReleaseCalls == 1 }
+    }
+
+    @Test
     fun bottomNavigationSwitchesOnlyBetweenTopLevelDestinations() {
         rule.onNodeWithTag("bottom_nav_sources").assertIsSelected()
         rule.onNodeWithTag("bottom_nav_settings").performClick()

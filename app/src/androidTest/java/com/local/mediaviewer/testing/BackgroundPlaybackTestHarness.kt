@@ -27,6 +27,8 @@ import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackEngineFactory
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.RoomPlaybackPositionStore
+import com.local.mediaviewer.pdf.PdfDocumentFactory
+import com.local.mediaviewer.pdf.PdfTemporaryFileRepository
 import com.local.mediaviewer.player.Media3PlaybackController
 import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.queue.PlaybackCoordinator
@@ -306,6 +308,10 @@ class BackgroundPlaybackAppContainer(
         get() = positionStore
     override val imageLoader: ImageLoader
         get() = delegate.imageLoader
+    override val pdfTemporaryFileRepository: PdfTemporaryFileRepository
+        get() = delegate.pdfTemporaryFileRepository
+    override val pdfDocumentFactory: PdfDocumentFactory
+        get() = delegate.pdfDocumentFactory
 
     override fun createPlaybackCoordinator(
         scope: CoroutineScope,

@@ -54,6 +54,7 @@ import com.local.mediaviewer.navigation.CurrentPlayerNavigationRequests
 import com.local.mediaviewer.navigation.HomeRoute
 import com.local.mediaviewer.navigation.ImageReaderRoute
 import com.local.mediaviewer.navigation.PLAYER_ENTRY_WAIT_TIMEOUT_MS
+import com.local.mediaviewer.navigation.PdfReaderRoute
 import com.local.mediaviewer.navigation.PlayerEntryState
 import com.local.mediaviewer.navigation.PlayerRoute
 import com.local.mediaviewer.navigation.PlayerRouteExitAction
@@ -69,6 +70,7 @@ import com.local.mediaviewer.player.VideoBackgroundLifecycleState
 import com.local.mediaviewer.player.VideoBackgroundLifecycleTransition
 import com.local.mediaviewer.player.VideoBackgroundPlaybackPolicy
 import com.local.mediaviewer.player.VideoSessionExitReason
+import com.local.mediaviewer.pdf.PdfReaderViewModel
 import com.local.mediaviewer.queue.PlaybackNoticeAction
 import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.settings.SettingsViewModel
@@ -81,6 +83,7 @@ import com.local.mediaviewer.ui.components.MediaStateKind
 import com.local.mediaviewer.ui.components.MediaStatePanel
 import com.local.mediaviewer.ui.home.HomeScreen
 import com.local.mediaviewer.ui.image.ImageReaderScreen
+import com.local.mediaviewer.ui.pdf.PdfReaderScreen
 import com.local.mediaviewer.ui.player.AudioPlayerScreen
 import com.local.mediaviewer.ui.player.FullscreenController
 import com.local.mediaviewer.ui.player.NowPlayingBar
@@ -433,15 +436,27 @@ fun MediaViewerApp(
             val state by browser.uiState.collectAsStateWithLifecycle()
             LaunchedEffect(browser) {
                 browser.mediaLaunches.collect { media ->
-                    navController.navigate(
-                        ImageReaderRoute(
-                            rootId = media.rootId,
-                            directoryLogicalUrl =
-                                media.directoryLogicalUrl,
-                            selectedLogicalUrl = media.logicalUrl,
-                            selectedName = media.name,
-                        ),
-                    )
+                    when (media.kind) {
+                        MediaKind.IMAGE -> navController.navigate(
+                            ImageReaderRoute(
+                                rootId = media.rootId,
+                                directoryLogicalUrl =
+                                    media.directoryLogicalUrl,
+                                selectedLogicalUrl = media.logicalUrl,
+                                selectedName = media.name,
+                            ),
+                        )
+
+                        MediaKind.PDF -> navController.navigate(
+                            PdfReaderRoute(
+                                rootId = media.rootId,
+                                logicalUrl = media.logicalUrl,
+                                fileName = media.name,
+                            ),
+                        )
+
+                        else -> Unit
+                    }
                 }
             }
             LaunchedEffect(browser) {
@@ -786,6 +801,31 @@ fun MediaViewerApp(
                 onBack = {
                     navController.popBackStack()
                 },
+            )
+        }
+        composable<PdfReaderRoute> { entry ->
+            val route = entry.toRoute<PdfReaderRoute>()
+            val reader: PdfReaderViewModel = viewModel(
+                viewModelStoreOwner = entry,
+                key = route.logicalUrl,
+                factory = viewModelFactory {
+                    initializer {
+                        PdfReaderViewModel(
+                            fileName = route.fileName,
+                            logicalUrl = route.logicalUrl,
+                            files = container.pdfTemporaryFileRepository,
+                            documents = container.pdfDocumentFactory,
+                        )
+                    }
+                },
+            )
+            val state by reader.uiState.collectAsStateWithLifecycle()
+            PdfReaderScreen(
+                state = state,
+                onViewportChanged = reader::updateViewport,
+                onRetryDocument = reader::retryDocument,
+                onRetryPage = reader::retryPage,
+                onBack = { navController.popBackStack() },
             )
         }
         }

@@ -23,6 +23,11 @@ import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackEngineFactory
 import com.local.mediaviewer.playback.PlaybackPositionStore
 import com.local.mediaviewer.playback.RoomPlaybackPositionStore
+import com.local.mediaviewer.pdf.AndroidPdfDocumentFactory
+import com.local.mediaviewer.pdf.DefaultPdfFileClient
+import com.local.mediaviewer.pdf.DefaultPdfTemporaryFileRepository
+import com.local.mediaviewer.pdf.PdfDocumentFactory
+import com.local.mediaviewer.pdf.PdfTemporaryFileRepository
 import com.local.mediaviewer.player.Media3PlaybackController
 import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.queue.PlaybackCoordinator
@@ -50,6 +55,8 @@ interface AppContainer {
     val playbackController: QueuePlaybackController
     val playbackPositionStore: PlaybackPositionStore
     val imageLoader: ImageLoader
+    val pdfTemporaryFileRepository: PdfTemporaryFileRepository
+    val pdfDocumentFactory: PdfDocumentFactory
 
     fun createPlaybackCoordinator(scope: CoroutineScope): PlaybackCoordinator
 }
@@ -119,6 +126,16 @@ class DefaultAppContainer(
     override val imageLoader: ImageLoader by lazy {
         MediaImageLoaderFactory.create(appContext)
     }
+
+    override val pdfTemporaryFileRepository: PdfTemporaryFileRepository =
+        DefaultPdfTemporaryFileRepository(
+            cacheRoot = appContext.cacheDir,
+            client = DefaultPdfFileClient(),
+            session = sessionManager,
+        )
+
+    override val pdfDocumentFactory: PdfDocumentFactory =
+        AndroidPdfDocumentFactory()
 
     private val playbackEngineLock = Any()
     private var activePlaybackEngine: PlaybackEngine? = null

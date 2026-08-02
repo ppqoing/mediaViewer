@@ -2,7 +2,9 @@ package com.local.mediaviewer
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
@@ -55,6 +57,37 @@ class AppActivityRecreationTest {
     val rules: TestRule = RuleChain
         .outerRule(containerRule)
         .around(compose)
+
+    @Test
+    fun activity_recreation_reuses_pdf_route_view_model() {
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("MiddleDir")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        compose.onNodeWithText("MiddleDir").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("示例目录")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        compose.onNodeWithText("示例目录").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("manual.pdf")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        compose.onNodeWithText("manual.pdf").performClick()
+        compose.onNodeWithTag("pdf_reader_root").assertIsDisplayed()
+        compose.onNodeWithText("manual.pdf").assertIsDisplayed()
+        assertEquals(1, containerRule.container.pdfAcquireCalls)
+
+        compose.activityRule.scenario.recreate()
+
+        compose.onNodeWithTag("pdf_reader_root").assertIsDisplayed()
+        compose.onNodeWithText("manual.pdf").assertIsDisplayed()
+        assertEquals(1, containerRule.container.pdfAcquireCalls)
+    }
 
     @Test
     fun activity_recreation_restores_player_route_and_service_owned_item() {

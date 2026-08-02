@@ -21,3 +21,10 @@ data class ImageReaderRoute(
     val selectedLogicalUrl: String,
     val selectedName: String,
 )
+
+@Serializable
+data class PdfReaderRoute(
+    val rootId: String,
+    val logicalUrl: String,
+    val fileName: String,
+)
