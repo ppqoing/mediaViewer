@@ -134,7 +134,7 @@ private fun BrowserPageContent(
             ) {
                 MediaStatePanel(
                     kind = MediaStateKind.EMPTY,
-                    title = "路径下无文件",
+                    title = "空文件夹",
                     modifier = Modifier
                         .align(Alignment.Center)
                         .testTag("browser_empty_state"),

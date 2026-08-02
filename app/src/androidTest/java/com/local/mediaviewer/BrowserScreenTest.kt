@@ -237,7 +237,10 @@ class BrowserScreenTest {
         val emptyBounds = rule.onNodeWithTag("browser_empty_state")
             .assertIsDisplayed()
             .fetchSemanticsNode().boundsInRoot
-        rule.onNodeWithText("路径下无文件").assertIsDisplayed()
+        rule.onNodeWithText("空文件夹").assertIsDisplayed()
+        rule.onNodeWithText("路径下无文件").assertDoesNotExist()
+        rule.onNodeWithText("加载子目录失败").assertDoesNotExist()
+        rule.onNodeWithText("目录响应格式无效").assertDoesNotExist()
         assertTrue(abs(contentBounds.center.x - emptyBounds.center.x) <= 1f)
         assertTrue(abs(contentBounds.center.y - emptyBounds.center.y) <= 1f)
     }
@@ -258,7 +261,7 @@ class BrowserScreenTest {
         }
 
         rule.onNodeWithText("child").assertIsDisplayed()
-        rule.onNodeWithText("路径下无文件").assertDoesNotExist()
+        rule.onNodeWithText("空文件夹").assertDoesNotExist()
     }
 
     @Test

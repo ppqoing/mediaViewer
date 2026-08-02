@@ -191,6 +191,55 @@ class BrowserViewModelTest {
     }
 
     @Test
+    fun `进入空子目录后保留目标路径面包屑且返回父目录`() =
+        runTest(dispatcher) {
+            val rootUrl = "http://media.example:8080/middle/"
+            val childUrl = "${rootUrl}empty/"
+            val childEntry = entry(
+                name = "empty",
+                logicalUrl = childUrl,
+                requestUrl =
+                    "http://192.0.2.1:8080/middle/empty/",
+                kind = MediaKind.DIRECTORY,
+            )
+            val rootPage = page(rootUrl, listOf(childEntry))
+            val childPage = page(
+                logicalUrl = childUrl,
+                entries = emptyList(),
+                breadcrumbs = listOf(
+                    Breadcrumb("MiddleDir", rootUrl),
+                    Breadcrumb("empty", childUrl),
+                ),
+            )
+            val viewModel = BrowserViewModel(
+                MIDDLE_SHARE,
+                QueueBrowserRepository(
+                    ArrayDeque(listOf(rootPage, childPage)),
+                ),
+            )
+
+            advanceUntilIdle()
+            viewModel.open(childEntry)
+            advanceUntilIdle()
+
+            val empty =
+                viewModel.uiState.value as BrowserUiState.Empty
+            assertEquals(
+                childUrl,
+                empty.page.logicalDirectoryUrl,
+            )
+            assertEquals(
+                listOf("MiddleDir", "empty"),
+                empty.page.breadcrumbs.map(Breadcrumb::label),
+            )
+            assertTrue(viewModel.goBack())
+            assertEquals(
+                rootUrl,
+                currentPage(viewModel).logicalDirectoryUrl,
+            )
+        }
+
+    @Test
     fun `failed child keeps the parent and back consumes the failed attempt`() =
         runTest(dispatcher) {
             val rootUrl = "http://media.example:8080/middle/"
