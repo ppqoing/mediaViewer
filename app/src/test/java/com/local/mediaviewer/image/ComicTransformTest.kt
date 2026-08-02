@@ -5,6 +5,51 @@ import org.junit.Test
 
 class ComicTransformTest {
     @Test
+    fun `偏心手势缩放保持横向手指锚定`() {
+        val zoomed = ComicTransformReducer.gesture(
+            current = ComicTransform(),
+            zoomChange = 2f,
+            panXPx = 0f,
+            centroidXPx = 750f,
+            viewportWidthPx = 1_000f,
+        )
+
+        assertEquals(2f, zoomed.scale, 0.001f)
+        assertEquals(-250f, zoomed.horizontalOffsetPx, 0.001f)
+    }
+
+    @Test
+    fun `连续阅读锚点记录质心所在项目中的比例并计算纵向校正`() {
+        val anchor = captureComicViewportAnchor(
+            items = listOf(ComicVisibleItem(index = 4, offsetPx = 100, sizePx = 400)),
+            centroidYPx = 250f,
+        )
+
+        assertEquals(0.375f, anchor!!.itemFraction, 0.001f)
+        assertEquals(
+            100f,
+            comicScrollCorrectionPx(
+                anchor = anchor,
+                updatedItem = ComicVisibleItem(index = 4, offsetPx = 50, sizePx = 800),
+            ),
+            0.001f,
+        )
+    }
+
+    @Test
+    fun `连续阅读质心落在间隙时选择中心最近页面`() {
+        val anchor = captureComicViewportAnchor(
+            items = listOf(
+                ComicVisibleItem(index = 1, offsetPx = 100, sizePx = 100),
+                ComicVisibleItem(index = 2, offsetPx = 300, sizePx = 100),
+            ),
+            centroidYPx = 275f,
+        )
+
+        assertEquals(2, anchor!!.itemIndex)
+    }
+
+    @Test
     fun `统一缩放限制一到五倍并钳制水平偏移`() {
         val zoomed = ComicTransformReducer.gesture(
             current = ComicTransform(),
