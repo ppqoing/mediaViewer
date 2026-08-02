@@ -221,10 +221,21 @@ class BrowserScreenTest {
     }
 
     @Test
-    fun emptyDirectoryHasExplicitState() {
+    fun emptyDirectoryKeepsPathAndShowsCenteredEmptyFolder() {
         rule.setContent {
             BrowserScreen(
-                state = BrowserUiState.Empty(browserPage(entries = emptyList())),
+                state = BrowserUiState.Empty(
+                    browserPage(
+                        breadcrumbs = listOf(
+                            Breadcrumb("根", "http://media.example/"),
+                            Breadcrumb(
+                                "Ayame",
+                                "http://media.example/MiddleDir/Ayame/",
+                            ),
+                        ),
+                        entries = emptyList(),
+                    ),
+                ),
                 onEntryClick = {},
                 onBreadcrumbClick = {},
                 onRetry = {},
@@ -237,12 +248,37 @@ class BrowserScreenTest {
         val emptyBounds = rule.onNodeWithTag("browser_empty_state")
             .assertIsDisplayed()
             .fetchSemanticsNode().boundsInRoot
+        rule.onNodeWithText("Ayame").assertIsDisplayed()
         rule.onNodeWithText("空文件夹").assertIsDisplayed()
         rule.onNodeWithText("路径下无文件").assertDoesNotExist()
         rule.onNodeWithText("加载子目录失败").assertDoesNotExist()
         rule.onNodeWithText("目录响应格式无效").assertDoesNotExist()
         assertTrue(abs(contentBounds.center.x - emptyBounds.center.x) <= 1f)
         assertTrue(abs(contentBounds.center.y - emptyBounds.center.y) <= 1f)
+    }
+
+    @Test
+    fun videoFilterOnlyChangesVisibleLoadedRows() {
+        rule.setContent {
+            BrowserScreen(
+                state = BrowserUiState.Content(
+                    browserPage(
+                        entries = listOf(
+                            browserEntry("clip.mp4", MediaKind.VIDEO),
+                            browserEntry("cover.jpg", MediaKind.IMAGE),
+                        ),
+                    ),
+                ),
+                onEntryClick = {},
+                onBreadcrumbClick = {},
+                onRetry = {},
+                onBack = {},
+            )
+        }
+
+        rule.onNodeWithTag("browser_filter_video").performClick()
+        rule.onNodeWithText("clip.mp4").assertIsDisplayed()
+        rule.onNodeWithText("cover.jpg").assertDoesNotExist()
     }
 
     @Test

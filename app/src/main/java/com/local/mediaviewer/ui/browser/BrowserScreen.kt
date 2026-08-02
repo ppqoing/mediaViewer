@@ -2,13 +2,21 @@ package com.local.mediaviewer.ui.browser
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -16,6 +24,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -29,7 +42,12 @@ import com.local.mediaviewer.ui.components.MediaIconButton
 import com.local.mediaviewer.ui.components.MediaScreenScaffold
 import com.local.mediaviewer.ui.components.MediaStateKind
 import com.local.mediaviewer.ui.components.MediaStatePanel
+import com.local.mediaviewer.ui.components.WarmPaperCard
+import com.local.mediaviewer.ui.icons.MediaIcon
+import com.local.mediaviewer.ui.icons.MediaIconImage
 import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.theme.MediaPillShape
+import com.local.mediaviewer.ui.theme.MediaTheme
 
 @Composable
 fun BrowserScreen(
@@ -41,6 +59,11 @@ fun BrowserScreen(
     onRetry: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val visiblePage = visiblePage(state)
+    val currentPath = visiblePage?.logicalDirectoryUrl
+    var selectedFilter by rememberSaveable(currentPath) {
+        mutableStateOf(BrowserFilter.ALL)
+    }
     MediaScreenScaffold(
         title = currentTitle(state),
         onBack = onBack,
@@ -54,7 +77,6 @@ fun BrowserScreen(
         },
         snackbarHost = { snackbarHostState?.let { SnackbarHost(it) } },
     ) { padding ->
-        val visiblePage = visiblePage(state)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -86,6 +108,8 @@ fun BrowserScreen(
                     onEntryClick = onEntryClick,
                     onBreadcrumbClick = onBreadcrumbClick,
                     onPlaybackAction = onPlaybackAction,
+                    selectedFilter = selectedFilter,
+                    onFilterSelected = { selectedFilter = it },
                     isEmpty = state is BrowserUiState.Empty,
                     statusContent = when (state) {
                         is BrowserUiState.Loading -> {
@@ -116,13 +140,26 @@ private fun BrowserPageContent(
     onEntryClick: (DirectoryEntry) -> Unit,
     onBreadcrumbClick: (Int) -> Unit,
     onPlaybackAction: (BrowserPlaybackAction, DirectoryEntry) -> Unit,
+    selectedFilter: BrowserFilter,
+    onFilterSelected: (BrowserFilter) -> Unit,
     isEmpty: Boolean,
     statusContent: (@Composable () -> Unit)? = null,
 ) {
-    androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+    val visibleEntries = remember(page.entries, selectedFilter) {
+        page.entries.filter(selectedFilter::accepts)
+    }
+    Column(Modifier.fillMaxSize()) {
         MediaBreadcrumbs(
             breadcrumbs = page.breadcrumbs,
             onBreadcrumbClick = onBreadcrumbClick,
+            modifier = Modifier.padding(
+                horizontal = MediaTheme.spacing.md,
+                vertical = MediaTheme.spacing.xs,
+            ),
+        )
+        BrowserFilterChips(
+            selectedFilter = selectedFilter,
+            onFilterSelected = onFilterSelected,
         )
         statusContent?.invoke()
         if (isEmpty) {
@@ -141,27 +178,127 @@ private fun BrowserPageContent(
                 )
             }
         } else {
-            LazyColumn(
+            WarmPaperCard(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .testTag("browser_list"),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                items(
-                    items = page.entries,
-                    key = DirectoryEntry::logicalUrl,
-                ) { entry ->
-                    MediaFileRow(
-                        entry = entry,
-                        onEntryClick = onEntryClick,
-                        onPlaybackAction = onPlaybackAction,
+                    .padding(
+                        start = MediaTheme.spacing.md,
+                        end = MediaTheme.spacing.md,
+                        top = MediaTheme.spacing.xs,
+                        bottom = MediaTheme.spacing.md,
                     )
+                    .testTag("browser_list"),
+            ) {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    itemsIndexed(
+                        items = visibleEntries,
+                        key = { _, entry -> entry.logicalUrl },
+                    ) { index, entry ->
+                        MediaFileRow(
+                            entry = entry,
+                            onEntryClick = onEntryClick,
+                            onPlaybackAction = onPlaybackAction,
+                        )
+                        if (index < visibleEntries.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(
+                                    horizontal = MediaTheme.spacing.md,
+                                ),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(
+                                    alpha = 0.72f,
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun BrowserFilterChips(
+    selectedFilter: BrowserFilter,
+    onFilterSelected: (BrowserFilter) -> Unit,
+) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            horizontal = MediaTheme.spacing.md,
+        ),
+        horizontalArrangement = Arrangement.spacedBy(MediaTheme.spacing.xs),
+    ) {
+        items(
+            items = BrowserFilter.entries,
+            key = { it.name },
+        ) { filter ->
+            val selected = filter == selectedFilter
+            FilterChip(
+                selected = selected,
+                onClick = { onFilterSelected(filter) },
+                label = {
+                    Text(
+                        text = filter.label,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                },
+                leadingIcon = filter.icon?.let { icon ->
+                    {
+                        MediaIconImage(
+                            icon = icon,
+                            contentDescription = null,
+                            tint = LocalContentColor.current,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .heightIn(min = MediaTheme.sizing.minimumTouchTarget)
+                    .testTag(filter.testTag),
+                shape = MediaPillShape,
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            )
+        }
+    }
+}
+
+private val BrowserFilter.label: String
+    get() = when (this) {
+        BrowserFilter.ALL -> "全部"
+        BrowserFilter.FOLDERS -> "文件夹"
+        BrowserFilter.VIDEO -> "视频"
+        BrowserFilter.AUDIO -> "音频"
+        BrowserFilter.IMAGE -> "图片"
+        BrowserFilter.GIF -> "动图"
+    }
+
+private val BrowserFilter.icon: MediaIcon?
+    get() = when (this) {
+        BrowserFilter.ALL -> null
+        BrowserFilter.FOLDERS -> MediaIcons.Folder
+        BrowserFilter.VIDEO -> MediaIcons.Video
+        BrowserFilter.AUDIO -> MediaIcons.Audio
+        BrowserFilter.IMAGE -> MediaIcons.Image
+        BrowserFilter.GIF -> MediaIcons.Gif
+    }
+
+private val BrowserFilter.testTag: String
+    get() = when (this) {
+        BrowserFilter.ALL -> "browser_filter_all"
+        BrowserFilter.FOLDERS -> "browser_filter_folders"
+        BrowserFilter.VIDEO -> "browser_filter_video"
+        BrowserFilter.AUDIO -> "browser_filter_audio"
+        BrowserFilter.IMAGE -> "browser_filter_image"
+        BrowserFilter.GIF -> "browser_filter_gif"
+    }
 
 @Composable
 private fun BrowserLoadingStatus() {

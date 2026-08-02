@@ -54,8 +54,8 @@ fun MediaFileRow(
             horizontalArrangement = Arrangement.spacedBy(MediaTheme.spacing.sm),
         ) {
             MediaGlyph(
-                icon = entry.kind.icon,
-                contentDescription = entry.kind.contentDescription,
+                icon = entry.icon,
+                contentDescription = entry.contentDescription,
                 tint = entry.kind.tint,
             )
             Column(Modifier.weight(1f)) {
@@ -115,22 +115,30 @@ private fun PlaybackActionsMenu(
     }
 }
 
-private val MediaKind.icon: MediaIcon
-    get() = when (this) {
-        MediaKind.DIRECTORY -> MediaIcons.Folder
-        MediaKind.VIDEO -> MediaIcons.Video
-        MediaKind.AUDIO -> MediaIcons.Audio
-        MediaKind.IMAGE -> MediaIcons.Image
-        MediaKind.UNKNOWN -> MediaIcons.UnknownFile
+private val DirectoryEntry.icon: MediaIcon
+    get() = if (isGif()) {
+        MediaIcons.Gif
+    } else {
+        when (kind) {
+            MediaKind.DIRECTORY -> MediaIcons.Folder
+            MediaKind.VIDEO -> MediaIcons.Video
+            MediaKind.AUDIO -> MediaIcons.Audio
+            MediaKind.IMAGE -> MediaIcons.Image
+            MediaKind.UNKNOWN -> MediaIcons.UnknownFile
+        }
     }
 
-private val MediaKind.contentDescription: String
-    get() = when (this) {
-        MediaKind.DIRECTORY -> "文件夹"
-        MediaKind.VIDEO -> "视频"
-        MediaKind.AUDIO -> "音频"
-        MediaKind.IMAGE -> "图片"
-        MediaKind.UNKNOWN -> "文件"
+private val DirectoryEntry.contentDescription: String
+    get() = if (isGif()) {
+        "动图"
+    } else {
+        when (kind) {
+            MediaKind.DIRECTORY -> "文件夹"
+            MediaKind.VIDEO -> "视频"
+            MediaKind.AUDIO -> "音频"
+            MediaKind.IMAGE -> "图片"
+            MediaKind.UNKNOWN -> "文件"
+        }
     }
 
 private val MediaKind.tint: Color
