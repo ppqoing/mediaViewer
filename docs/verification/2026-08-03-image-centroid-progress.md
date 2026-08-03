@@ -4,9 +4,11 @@
 
 图片相关 JVM 定向门禁和 Debug/Release 构建通过。模拟器三个指定类共执行
 65 项，56 项通过、9 项失败；只定向重验这 9 个失败方法后仍为 9 项失败，
-因此设备门禁不记为 PASS。其中 `holdingProgressPausesDeadlineAndReleaseRestartsIt`
-是本计划新增门禁失败，后续需要修复；其余 8 项已在此前任务或 PDF 共享回归中
-记录为既有失败。本任务没有修改代码或测试。
+这是原始集成门禁和首次定向重验的历史事实。后续提交 `d121bcf` 仅修正
+`holdingProgressPausesDeadlineAndReleaseRestartsIt` 的测试时钟边界，该方法定向
+1/1 通过，生产代码未改，因此本计划新增图片功能门禁当前通过。其余 8 项已在
+此前任务或 PDF 共享回归中记录为既有失败且未再重跑，完整三个类门禁仍非全绿，
+总体状态保持 PARTIAL。
 
 所有 Gradle 命令只在命令作用域设置：
 
@@ -61,16 +63,32 @@ $env:ANDROID_SDK_ROOT='C:\Users\Administrator\AppData\Local\Android\Sdk'
 遵循“只重验未通过测验”，之后仅以同一 connected 任务和
 `android.testInstrumentationRunnerArguments.class` 定向列出下述 9 个失败方法，
 没有重跑其余 56 个已通过方法。定向重验退出码 1，0/9 通过、9 项仍失败、
-0 跳过；未修改代码或测试，也未再次重跑。
+0 跳过。以下先保留该原始结果，再记录唯一新增门禁的后续定向修正；其余 8 项
+没有再次运行。
 
-### 本计划新增门禁失败
+### 本计划新增门禁的后续修正
 
 - `ImageReaderScreenTest#holdingProgressPausesDeadlineAndReleaseRestartsIt`：首次完整
   门禁和定向重验均失败。测试在按住进度条 3.5 秒后松手，推进 2999 ms 再推进
   2 ms，并在 `ImageReaderScreenTest.kt:776` 要求顶部进度节点不存在。XML 精确错误为
   `Failed: assertDoesNotExist. Reason: Did not expect any node but found '1' node that satisfies: (TestTag = 'image_reader_toolbar_progress')`；找到的节点文本为
-  `2 / 3`。这是本计划 Task 4 自动隐藏路径的新门禁失败，后续需要修复，不能归入
-  既有失败。
+  `2 / 3`。这是本计划 Task 4 自动隐藏路径的原始新增门禁失败，不能归入既有失败。
+
+后续按 Task 4 的 TDD 排查只修正测试时序：
+
+- 原断言保持稳定 RED；临时状态诊断显示按下后
+  `interactionActive=true, epoch=0`，抬手后为
+  `interactionActive=false, epoch=1`，说明生产状态已经收到抬手并重启计时。
+- 根因是 `autoAdvance=false` 时，2999 ms 后尚需显式帧启动/提交 Compose 状态；
+  仅推进 2 ms 不能可靠提交到期后的界面变化。
+- 提交 `d121bcf test: stabilize reader interaction auto-hide timing` 只改 AndroidTest：
+  2999 ms 时上下功能区仍显示，第一个显式帧后仍显示，第二个显式帧后上下同步隐藏，
+  容差约 32 ms。
+- 仅定向运行该方法，1/1 通过，`BUILD SUCCESSFUL`；没有重跑其他已通过或既有失败
+  方法。定向复审结论为 CLEAN，生产代码没有改动。
+
+据此，本计划新增的按住暂停计时、抬手重计和上下同步隐藏门禁当前通过；但这不把
+原始 65 项集成结果改写为全绿。
 
 ### 既有失败隔离
 
