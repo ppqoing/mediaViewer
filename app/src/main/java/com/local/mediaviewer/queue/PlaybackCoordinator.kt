@@ -12,6 +12,7 @@ import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -80,6 +81,7 @@ class PlaybackCoordinator(
     private var lastStatus = engine.state.value.status
     private var pauseCorrectionIssued = false
     private var endpointRecoveryUsedForMediaKey: String? = null
+    private val engineMediaGeneration = AtomicLong()
     private val engineObserver: Job
 
     override val state: StateFlow<PlaybackState> = engine.state
@@ -91,7 +93,11 @@ class PlaybackCoordinator(
     init {
         engineObserver = coordinatorScope.launch {
             engine.state.collect { playback ->
+                val eventMediaGeneration = engineMediaGeneration.get()
                 mutex.withLock {
+                    if (eventMediaGeneration != engineMediaGeneration.get()) {
+                        return@withLock
+                    }
                     updatePlayback(playback)
                     correctUnexpectedPlaying(playback)
                     applyPendingResume(playback)
@@ -299,7 +305,9 @@ class PlaybackCoordinator(
     override fun prepare(url: String) {
         launchMutation {
             loadedMediaKey = null
-            engine.prepare(sourceResolver.resolve(url))
+            val source = sourceResolver.resolve(url)
+            engineMediaGeneration.incrementAndGet()
+            engine.prepare(source)
         }
     }
 
@@ -508,6 +516,7 @@ class PlaybackCoordinator(
         val requestUrl = endpoint.requestUrlFor(item.logicalUrl)
         val source = sourceResolver.resolve(requestUrl)
         loadedMediaKey = item.mediaKey
+        engineMediaGeneration.incrementAndGet()
         engine.prepare(source)
         updatePlayback(engine.state.value)
         engine.setPlaybackSpeed(queue.playbackSpeed)

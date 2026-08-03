@@ -139,6 +139,76 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
+    fun `old ended event captured during probe does not skip newly selected media`() = runTest {
+        val probeStarted = CompletableDeferred<Unit>()
+        val probeGate = CompletableDeferred<Unit>()
+        val resolver = PlaybackSourceResolver { url ->
+            if (url.endsWith("/b.mp4")) {
+                probeStarted.complete(Unit)
+                probeGate.await()
+            }
+            PlaybackSource(url)
+        }
+        val engine = FakeEngine()
+        val coordinator = coordinator(engine, sourceResolver = resolver, scope = this)
+        coordinator.replaceQueue(listOf(item("a"), item("b"), item("c")), "a")
+        advanceUntilIdle()
+
+        coordinator.select("b")
+        probeStarted.await()
+        engine.emit(PlaybackState(status = PlaybackStatus.ENDED))
+        runCurrent()
+        probeGate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(requestUrlFor("a"), requestUrlFor("b")),
+            engine.prepareSources.map(PlaybackSource::url),
+        )
+        assertEquals("b", coordinator.sessionState.value.currentItem?.mediaKey)
+        assertEquals(0, engine.stopCalls)
+        coordinator.close()
+    }
+
+    @Test
+    fun `old error event captured during probe does not recover newly selected media`() = runTest {
+        val probeStarted = CompletableDeferred<Unit>()
+        val probeGate = CompletableDeferred<Unit>()
+        val resolver = PlaybackSourceResolver { url ->
+            if (url.endsWith("/b.mp4")) {
+                probeStarted.complete(Unit)
+                probeGate.await()
+            }
+            PlaybackSource(url)
+        }
+        val engine = FakeEngine()
+        val session = FakeSession()
+        val coordinator = coordinator(
+            engine = engine,
+            session = session,
+            sourceResolver = resolver,
+            scope = this,
+        )
+        coordinator.replaceQueue(listOf(item("a"), item("b"), item("c")), "a")
+        advanceUntilIdle()
+
+        coordinator.select("b")
+        probeStarted.await()
+        engine.emit(PlaybackState(status = PlaybackStatus.ERROR, errorMessage = "old media"))
+        runCurrent()
+        probeGate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(requestUrlFor("a"), requestUrlFor("b")),
+            engine.prepareSources.map(PlaybackSource::url),
+        )
+        assertEquals("b", coordinator.sessionState.value.currentItem?.mediaKey)
+        assertEquals(0, session.refreshCalls)
+        coordinator.close()
+    }
+
+    @Test
     fun `播放结束自动准备并播放顺序队列下一项`() = runTest {
         val engine = FakeEngine()
         val coordinator = coordinator(engine, scope = this)
