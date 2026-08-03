@@ -770,8 +770,16 @@ class ImageReaderScreenTest {
         )
         rule.onNodeWithTag("image_reader_scrim")
             .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_toolbar_progress")
+            .assertIsDisplayed()
 
-        rule.mainClock.advanceTimeBy(2L)
+        rule.mainClock.advanceTimeByFrame()
+        rule.onNodeWithTag("image_reader_toolbar_progress")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_scrim")
+            .assertIsDisplayed()
+
+        rule.mainClock.advanceTimeByFrame()
         rule.onNodeWithTag("image_reader_toolbar_progress")
             .assertDoesNotExist()
         rule.onNodeWithTag("image_reader_scrim")
