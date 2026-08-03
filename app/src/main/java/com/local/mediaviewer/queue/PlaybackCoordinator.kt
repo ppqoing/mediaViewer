@@ -4,8 +4,10 @@ import android.view.ViewGroup
 import com.local.mediaviewer.core.AppResult
 import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackPositionStore
+import com.local.mediaviewer.playback.PlaybackSourceResolver
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.playback.PassthroughPlaybackSourceResolver
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.player.QueuePlaybackController
 import com.local.mediaviewer.session.ServerSessionManager
@@ -56,6 +58,7 @@ class PlaybackCoordinator(
     private val queueRepository: PlaybackQueueRepository,
     private val positionStore: PlaybackPositionStore,
     private val session: ServerSessionManager,
+    private val sourceResolver: PlaybackSourceResolver = PassthroughPlaybackSourceResolver,
     private val scope: CoroutineScope,
     private val random: Random = Random.Default,
 ) : QueuePlaybackController {
@@ -296,7 +299,7 @@ class PlaybackCoordinator(
     override fun prepare(url: String) {
         launchMutation {
             loadedMediaKey = null
-            engine.prepare(url)
+            engine.prepare(sourceResolver.resolve(url))
         }
     }
 
@@ -502,8 +505,10 @@ class PlaybackCoordinator(
             pendingResumeMs = positionStore.resumePosition(item.mediaKey)
             resumeApplied = false
         }
+        val requestUrl = endpoint.requestUrlFor(item.logicalUrl)
+        val source = sourceResolver.resolve(requestUrl)
         loadedMediaKey = item.mediaKey
-        engine.prepare(endpoint.requestUrlFor(item.logicalUrl))
+        engine.prepare(source)
         updatePlayback(engine.state.value)
         engine.setPlaybackSpeed(queue.playbackSpeed)
         if (autoPlay) engine.play()

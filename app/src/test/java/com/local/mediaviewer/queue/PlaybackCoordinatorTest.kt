@@ -6,13 +6,18 @@ import com.local.mediaviewer.core.AppError
 import com.local.mediaviewer.model.MediaKind
 import com.local.mediaviewer.model.SessionEndpoint
 import com.local.mediaviewer.playback.PlaybackEngine
+import com.local.mediaviewer.playback.PlaybackDemuxStrategy
 import com.local.mediaviewer.playback.PlaybackPositionStore
+import com.local.mediaviewer.playback.PlaybackSource
+import com.local.mediaviewer.playback.PlaybackSourceResolver
 import com.local.mediaviewer.playback.PlaybackState
 import com.local.mediaviewer.playback.PlaybackStatus
+import com.local.mediaviewer.playback.PassthroughPlaybackSourceResolver
 import com.local.mediaviewer.playback.VideoScaleMode
 import com.local.mediaviewer.session.ServerSessionManager
 import com.local.mediaviewer.session.ServerSessionState
 import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,6 +36,108 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackCoordinatorTest {
+    @Test
+    fun `queue load passes resolved demux strategy to engine`() = runTest {
+        val engine = FakeEngine()
+        val resolver = PlaybackSourceResolver { url ->
+            PlaybackSource(url, PlaybackDemuxStrategy.AVFORMAT)
+        }
+        val coordinator = coordinator(
+            engine = engine,
+            sourceResolver = resolver,
+            scope = this,
+        )
+
+        coordinator.replaceQueue(listOf(item("a")), "a")
+        advanceUntilIdle()
+
+        assertEquals(
+            PlaybackSource(requestUrlFor("a"), PlaybackDemuxStrategy.AVFORMAT),
+            engine.prepareSources.single(),
+        )
+        coordinator.close()
+    }
+
+    @Test
+    fun `direct prepare also uses source resolver`() = runTest {
+        val engine = FakeEngine()
+        val resolver = PlaybackSourceResolver { url ->
+            PlaybackSource(url, PlaybackDemuxStrategy.AVFORMAT)
+        }
+        val coordinator = coordinator(engine, sourceResolver = resolver, scope = this)
+
+        coordinator.prepare("http://10.0.0.9:8080/direct.mp4")
+        advanceUntilIdle()
+
+        assertEquals(PlaybackDemuxStrategy.AVFORMAT, engine.prepareSources.single().demuxStrategy)
+        coordinator.close()
+    }
+
+    @Test
+    fun `endpoint recovery resolves the refreshed request url`() = runTest {
+        val resolvedUrls = mutableListOf<String>()
+        val resolver = PlaybackSourceResolver { url ->
+            resolvedUrls += url
+            PlaybackSource(url, PlaybackDemuxStrategy.AVFORMAT)
+        }
+        val session = FakeSession(
+            refreshedEndpoint = SessionEndpoint(
+                logicalBaseUrl = "http://media.example:8080",
+                requestBaseUrl = "http://10.0.0.10:8080",
+                ipv4 = "10.0.0.10",
+            ),
+        )
+        val engine = FakeEngine()
+        val coordinator = coordinator(
+            engine = engine,
+            session = session,
+            sourceResolver = resolver,
+            scope = this,
+        )
+        coordinator.replaceQueue(listOf(item("a")), "a")
+        advanceUntilIdle()
+
+        engine.emit(PlaybackState(status = PlaybackStatus.ERROR, errorMessage = "old endpoint"))
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                "http://10.0.0.9:8080/a.mp4",
+                "http://10.0.0.10:8080/a.mp4",
+            ),
+            resolvedUrls,
+        )
+        assertEquals(
+            PlaybackDemuxStrategy.AVFORMAT,
+            engine.prepareSources.last().demuxStrategy,
+        )
+        coordinator.close()
+    }
+
+    @Test
+    fun `serialized probe cannot apply old media after newer media`() = runTest {
+        val firstProbeGate = CompletableDeferred<Unit>()
+        val resolver = PlaybackSourceResolver { url ->
+            if (url.endsWith("/a.mp4")) firstProbeGate.await()
+            PlaybackSource(url)
+        }
+        val engine = FakeEngine()
+        val coordinator = coordinator(engine, sourceResolver = resolver, scope = this)
+
+        coordinator.replaceQueue(listOf(item("a"), item("b")), "a")
+        runCurrent()
+        coordinator.select("b")
+        firstProbeGate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(requestUrlFor("a"), requestUrlFor("b")),
+            engine.prepareSources.map(PlaybackSource::url),
+        )
+        assertEquals("b", coordinator.sessionState.value.currentItem?.mediaKey)
+        coordinator.close()
+    }
+
     @Test
     fun `播放结束自动准备并播放顺序队列下一项`() = runTest {
         val engine = FakeEngine()
@@ -481,12 +589,14 @@ class PlaybackCoordinatorTest {
         repository: FakeQueueRepository = FakeQueueRepository(),
         positions: FakePositionStore = FakePositionStore(),
         session: FakeSession = FakeSession(),
+        sourceResolver: PlaybackSourceResolver = PassthroughPlaybackSourceResolver,
         scope: CoroutineScope,
     ) = PlaybackCoordinator(
         engine = engine,
         queueRepository = repository,
         positionStore = positions,
         session = session,
+        sourceResolver = sourceResolver,
         scope = scope,
     )
 
@@ -504,6 +614,7 @@ private class FakeEngine : PlaybackEngine {
     private val mutableState = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = mutableState
     val prepareCalls = mutableListOf<String>()
+    val prepareSources = mutableListOf<PlaybackSource>()
     val seekCalls = mutableListOf<Long>()
     var playCalls = 0
     var stopCalls = 0
@@ -518,6 +629,11 @@ private class FakeEngine : PlaybackEngine {
             status = PlaybackStatus.OPENING,
             playbackSpeed = mutableState.value.playbackSpeed,
         )
+    }
+
+    override fun prepare(source: PlaybackSource) {
+        prepareSources += source
+        prepare(source.url)
     }
 
     override fun attachVideoOutput(host: ViewGroup) = Unit

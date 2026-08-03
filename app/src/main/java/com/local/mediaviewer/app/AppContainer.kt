@@ -17,11 +17,13 @@ import com.local.mediaviewer.network.DefaultShareDiscoveryParser
 import com.local.mediaviewer.network.OkHttpShareDiscoveryTransport
 import com.local.mediaviewer.network.SystemIpv4Resolver
 import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
+import com.local.mediaviewer.playback.DefaultPlaybackSourceResolver
 import com.local.mediaviewer.playback.MediaViewerDatabase
 import com.local.mediaviewer.playback.MediaViewerDatabaseFactory
 import com.local.mediaviewer.playback.PlaybackEngine
 import com.local.mediaviewer.playback.PlaybackEngineFactory
 import com.local.mediaviewer.playback.PlaybackPositionStore
+import com.local.mediaviewer.playback.PlaybackSourceResolver
 import com.local.mediaviewer.playback.RoomPlaybackPositionStore
 import com.local.mediaviewer.pdf.AndroidPdfDocumentFactory
 import com.local.mediaviewer.pdf.DefaultPdfFileClient
@@ -65,6 +67,8 @@ class DefaultAppContainer(
     context: Context,
     private val playbackEngineFactory: PlaybackEngineFactory =
         PlaybackEngineFactory { AndroidVlcPlaybackEngine(context.applicationContext) },
+    private val playbackSourceResolver: PlaybackSourceResolver =
+        DefaultPlaybackSourceResolver(),
 ) : AppContainer {
     private val appContext = context.applicationContext
     override val settingsRepository: ServerSettingsRepository =
@@ -159,6 +163,7 @@ class DefaultAppContainer(
                     queueRepository = playbackQueueRepository,
                     positionStore = playbackPositionStore,
                     session = sessionManager,
+                    sourceResolver = playbackSourceResolver,
                     scope = scope,
                 ).start()
             }

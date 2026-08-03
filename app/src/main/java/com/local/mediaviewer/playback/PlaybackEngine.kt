@@ -19,6 +19,10 @@ interface PlaybackEngine : AutoCloseable {
 
     fun prepare(url: String)
 
+    fun prepare(source: PlaybackSource) {
+        prepare(source.url)
+    }
+
     fun attachVideoOutput(host: ViewGroup)
 
     fun detachVideoOutput()
