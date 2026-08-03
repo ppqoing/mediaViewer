@@ -51,6 +51,10 @@ class AndroidVlcPlaybackEngine(
     }
 
     override fun prepare(url: String) {
+        prepare(PlaybackSource(url))
+    }
+
+    override fun prepare(source: PlaybackSource) {
         check(!closed.get()) {
             "PlaybackEngine is closed"
         }
@@ -58,7 +62,7 @@ class AndroidVlcPlaybackEngine(
             status = PlaybackStatus.OPENING,
             playbackSpeed = mutableState.value.playbackSpeed,
         )
-        val media = Media(libVlc, Uri.parse(url))
+        val media = Media(libVlc, Uri.parse(source.url))
         val decoderConfiguration =
             VlcVideoDecoderPolicy.compatibility
         media.setHWDecoderEnabled(
@@ -68,6 +72,7 @@ class AndroidVlcPlaybackEngine(
         decoderConfiguration.mediaOptions.forEach(
             media::addOption,
         )
+        VlcMediaOptions.forSource(source).forEach(media::addOption)
         media.addOption(":network-caching=1500")
         mediaPlayer.media = media
         media.release()

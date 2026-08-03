@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.local.mediaviewer.app.DefaultAppContainer
 import com.local.mediaviewer.playback.AndroidVlcPlaybackEngine
+import com.local.mediaviewer.playback.PlaybackDemuxStrategy
+import com.local.mediaviewer.playback.PlaybackSource
 import com.local.mediaviewer.playback.PlaybackStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -20,7 +22,14 @@ class LibVlcEngineCreationTest {
         val engine = AndroidVlcPlaybackEngine(context)
         assertEquals(PlaybackStatus.IDLE, engine.state.value.status)
 
-        engine.prepare("http://127.0.0.1:8080/middle/movie.mp4")
+        engine.prepare("http://127.0.0.1:8080/middle/flat.mp4")
+        assertEquals(PlaybackStatus.OPENING, engine.state.value.status)
+        engine.prepare(
+            PlaybackSource(
+                url = "http://127.0.0.1:8080/middle/fragmented.mp4",
+                demuxStrategy = PlaybackDemuxStrategy.AVFORMAT,
+            ),
+        )
         assertEquals(PlaybackStatus.OPENING, engine.state.value.status)
 
         engine.close()
