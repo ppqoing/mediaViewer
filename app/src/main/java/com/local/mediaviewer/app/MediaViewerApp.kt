@@ -74,6 +74,7 @@ import com.local.mediaviewer.pdf.PdfReaderViewModel
 import com.local.mediaviewer.queue.PlaybackNoticeAction
 import com.local.mediaviewer.session.ServerSessionState
 import com.local.mediaviewer.settings.SettingsViewModel
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 import com.local.mediaviewer.ui.browser.BrowserScreen
 import com.local.mediaviewer.ui.components.MediaAction
 import com.local.mediaviewer.ui.components.MediaAppScaffold
@@ -782,6 +783,13 @@ fun MediaViewerApp(
             val state by
                 reader.uiState
                     .collectAsStateWithLifecycle()
+            val controlsAutoHide by
+                container.playerPreferencesRepository
+                    .videoControlsAutoHide
+                    .collectAsStateWithLifecycle(
+                        initialValue =
+                            VideoControlsAutoHide.THREE_SECONDS,
+                    )
             ImageReaderScreen(
                 state = state,
                 imageLoader = container.imageLoader,
@@ -798,6 +806,7 @@ fun MediaViewerApp(
                     reader::onImageLoadSuccess,
                 onRetryImage =
                     reader::retryImage,
+                controlsAutoHide = controlsAutoHide,
                 onBack = {
                     navController.popBackStack()
                 },

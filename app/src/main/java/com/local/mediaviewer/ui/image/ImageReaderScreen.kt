@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,12 +33,16 @@ import com.local.mediaviewer.image.ImageReaderItem
 import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.image.ImageReaderUiState
 import com.local.mediaviewer.image.ImageSortOrder
+import com.local.mediaviewer.image.ReaderControlsReducer
+import com.local.mediaviewer.image.ReaderControlsState
 import com.local.mediaviewer.image.ZoomTransform
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 import com.local.mediaviewer.ui.components.MediaAction
 import com.local.mediaviewer.ui.components.MediaStateKind
 import com.local.mediaviewer.ui.components.MediaStatePanel
 import com.local.mediaviewer.ui.components.MediaTopAppBar
 import com.local.mediaviewer.ui.theme.MediaTheme
+import kotlinx.coroutines.delay
 
 @Composable
 fun ImageReaderScreen(
@@ -52,6 +57,8 @@ fun ImageReaderScreen(
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
     onBack: () -> Unit,
+    controlsAutoHide: VideoControlsAutoHide =
+        VideoControlsAutoHide.THREE_SECONDS,
     safeDrawingInsets: WindowInsets =
         WindowInsets.safeDrawing,
 ) {
@@ -147,6 +154,8 @@ fun ImageReaderScreen(
                             onRetryImage =
                                 onRetryImage,
                             onBack = onBack,
+                            controlsAutoHide =
+                                controlsAutoHide,
                             safeDrawingInsets =
                                 safeDrawingInsets,
                         )
@@ -172,11 +181,11 @@ private fun ImageReaderContent(
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
     onBack: () -> Unit,
+    controlsAutoHide: VideoControlsAutoHide,
     safeDrawingInsets: WindowInsets,
 ) {
-    // 规格 §8.4：轻触切换顶部工具栏；默认可见。
-    var toolbarVisible by rememberSaveable {
-        mutableStateOf(true)
+    var controlsState by remember {
+        mutableStateOf(ReaderControlsState())
     }
     var singleImageZoom by remember {
         mutableStateOf(ZoomTransform())
@@ -196,7 +205,24 @@ private fun ImageReaderContent(
     var comicJumpCommand by remember {
         mutableStateOf<ComicJumpCommand?>(null)
     }
-    val onToggleToolbar = { toolbarVisible = !toolbarVisible }
+    LaunchedEffect(
+        controlsState.visible,
+        controlsState.interactionActive,
+        controlsState.autoHideEpoch,
+        controlsAutoHide,
+    ) {
+        val delayMs = ReaderControlsReducer.autoHideDelayMs(
+            state = controlsState,
+            preference = controlsAutoHide,
+        ) ?: return@LaunchedEffect
+        delay(delayMs)
+        controlsState = controlsState.copy(visible = false)
+    }
+    val onToggleToolbar = {
+        controlsState = ReaderControlsReducer.toggle(
+            controlsState,
+        )
+    }
     val currentIndex = state.images
         .indexOfFirst {
             it.logicalUrl == current.logicalUrl
@@ -215,6 +241,20 @@ private fun ImageReaderContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .trackReaderInteraction(
+                onBeginInteraction = {
+                    controlsState =
+                        ReaderControlsReducer.beginInteraction(
+                            controlsState,
+                        )
+                },
+                onEndInteraction = {
+                    controlsState =
+                        ReaderControlsReducer.endInteraction(
+                            controlsState,
+                        )
+                },
+            )
             .testTag("image_reader_root"),
     ) {
         if (state.mode == ImageReaderMode.COMIC) {
@@ -281,7 +321,7 @@ private fun ImageReaderContent(
             )
         }
 
-        if (toolbarVisible) {
+        if (controlsState.visible) {
             Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)

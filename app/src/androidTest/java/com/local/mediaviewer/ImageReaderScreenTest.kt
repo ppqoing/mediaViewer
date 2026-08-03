@@ -50,6 +50,7 @@ import com.local.mediaviewer.image.ImageReaderMode
 import com.local.mediaviewer.image.ImageReaderUiState
 import com.local.mediaviewer.image.ImageSortOrder
 import com.local.mediaviewer.image.MediaImageLoaderFactory
+import com.local.mediaviewer.settings.VideoControlsAutoHide
 import com.local.mediaviewer.ui.image.ComicHorizontalOffsetSemanticsKey
 import com.local.mediaviewer.ui.image.ComicScaleSemanticsKey
 import com.local.mediaviewer.ui.image.ImageItemErrorPanel
@@ -687,6 +688,97 @@ class ImageReaderScreenTest {
     }
 
     @Test
+    fun threeSecondDeadlineHidesBothControlsAndTapRestoresThem() {
+        rule.mainClock.autoAdvance = false
+        setScreen(
+            state = contentState(ImageReaderMode.SINGLE),
+            controlsAutoHide =
+                VideoControlsAutoHide.THREE_SECONDS,
+        )
+
+        rule.onNodeWithTag("image_reader_toolbar_progress")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_scrim")
+            .assertIsDisplayed()
+        rule.mainClock.advanceTimeBy(
+            milliseconds = 2_999L,
+            ignoreFrameDuration = true,
+        )
+        rule.onNodeWithTag("image_reader_toolbar_progress")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_scrim")
+            .assertIsDisplayed()
+
+        rule.mainClock.advanceTimeBy(2L)
+        rule.onNodeWithTag("image_reader_toolbar_progress")
+            .assertDoesNotExist()
+        rule.onNodeWithTag("image_reader_scrim")
+            .assertDoesNotExist()
+
+        rule.onNodeWithTag("media_image")
+            .performTouchInput { click() }
+        rule.mainClock.advanceTimeBy(500L)
+        rule.waitForIdle()
+
+        rule.onNodeWithTag("image_reader_toolbar_progress")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_scrim")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun neverPreferenceKeepsBothControlsVisibleAfterTwentySeconds() {
+        rule.mainClock.autoAdvance = false
+        setScreen(
+            state = contentState(ImageReaderMode.COMIC),
+            controlsAutoHide = VideoControlsAutoHide.NEVER,
+        )
+
+        rule.mainClock.advanceTimeBy(20_000L)
+
+        rule.onNodeWithTag("image_reader_toolbar_progress")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_scrim")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun holdingProgressPausesDeadlineAndReleaseRestartsIt() {
+        rule.mainClock.autoAdvance = false
+        setScreen(
+            state = contentState(ImageReaderMode.COMIC),
+            controlsAutoHide =
+                VideoControlsAutoHide.THREE_SECONDS,
+        )
+
+        rule.onNodeWithTag("comic_progress_slider")
+            .performTouchInput { down(center) }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(3_500L)
+
+        rule.onNodeWithTag("image_reader_toolbar_progress")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("image_reader_scrim")
+            .assertIsDisplayed()
+
+        rule.onNodeWithTag("comic_progress_slider")
+            .performTouchInput { up() }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(
+            milliseconds = 2_999L,
+            ignoreFrameDuration = true,
+        )
+        rule.onNodeWithTag("image_reader_scrim")
+            .assertIsDisplayed()
+
+        rule.mainClock.advanceTimeBy(2L)
+        rule.onNodeWithTag("image_reader_toolbar_progress")
+            .assertDoesNotExist()
+        rule.onNodeWithTag("image_reader_scrim")
+            .assertDoesNotExist()
+    }
+
+    @Test
     fun comicDoubleTapResetsSharedTransform() {
         setScreen(contentState(ImageReaderMode.COMIC))
         zoomAndPanComic()
@@ -1244,6 +1336,8 @@ class ImageReaderScreenTest {
             { _, _ -> },
         onImageLoadSuccess: (String) -> Unit = {},
         onRetryImage: (String) -> Unit = {},
+        controlsAutoHide: VideoControlsAutoHide =
+            VideoControlsAutoHide.NEVER,
         safeDrawingInsets: WindowInsets = WindowInsets(0),
     ) {
         rule.setContent {
@@ -1261,6 +1355,7 @@ class ImageReaderScreenTest {
                         onImageLoadSuccess,
                     onRetryImage = onRetryImage,
                     onBack = {},
+                    controlsAutoHide = controlsAutoHide,
                     safeDrawingInsets = safeDrawingInsets,
                 )
             }
