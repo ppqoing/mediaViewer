@@ -187,6 +187,15 @@ private fun ImageReaderContent(
     var zoomCommand by remember {
         mutableStateOf<SingleImageZoomCommand?>(null)
     }
+    var progressPreviewIndex by rememberSaveable {
+        mutableStateOf<Int?>(null)
+    }
+    var comicJumpCommandId by rememberSaveable {
+        mutableStateOf(0L)
+    }
+    var comicJumpCommand by remember {
+        mutableStateOf<ComicJumpCommand?>(null)
+    }
     val onToggleToolbar = { toolbarVisible = !toolbarVisible }
     val currentIndex = state.images
         .indexOfFirst {
@@ -230,6 +239,13 @@ private fun ImageReaderContent(
                 onImageLoadSuccess =
                     onImageLoadSuccess,
                 onRetryImage = onRetryImage,
+                jumpCommand = comicJumpCommand,
+                onJumpHandled = { handledId ->
+                    if (comicJumpCommand?.id == handledId) {
+                        comicJumpCommand = null
+                        progressPreviewIndex = null
+                    }
+                },
                 onToggleToolbar = onToggleToolbar,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -291,6 +307,8 @@ private fun ImageReaderContent(
             }
             ImageReaderOverlayControls(
                 currentIndex = currentIndex,
+                comicDisplayIndex =
+                    progressPreviewIndex ?: currentIndex,
                 totalCount = state.images.size,
                 currentItemName = current.name,
                 mode = state.mode,
@@ -322,6 +340,21 @@ private fun ImageReaderContent(
                 onFitScreen = {
                     sendZoomCommand(
                         SingleImageZoomAction.FIT_SCREEN,
+                    )
+                },
+                onComicProgressChanged = { value ->
+                    progressPreviewIndex = comicProgressIndex(
+                        value = value,
+                        totalCount = state.images.size,
+                    )
+                },
+                onComicProgressFinished = {
+                    val targetIndex = progressPreviewIndex
+                        ?: currentIndex
+                    comicJumpCommandId += 1L
+                    comicJumpCommand = ComicJumpCommand(
+                        id = comicJumpCommandId,
+                        targetIndex = targetIndex,
                     )
                 },
                 onModeChanged = onModeChanged,

@@ -10,7 +10,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import coil3.ImageLoader
@@ -21,6 +20,7 @@ import com.local.mediaviewer.image.MediaImageLoaderFactory
 import com.local.mediaviewer.testing.MediaFixtureFactory
 import com.local.mediaviewer.testing.MediaFixtureServer
 import com.local.mediaviewer.ui.image.ComicReader
+import com.local.mediaviewer.ui.image.ComicJumpCommand
 import com.local.mediaviewer.ui.image.ComicViewportAnchorErrorSemanticsKey
 import com.local.mediaviewer.ui.image.ComicViewportAnchorTargetYSemanticsKey
 import java.io.File
@@ -73,7 +73,7 @@ class ComicReaderDynamicLoadingTest {
     }
 
     @Test
-    fun fiftyImagesAreRequestedLazilyAsReaderScrolls() {
+    fun jumpToFiftiethImageRequestsTargetWithoutLoadingEveryIntermediateImage() {
         val images = (1..IMAGE_COUNT).map { index ->
             val name =
                 "page-" +
@@ -93,9 +93,19 @@ class ComicReaderDynamicLoadingTest {
                     server.url("/pik/$name"),
             )
         }
+        var sendJump: (() -> Unit)? = null
         rule.setContent {
             var transform by remember {
                 mutableStateOf(ComicTransform())
+            }
+            var jumpCommand by remember {
+                mutableStateOf<ComicJumpCommand?>(null)
+            }
+            sendJump = {
+                jumpCommand = ComicJumpCommand(
+                    id = 1L,
+                    targetIndex = IMAGE_COUNT - 1,
+                )
             }
             MaterialTheme {
                 ComicReader(
@@ -117,6 +127,12 @@ class ComicReaderDynamicLoadingTest {
                     onImageLoadError = { _, _ -> },
                     onImageLoadSuccess = {},
                     onRetryImage = {},
+                    jumpCommand = jumpCommand,
+                    onJumpHandled = { handledId ->
+                        if (jumpCommand?.id == handledId) {
+                            jumpCommand = null
+                        }
+                    },
                 )
             }
         }
@@ -138,8 +154,9 @@ class ComicReaderDynamicLoadingTest {
             initialPaths.size < IMAGE_COUNT,
         )
 
-        rule.onNodeWithTag("comic_reader")
-            .performScrollToIndex(IMAGE_COUNT - 1)
+        rule.runOnIdle {
+            checkNotNull(sendJump).invoke()
+        }
         rule.waitUntil(10_000) {
             server.requestedMediaPaths().contains(
                 "/pik/page-050.png",

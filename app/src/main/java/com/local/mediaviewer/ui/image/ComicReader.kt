@@ -90,6 +90,8 @@ fun ComicReader(
         (String, ImageLoadFailureKind) -> Unit,
     onImageLoadSuccess: (String) -> Unit,
     onRetryImage: (String) -> Unit,
+    jumpCommand: ComicJumpCommand? = null,
+    onJumpHandled: (Long) -> Unit = {},
     onToggleToolbar: () -> Unit = {},
     refreshingImageLogicalUrl: String? = null,
     modifier: Modifier = Modifier,
@@ -170,6 +172,19 @@ fun ComicReader(
                     it.logicalUrl == anchorLogicalUrl
                 }.coerceAtLeast(0)
             listState.scrollToItem(anchorIndex)
+        }
+        LaunchedEffect(jumpCommand?.id) {
+            val command = jumpCommand
+                ?: return@LaunchedEffect
+            if (images.isEmpty()) {
+                onJumpHandled(command.id)
+                return@LaunchedEffect
+            }
+            val target = command.targetIndex
+                .coerceIn(images.indices)
+            listState.scrollToItem(target)
+            onAnchorChanged(images[target].logicalUrl)
+            onJumpHandled(command.id)
         }
         LaunchedEffect(pendingViewportAnchor) {
             val pending =

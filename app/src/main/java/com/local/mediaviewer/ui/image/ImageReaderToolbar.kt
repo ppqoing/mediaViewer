@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -142,6 +143,9 @@ fun ImageReaderToolbar(
                 )
                 Text(
                     text = "${currentIndex + 1} / $totalCount",
+                    modifier = Modifier.testTag(
+                        "image_reader_toolbar_progress",
+                    ),
                     maxLines = 1,
                     style = MaterialTheme.typography.bodySmall,
                     color = playerColors.control.copy(
@@ -203,6 +207,7 @@ fun ImageReaderToolbar(
 @Composable
 fun ImageReaderOverlayControls(
     currentIndex: Int,
+    comicDisplayIndex: Int,
     totalCount: Int,
     currentItemName: String,
     mode: ImageReaderMode,
@@ -212,6 +217,8 @@ fun ImageReaderOverlayControls(
     onZoomOut: () -> Unit,
     onZoomIn: () -> Unit,
     onFitScreen: () -> Unit,
+    onComicProgressChanged: (Float) -> Unit,
+    onComicProgressFinished: () -> Unit,
     onModeChanged: (ImageReaderMode) -> Unit,
     hasStaticImages: Boolean,
     hasAnimatedGifs: Boolean,
@@ -316,6 +323,57 @@ fun ImageReaderOverlayControls(
                                 contentDescription = "适合屏幕",
                                 onClick = onFitScreen,
                                 enabled = scale > 1.001f,
+                            )
+                        }
+                    }
+                } else {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal =
+                                    MediaTheme.spacing.md,
+                            ),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        color = playerColors.topScrimStart,
+                        contentColor = playerColors.control,
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(
+                                horizontal =
+                                    MediaTheme.spacing.md,
+                                vertical =
+                                    MediaTheme.spacing.xs,
+                            ),
+                        ) {
+                            Text(
+                                text =
+                                    "${comicDisplayIndex + 1} / $totalCount",
+                                modifier = Modifier.testTag(
+                                    "comic_progress_label",
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = playerColors.control,
+                            )
+                            Slider(
+                                value =
+                                    comicDisplayIndex + 1f,
+                                onValueChange =
+                                    onComicProgressChanged,
+                                onValueChangeFinished =
+                                    onComicProgressFinished,
+                                valueRange =
+                                    1f..
+                                        totalCount
+                                            .coerceAtLeast(1)
+                                            .toFloat(),
+                                steps =
+                                    (totalCount - 2)
+                                        .coerceAtLeast(0),
+                                enabled = totalCount > 1,
+                                modifier = Modifier.testTag(
+                                    "comic_progress_slider",
+                                ),
                             )
                         }
                     }

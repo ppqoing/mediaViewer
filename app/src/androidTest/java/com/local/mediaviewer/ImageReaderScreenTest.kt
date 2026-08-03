@@ -26,6 +26,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
@@ -212,6 +213,74 @@ class ImageReaderScreenTest {
             .assertDoesNotExist()
         rule.onNodeWithContentDescription("下一张")
             .assertDoesNotExist()
+    }
+
+    @Test
+    fun comicModeShowsFolderProgress() {
+        setScreen(contentState(ImageReaderMode.COMIC))
+
+        rule.onNodeWithTag("comic_progress_slider")
+            .assertIsDisplayed()
+        rule.onNodeWithTag("comic_progress_label")
+            .assertTextEquals("2 / 3")
+    }
+
+    @Test
+    fun draggingComicProgressToEndJumpsToLastImageOnceReleased() {
+        val anchors = mutableListOf<String>()
+        setScreen(
+            state = contentState(ImageReaderMode.COMIC),
+            onAnchorChanged = anchors::add,
+        )
+
+        rule.onNodeWithTag("comic_progress_slider")
+            .performTouchInput {
+                down(center)
+                moveTo(
+                    Offset(width - 1f, center.y),
+                    delayMillis = 300L,
+                )
+                up()
+            }
+        rule.waitUntil(5_000) {
+            anchors.lastOrNull() ==
+                "http://media.example/pik/c.webp"
+        }
+        rule.runOnIdle {
+            assertEquals(
+                "http://media.example/pik/c.webp",
+                anchors.last(),
+            )
+        }
+    }
+
+    @Test
+    fun singleModeHidesComicProgress() {
+        setScreen(contentState(ImageReaderMode.SINGLE))
+
+        rule.onNodeWithTag("comic_progress_slider")
+            .assertDoesNotExist()
+        rule.onNodeWithTag("comic_progress_label")
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun oneComicImageShowsOneOfOneAndDisablesProgress() {
+        val base = contentState(ImageReaderMode.COMIC)
+        val only = base.images.single {
+            it.logicalUrl == base.anchorLogicalUrl
+        }
+        setScreen(
+            base.copy(
+                images = listOf(only),
+                anchorLogicalUrl = only.logicalUrl,
+            ),
+        )
+
+        rule.onNodeWithTag("comic_progress_label")
+            .assertTextEquals("1 / 1")
+        rule.onNodeWithTag("comic_progress_slider")
+            .assertIsNotEnabled()
     }
 
     @Test
@@ -749,8 +818,9 @@ class ImageReaderScreenTest {
 
         rule.onNodeWithTag("image_reader_scrim")
             .assertIsDisplayed()
-        rule.onNodeWithText("2 / 3")
-            .assertIsDisplayed()
+        rule.onNodeWithTag(
+            "image_reader_toolbar_progress",
+        ).assertTextEquals("2 / 3")
         rule.onNodeWithText("重新连接并重试")
             .performClick()
         rule.runOnIdle {
@@ -813,8 +883,9 @@ class ImageReaderScreenTest {
 
         rule.onNodeWithText(longTitle)
             .assertIsDisplayed()
-        rule.onNodeWithText("2 / 3")
-            .assertIsDisplayed()
+        rule.onNodeWithTag(
+            "image_reader_toolbar_progress",
+        ).assertTextEquals("2 / 3")
         rule.onNodeWithTag("comic_reader")
             .assertIsDisplayed()
         val window = rule.onNodeWithTag("reader_window")
