@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.LocalContentColor
@@ -15,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,7 +55,9 @@ fun MediaBreadcrumbs(
                         icon = MediaIcons.ChevronRight,
                         contentDescription = null,
                         tint = LocalContentColor.current,
-                        modifier = Modifier.clearAndSetSemantics {},
+                        modifier = Modifier
+                            .requiredSize(20.dp)
+                            .testTag("breadcrumb_separator_$index"),
                     )
                 }
                 val isCurrent = index == breadcrumbs.lastIndex

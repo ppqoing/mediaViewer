@@ -2,6 +2,7 @@ package com.local.mediaviewer.ui.components
 
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -11,6 +12,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.ui.icons.MediaIcons
 import com.local.mediaviewer.ui.icons.MediaIconImage
 
@@ -35,6 +37,7 @@ fun MediaTopAppBar(
                         icon = MediaIcons.Back,
                         contentDescription = "返回",
                         tint = contentColor,
+                        modifier = Modifier.requiredSize(28.dp),
                     )
                 }
             }

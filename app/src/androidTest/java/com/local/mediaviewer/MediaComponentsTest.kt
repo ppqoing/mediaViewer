@@ -8,7 +8,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PixelMap
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -23,6 +27,7 @@ import com.local.mediaviewer.ui.components.MediaBottomNavigation
 import com.local.mediaviewer.ui.components.MediaFilterChips
 import com.local.mediaviewer.ui.components.MediaIconButton
 import com.local.mediaviewer.ui.components.MediaPrimaryButton
+import com.local.mediaviewer.ui.components.PlayerIconButton
 import com.local.mediaviewer.ui.components.MediaSegmentedControl
 import com.local.mediaviewer.ui.components.MediaStateKind
 import com.local.mediaviewer.ui.components.MediaStatePanel
@@ -30,6 +35,7 @@ import com.local.mediaviewer.ui.components.SegmentItem
 import com.local.mediaviewer.ui.components.TopLevelDestination
 import com.local.mediaviewer.ui.components.WarmPaperCard
 import com.local.mediaviewer.ui.icons.MediaIcons
+import com.local.mediaviewer.ui.player.PlayerIcons
 import com.local.mediaviewer.ui.theme.MediaViewerTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -132,6 +138,37 @@ class MediaComponentsTest {
             .fetchSemanticsNode().boundsInRoot
         assertTrue(bounds.width >= 48f)
         assertTrue(bounds.height >= 48f)
+        val inkBounds = rule.onNodeWithContentDescription("搜索")
+            .captureToImage()
+            .toPixelMap()
+            .inkBoundsComparedWithCorner()
+        assertTrue("ordinary icon ink width=${inkBounds.width}", inkBounds.width <= 24)
+        assertTrue("ordinary icon ink height=${inkBounds.height}", inkBounds.height <= 24)
+    }
+
+    @Test
+    fun generatedPlayerIconKeepsTouchTargetWithoutDominatingIt() {
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f)) {
+                MediaViewerTheme {
+                    PlayerIconButton(
+                        icon = PlayerIcons.Queue,
+                        contentDescription = "播放队列",
+                        onClick = {},
+                    )
+                }
+            }
+        }
+
+        val node = rule.onNodeWithContentDescription("播放队列")
+        val bounds = node.fetchSemanticsNode().boundsInRoot
+        assertTrue(bounds.width >= 48f)
+        assertTrue(bounds.height >= 48f)
+        val inkBounds = node.captureToImage()
+            .toPixelMap()
+            .inkBoundsComparedWithCorner()
+        assertTrue("player icon ink width=${inkBounds.width}", inkBounds.width <= 28)
+        assertTrue("player icon ink height=${inkBounds.height}", inkBounds.height <= 28)
     }
 
     @Test
@@ -216,3 +253,39 @@ class MediaComponentsTest {
             .assertIsNotEnabled()
     }
 }
+
+private data class InkBounds(
+    val width: Int,
+    val height: Int,
+)
+
+private fun PixelMap.inkBoundsComparedWithCorner(): InkBounds {
+    val background = this[0, 0]
+    var minX = width
+    var minY = height
+    var maxX = -1
+    var maxY = -1
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            if (this[x, y].channelDistanceFrom(background) > 0.12f) {
+                minX = minOf(minX, x)
+                minY = minOf(minY, y)
+                maxX = maxOf(maxX, x)
+                maxY = maxOf(maxY, y)
+            }
+        }
+    }
+    return if (maxX < minX || maxY < minY) {
+        InkBounds(width = 0, height = 0)
+    } else {
+        InkBounds(
+            width = maxX - minX + 1,
+            height = maxY - minY + 1,
+        )
+    }
+}
+
+private fun Color.channelDistanceFrom(other: Color): Float =
+    kotlin.math.abs(red - other.red) +
+        kotlin.math.abs(green - other.green) +
+        kotlin.math.abs(blue - other.blue)

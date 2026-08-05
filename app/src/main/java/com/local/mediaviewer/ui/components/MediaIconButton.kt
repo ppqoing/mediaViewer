@@ -2,6 +2,7 @@ package com.local.mediaviewer.ui.components
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -12,6 +13,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.ui.icons.MediaIcon
 import com.local.mediaviewer.ui.icons.MediaIconImage
@@ -40,6 +42,7 @@ fun MediaIconButton(
     selected: Boolean? = null,
     loading: Boolean = false,
     stateDescription: String? = null,
+    iconSize: Dp = 28.dp,
 ) {
     SemanticIconButton(
         icon = icon,
@@ -50,6 +53,7 @@ fun MediaIconButton(
         selected = selected,
         loading = loading,
         stateDescription = stateDescription,
+        iconSize = iconSize,
         tint = if (selected == true) {
             MaterialTheme.colorScheme.primary
         } else {
@@ -68,6 +72,7 @@ fun PlayerIconButton(
     selected: Boolean? = null,
     loading: Boolean = false,
     stateDescription: String? = null,
+    iconSize: Dp = 32.dp,
 ) {
     SemanticIconButton(
         icon = icon,
@@ -78,6 +83,7 @@ fun PlayerIconButton(
         selected = selected,
         loading = loading,
         stateDescription = stateDescription,
+        iconSize = iconSize,
         tint = if (selected == true) {
             MediaTheme.playerColors.active
         } else {
@@ -96,6 +102,7 @@ private fun SemanticIconButton(
     selected: Boolean?,
     loading: Boolean,
     stateDescription: String?,
+    iconSize: Dp,
     tint: Color,
 ) {
     val visualState = mediaIconButtonVisualState(enabled, loading)
@@ -131,6 +138,7 @@ private fun SemanticIconButton(
                 icon = icon,
                 contentDescription = null,
                 tint = tint.copy(alpha = tint.alpha * visualState.iconAlpha),
+                modifier = Modifier.requiredSize(iconSize),
             )
         }
     }

@@ -226,6 +226,25 @@ class PlaybackQueueUiTest {
             .assertIsDisplayed()
         rule.onNodeWithContentDescription("上移 第一首").assertDoesNotExist()
         rule.onNodeWithContentDescription("下移 第一首").assertDoesNotExist()
+        val maxHeaderIconSize = with(rule.density) { 28.dp.toPx() } + 1f
+        val moreIconBounds = rule.onNodeWithTag(
+            testTag = "queue_more_icon",
+            useUnmergedTree = true,
+        )
+            .fetchSemanticsNode().boundsInRoot
+        val closeIconBounds = rule.onNodeWithTag(
+            testTag = "queue_close_icon",
+            useUnmergedTree = true,
+        )
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "queue more icon width=${moreIconBounds.width}",
+            moreIconBounds.width <= maxHeaderIconSize,
+        )
+        assertTrue(
+            "queue close icon width=${closeIconBounds.width}",
+            closeIconBounds.width <= maxHeaderIconSize,
+        )
 
         rule.onNodeWithContentDescription("队列项 第二首，即将播放").performClick()
         assertEquals("b", selected)

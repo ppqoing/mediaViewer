@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -250,11 +251,19 @@ class BrowserScreenTest {
         val emptyBounds = rule.onNodeWithTag("browser_empty_state")
             .assertIsDisplayed()
             .fetchSemanticsNode().boundsInRoot
-        rule.onNodeWithText("Ayame").assertIsDisplayed()
+        rule.onNodeWithTag("breadcrumb_1").assertIsDisplayed()
         rule.onNodeWithText("空文件夹").assertIsDisplayed()
         rule.onNodeWithText("路径下无文件").assertDoesNotExist()
         rule.onNodeWithText("加载子目录失败").assertDoesNotExist()
         rule.onNodeWithText("目录响应格式无效").assertDoesNotExist()
+        val separatorBounds = rule.onNodeWithTag(
+            testTag = "breadcrumb_separator_1",
+            useUnmergedTree = true,
+        )
+            .fetchSemanticsNode().boundsInRoot
+        val expectedSeparatorSize = with(rule.density) { 20.dp.toPx() }
+        assertEquals(expectedSeparatorSize, separatorBounds.width, 1f)
+        assertEquals(expectedSeparatorSize, separatorBounds.height, 1f)
         assertTrue(abs(contentBounds.center.x - emptyBounds.center.x) <= 1f)
         assertTrue(abs(contentBounds.center.y - emptyBounds.center.y) <= 1f)
     }

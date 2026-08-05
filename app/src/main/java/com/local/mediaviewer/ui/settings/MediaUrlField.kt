@@ -1,6 +1,7 @@
 package com.local.mediaviewer.ui.settings
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -12,6 +13,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import com.local.mediaviewer.ui.icons.MediaIcons
 import com.local.mediaviewer.ui.icons.MediaIconImage
 import com.local.mediaviewer.ui.theme.MediaTheme
@@ -42,6 +44,7 @@ fun MediaUrlField(
                 icon = MediaIcons.NetworkShare,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.requiredSize(24.dp),
             )
         },
         keyboardOptions = KeyboardOptions(
@@ -54,12 +57,14 @@ fun MediaUrlField(
                     icon = MediaIcons.Connected,
                     contentDescription = null,
                     tint = MediaTheme.extendedColors.success,
+                    modifier = Modifier.requiredSize(24.dp),
                 )
 
                 MediaUrlFieldState.ERROR -> MediaIconImage(
                     icon = MediaIcons.Error,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.requiredSize(24.dp),
                 )
 
                 else -> Unit

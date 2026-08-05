@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -253,6 +254,9 @@ fun PlaybackQueueSheet(
                     icon = MediaIcons.More,
                     contentDescription = "更多队列操作",
                     tint = androidx.compose.material3.LocalContentColor.current,
+                    modifier = Modifier
+                        .requiredSize(28.dp)
+                        .testTag("queue_more_icon"),
                 )
             }
             DropdownMenu(
@@ -272,6 +276,9 @@ fun PlaybackQueueSheet(
                     icon = MediaIcons.Close,
                     contentDescription = "关闭播放队列",
                     tint = androidx.compose.material3.LocalContentColor.current,
+                    modifier = Modifier
+                        .requiredSize(28.dp)
+                        .testTag("queue_close_icon"),
                 )
             }
         },
