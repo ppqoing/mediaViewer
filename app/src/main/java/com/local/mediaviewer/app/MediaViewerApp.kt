@@ -561,7 +561,11 @@ fun MediaViewerApp(
 
             val leaveBootstrap = {
                 if (
-                    PlayerRouteLifecyclePolicy.exitAction(routeLifecycleState) ==
+                    PlayerRouteLifecyclePolicy.exitAction(
+                        state = routeLifecycleState,
+                        backgroundPlaybackEnabled =
+                            videoBackgroundPlaybackEnabled,
+                    ) ==
                     PlayerRouteExitAction.STOP_AND_CLEAR
                 ) {
                     videoBackgroundLifecycleState =
@@ -653,7 +657,9 @@ fun MediaViewerApp(
                     val leave = {
                         if (
                             PlayerRouteLifecyclePolicy.exitAction(
-                                readyRouteLifecycleState,
+                                state = readyRouteLifecycleState,
+                                backgroundPlaybackEnabled =
+                                    videoBackgroundPlaybackEnabled,
                             ) == PlayerRouteExitAction.STOP_AND_CLEAR
                         ) {
                             videoBackgroundLifecycleState =

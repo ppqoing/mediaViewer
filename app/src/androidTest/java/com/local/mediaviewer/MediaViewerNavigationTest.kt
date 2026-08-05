@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -239,8 +240,7 @@ class MediaViewerNavigationTest {
     fun videoBackgroundDefaultsOffAndBackClearsQueue() {
         openNestedDirectory()
         rule.onNodeWithText("样例.mp4").performClick()
-        rule.onNodeWithContentDescription("更多播放设置")
-            .performClick()
+        openVideoBackgroundPlaybackMenu()
         rule.onNodeWithTag("video_background_playback")
             .assert(
                 androidx.compose.ui.test.SemanticsMatcher.expectValue(
@@ -264,8 +264,7 @@ class MediaViewerNavigationTest {
     fun videoBackgroundOptInPreservesQueueAndNewSessionResetsOff() {
         openNestedDirectory()
         rule.onNodeWithText("样例.mp4").performClick()
-        rule.onNodeWithContentDescription("更多播放设置")
-            .performClick()
+        openVideoBackgroundPlaybackMenu()
         rule.onNodeWithTag("video_background_playback")
             .performClick()
             .assert(
@@ -278,6 +277,7 @@ class MediaViewerNavigationTest {
         Espresso.pressBack()
         rule.onNodeWithContentDescription("返回").performClick()
         rule.onNodeWithTag("browser_list").assertIsDisplayed()
+        rule.onNodeWithTag("now_playing_bar").assertIsDisplayed()
         rule.runOnIdle {
             assertTrue(
                 container.fakePlaybackController
@@ -287,8 +287,7 @@ class MediaViewerNavigationTest {
 
         currentPlayerRequests.requestOpenCurrentPlayer()
         rule.onNodeWithText("样例.mp4").assertIsDisplayed()
-        rule.onNodeWithContentDescription("更多播放设置")
-            .performClick()
+        openVideoBackgroundPlaybackMenu()
         rule.onNodeWithTag("video_background_playback")
             .assert(
                 androidx.compose.ui.test.SemanticsMatcher.expectValue(
@@ -296,6 +295,26 @@ class MediaViewerNavigationTest {
                     ToggleableState.Off,
                 ),
             )
+    }
+
+    @Test
+    fun videoBackgroundOptInSystemBackPreservesQueue() {
+        openNestedDirectory()
+        rule.onNodeWithText("样例.mp4").performClick()
+        openVideoBackgroundPlaybackMenu()
+        rule.onNodeWithTag("video_background_playback").performClick()
+
+        Espresso.pressBack()
+        Espresso.pressBack()
+
+        rule.onNodeWithTag("browser_list").assertIsDisplayed()
+        rule.onNodeWithTag("now_playing_bar").assertIsDisplayed()
+        rule.runOnIdle {
+            assertTrue(
+                container.fakePlaybackController
+                    .sessionState.value.queue.items.isNotEmpty(),
+            )
+        }
     }
 
     @Test
@@ -476,5 +495,19 @@ class MediaViewerNavigationTest {
         }
         rule.onNodeWithText("MiddleDir").assertExists()
         rule.onNodeWithTag("breadcrumb_1").assertExists()
+    }
+
+    private fun openVideoBackgroundPlaybackMenu() {
+        if (
+            rule.onAllNodesWithTag("video_top_controls_ordinary")
+                .fetchSemanticsNodes().isEmpty()
+        ) {
+            rule.onNodeWithTag("video_gesture_layer").performClick()
+        }
+        rule.waitUntil(2_000L) {
+            rule.onAllNodesWithTag("video_top_controls_ordinary")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithContentDescription("更多播放选项").performClick()
     }
 }

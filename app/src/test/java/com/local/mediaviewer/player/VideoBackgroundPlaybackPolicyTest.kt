@@ -3,7 +3,6 @@ package com.local.mediaviewer.player
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VideoBackgroundPlaybackPolicyTest {
@@ -137,22 +136,4 @@ class VideoBackgroundPlaybackPolicyTest {
         assertNull(closedPlayer.state.pendingResumeMediaKey)
     }
 
-    @Test
-    fun `leaving video always stops and clears regardless of background setting`() {
-        assertTrue(
-            VideoBackgroundPlaybackPolicy.shouldStopAndClear(
-                VideoSessionExitReason.NAVIGATE_AWAY,
-            ),
-        )
-        assertFalse(
-            VideoBackgroundPlaybackPolicy.shouldStopAndClear(
-                VideoSessionExitReason.APP_BACKGROUND,
-            ),
-        )
-        assertFalse(
-            VideoBackgroundPlaybackPolicy.shouldStopAndClear(
-                VideoSessionExitReason.CONFIGURATION_CHANGE,
-            ),
-        )
-    }
 }

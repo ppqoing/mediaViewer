@@ -102,7 +102,4 @@ object VideoBackgroundPlaybackPolicy {
     ): VideoBackgroundLifecycleState =
         state.copy(pendingResumeMediaKey = null)
 
-    fun shouldStopAndClear(
-        reason: VideoSessionExitReason,
-    ): Boolean = reason == VideoSessionExitReason.NAVIGATE_AWAY
 }

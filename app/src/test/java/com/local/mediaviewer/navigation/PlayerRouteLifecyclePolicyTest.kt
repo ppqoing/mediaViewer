@@ -21,7 +21,7 @@ class PlayerRouteLifecyclePolicyTest {
     }
 
     @Test
-    fun `bootstrap exit after confirmed video stops and clears`() {
+    fun `confirmed video stops and clears only when background playback is disabled`() {
         val confirmedVideo = PlayerRouteLifecyclePolicy.observeCurrentItem(
             state = PlayerRouteLifecycleState(),
             currentKind = MediaKind.VIDEO,
@@ -29,7 +29,17 @@ class PlayerRouteLifecyclePolicyTest {
 
         assertEquals(
             PlayerRouteExitAction.STOP_AND_CLEAR,
-            PlayerRouteLifecyclePolicy.exitAction(confirmedVideo),
+            PlayerRouteLifecyclePolicy.exitAction(
+                state = confirmedVideo,
+                backgroundPlaybackEnabled = false,
+            ),
+        )
+        assertEquals(
+            PlayerRouteExitAction.LEAVE_ONLY,
+            PlayerRouteLifecyclePolicy.exitAction(
+                state = confirmedVideo,
+                backgroundPlaybackEnabled = true,
+            ),
         )
     }
 
@@ -42,11 +52,17 @@ class PlayerRouteLifecyclePolicyTest {
 
         assertEquals(
             PlayerRouteExitAction.LEAVE_ONLY,
-            PlayerRouteLifecyclePolicy.exitAction(confirmedAudio),
+            PlayerRouteLifecyclePolicy.exitAction(
+                state = confirmedAudio,
+                backgroundPlaybackEnabled = false,
+            ),
         )
         assertEquals(
             PlayerRouteExitAction.LEAVE_ONLY,
-            PlayerRouteLifecyclePolicy.exitAction(PlayerRouteLifecycleState()),
+            PlayerRouteLifecyclePolicy.exitAction(
+                state = PlayerRouteLifecycleState(),
+                backgroundPlaybackEnabled = false,
+            ),
         )
     }
 
@@ -65,7 +81,10 @@ class PlayerRouteLifecyclePolicyTest {
         assertEquals(MediaKind.AUDIO, confirmedAudio.lastPresentedKind)
         assertEquals(
             PlayerRouteExitAction.LEAVE_ONLY,
-            PlayerRouteLifecyclePolicy.exitAction(confirmedAudio),
+            PlayerRouteLifecyclePolicy.exitAction(
+                state = confirmedAudio,
+                backgroundPlaybackEnabled = true,
+            ),
         )
     }
 }

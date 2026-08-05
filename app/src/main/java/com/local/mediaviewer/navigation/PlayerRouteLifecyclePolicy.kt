@@ -23,7 +23,11 @@ object PlayerRouteLifecyclePolicy {
 
     fun exitAction(
         state: PlayerRouteLifecycleState,
-    ): PlayerRouteExitAction = if (state.lastPresentedKind == MediaKind.VIDEO) {
+        backgroundPlaybackEnabled: Boolean,
+    ): PlayerRouteExitAction = if (
+        state.lastPresentedKind == MediaKind.VIDEO &&
+        !backgroundPlaybackEnabled
+    ) {
         PlayerRouteExitAction.STOP_AND_CLEAR
     } else {
         PlayerRouteExitAction.LEAVE_ONLY
